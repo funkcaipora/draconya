@@ -234,8 +234,8 @@ seguinte grava o que ficou para trás antes de soltar o personagem. A sessão do
 - **Quem hospeda o mundo existe desde a OW-18** (`WorldShard`, atrás de `OPEN_WORLD`): o checkpoint se
   prova com a sessão real do `sim` em `world-checkpoint-real.test.ts`, com um ruleset de mentira
   (`world-checkpoint.test.ts`) e, de ponta a ponta, em `world-host.test.ts` e `world-boot.test.ts`.
-- **A presença** (OW-19): o `departure-requested` que o `sim` emite (logout, x-log) ainda não é lido pelo
-  hospedeiro; quando for, ele chama o mesmo funil de saída, e o lote antecipado vem de graça.
+- **A presença** (OW-19, #840) saiu: o hospedeiro lê o `departure-requested` (logout, x-log) e chama o mesmo
+  funil de saída, `release`, e o lote antecipado vem de graça — ver "A presença no hospedeiro", mais abaixo.
 - **O `use-slot` do mundo** só suja pelo `dirty` na Cidade (`ruleset.type === 'city'`), e **a OW-18 não o
   muda**: conjurar já suja o personagem no mundo sem a marca — a magia gasta mana (a marca do checkpoint), a
   runa e a poção gastam gold (`goldSpent`) e contam `suppliesUsed` (os agregados) —, e marcar `dirty` também
@@ -570,10 +570,10 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
 - **Quem hospeda existe desde a OW-18**: o `WorldShard` atrás de `OPEN_WORLD` cria o mundo, e a tabela
   de transições (`game/transitions.ts`) o põe no centro do grafo. Com a flag desligada — o default — o
   hospedeiro é o de hoje.
-- **Quem lê a saída.** `departure-requested` e `logout-refused` saem do `sim`, e o hospedeiro ainda os
-  ignora (`#presentMoves` os descarta): ler o primeiro **sem visualizador** — gravar o checkpoint e
-  soltar o personagem para o repouso — e traduzir o segundo na mensagem `logout-refused` é a OW-19, que
-  também entrega `presence-lost` e `presence-restored`.
+- **Quem lê a saída** saiu na OW-19 (#840): `departure-requested` e `logout-refused` saem do `sim`, e o
+  hospedeiro os lê em `#presentMoves` — o primeiro **sem visualizador** também, gravando o checkpoint e
+  soltando o personagem para o repouso; o segundo vira a mensagem `logout-refused` —, e entrega
+  `presence-lost` e `presence-restored`. Ver "A presença no hospedeiro".
 - **A fila estável.** O ADR 0060 d.5c quer a fila do mundo ordenada por `(dueAtMs, priority,
   subject, kind, seq)` (`tieBreak: 'stable'`, OW-06, #827). `createWorldSession` é onde ela se
   pede, e a OW-06 ainda não pousou: até lá a fila do mundo desempata por inserção, como a da
@@ -848,7 +848,7 @@ esperar o ciclo seguinte (como o `leave-hunt`). O `sim` devolve um de dois event
 |---|---|
 | `logout-refused { reason }` | manda a mensagem `logout-refused` do protocolo a **quem pediu** — todas as abas dele, e ninguém mais do mundo. O personagem não muda |
 | `departure-requested { reason, worldPosition }` | grava o checkpoint e solta o personagem para o repouso, como abaixo |
-| nenhum (`requestLogout` devolve `null`: o `sim` não conhece o personagem, ou ele morreu) | o `release` de sempre — não um pedido sem resposta. É o retry da saída que falhou, abaixo |
+| nenhum (`requestLogout` devolve `null`: o `sim` não conhece o personagem, ou ele morreu) | o `release` de sempre — não um pedido sem resposta, que o hospedeiro engoliria em silêncio |
 
 Quem já está saindo (o duplo clique, o x-log em voo, a transição) não pede nada: o `logout` é ignorado.
 
@@ -877,11 +877,24 @@ personagem: sai quem o `sim` nomeou, e o resto do mundo continua. O hospedeiro c
   `sim` não o conhece mais.
 - **Quem está no meio de uma transição já está deixando o mundo.** O pedido é ignorado: soltá-lo agora soltaria
   a sessão de destino, que o `release` resolve pelo personagem.
-- **Falhar não perde nada.** Se o `release` falha — o Redis recusou o extrato —, o `sim` já tirou o personagem
-  da sessão (`Session.leave`), mas o hospedeiro não o soltou: o diretório e o slot ficam, e o extrato que não
-  pousou vai na frente do lote seguinte (OW-16). O `sim` não repete o pedido, e quem o repete é o `logout`
-  seguinte — o ramo "sem veredicto" acima, que é o `release` de sempre. Sem ele, o pedido seria engolido: não
-  há personagem para o `sim` decidir. O x-log que falha espera o `logout` ou a drenagem.
+- **Falhar não perde nada, e não fica sem dono.** Se o `release` falha — o Redis recusou o extrato —, o `sim`
+  já tirou o personagem da sessão (`Session.leave`), mas o hospedeiro não o soltou: o diretório e o slot ficam,
+  e o extrato que não pousou vai na frente do lote seguinte (OW-16). O `sim` não repete o pedido — o
+  `departure-requested` é um só —, e o x-log não tem jogador que mande outro `logout`; por isso a saída que
+  falhou fica **registrada** (`#failedDepartures`) e é repetida por quem passa: pelo **ciclo de checkpoint**
+  (a cada 60 s, antes dos lotes, até o Redis voltar) e pelo **`prepare` de quem reconecta**. Um log não
+  bastava: o personagem ficaria mapeado, com o slot da conta renovado a cada ciclo, até o processo reiniciar.
+  Enquanto a saída falha, o personagem é um fantasma — não existe no `sim` — e **não recebe visualizador**
+  (`attach` recusa): ele só veria uma cena vazia.
+- **A reconexão que corre contra a saída perde.** O x-log vence 60 s depois de o navegador fechar, e o
+  cliente reconecta sozinho, com recuo de até 30 s: a janela existe. Com a saída em voo — ou falha, à espera —
+  o `prepare` **espera por ela** e recusa o ticket com um **503** (`refused: 'leaving'`): o `release`
+  devolveu o slot que o ticket reservara, e a entrada é do `api`, que emite o seguinte, já com o
+  personagem em repouso. O mesmo vale se a saída começa — ou acaba — enquanto o `prepare` espera o diretório.
+  E o upgrade que já passou do `prepare` quando a saída começa esbarra no `attach`, que **recusa** em vez de
+  reanexar a quem foi embora: o `open` do servidor captura a exceção e fecha **aquele** socket com o código
+  **1013**. O mundo é um processo só (ADR 0060 d.2c), e uma exceção que escapasse do handler do uWebSockets
+  seria um `uncaughtException` — `process.exit(1)` do `main.ts`, para todo jogador.
 - **O mundo não é recolhido.** `#collectResting` só visita sessão de `hz <= 0`, e o mundo roda a 10 Hz: o
   recolhimento de 5 minutos é da Cidade, e o personagem em luta sem visualizador passa dos 5 minutos no
   mundo. O que o tira é a saída do `sim`.

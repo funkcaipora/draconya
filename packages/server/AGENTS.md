@@ -1053,11 +1053,10 @@ conferida):
 - **O `logout` do mundo é `#requestLogout`**: `requestLogout` do `sim` e `#presentMoves` na hora — o jogador
   tem a resposta sem esperar o ciclo. Na hunt e na Cidade segue `#logout` (encerra a sessão, sem
   `canLogout`). O `leave-hunt` no mundo continua recusado (OW-18) e NUNCA vira `logout`.
-  **Veredicto `null` (o `sim` não conhece o personagem) é `release`, e não silêncio.** O `release` que
-  falhou (o Redis recusou o extrato) já tirou o personagem do `sim` e não o soltou do hospedeiro: o `logout`
-  seguinte é o retry do OW-16, e sem este ramo ele seria engolido — não há personagem para o `sim` decidir.
-  Quem já está saindo (`#departing`, `#transitions`) não pede nada; é o `#releaseFromWorld`, o ÚNICO
-  `release` do mundo por decisão do `sim`, que marca e desmarca `#departing`.
+  **Veredicto `null` (o `sim` não conhece o personagem) é `release`, e não silêncio**: sem este ramo o
+  `logout` seria engolido — não há personagem para o `sim` decidir. Quem já está saindo (`#departing`,
+  `#transitions`) não pede nada; é o `#releaseFromWorld`, o ÚNICO `release` do mundo por decisão do `sim`,
+  que marca e desmarca `#departing`.
 - **`departure-requested` vale COM ou SEM visualizador.** `#presentMoves` o trata nos dois ramos — o sem
   ninguém é o x-log. É por personagem, e `#departFromWorld` chama `release` com o `EndReason` (`endReasonOf`:
   `death` → `death`, o resto → `manual-exit`) e a **posição do EVENTO** como âncora
@@ -1070,6 +1069,20 @@ conferida):
 - **`#departing` e `#transitions`.** Dois pedidos do mesmo personagem no mesmo ciclo viram uma saída (o
   `sim` já o tirou, mas o hospedeiro só o esquece depois dos `await`s); quem está numa transição já está
   deixando o mundo, e soltá-lo soltaria a sessão DE DESTINO, que o `release` resolve pelo personagem.
+  `#departing` guarda a PROMESSA da saída (que nunca rejeita), e quem chega no meio espera por ela.
+- **A saída que falha NUNCA fica sem dono** (`#failedDepartures`). O `release` que o Redis recusou já tirou o
+  personagem do `sim` — o `departure-requested` é um só, e o x-log não tem jogador que peça outro —, e um
+  log deixaria o personagem mapeado, com diretório e slot renovados a cada ciclo, até o processo reiniciar.
+  A saída falha fica registrada e é repetida por `#retryDepartures` (o início de `checkpointWorlds`, antes
+  dos lotes) e pelo `#prepare` de quem reconecta. Código novo que dispare um `release` do mundo passa por
+  `#releaseFromWorld`, que é quem registra a falha — e o `release` limpa o registro quando solta.
+- **A reconexão que corre contra a saída perde** (`#awaitDeparture`). O x-log vence no instante em que o
+  cliente reconecta sozinho: com a saída em voo (ou falha), `#prepare` espera por ela e recusa o ticket com
+  `refused: 'leaving'` (503), e a recusa vale também se a saída começa ou acaba enquanto o `#prepare`
+  espera o diretório (a conferência é DEPOIS do `#register`). `attach` recusa o personagem que está saindo
+  (lança), e o `open` do `server.ts` **captura** a exceção e fecha o socket com 1013: uma exceção que escape
+  de um handler do uWebSockets é `uncaughtException`, `process.exit(1)` — e o mundo é um processo só. Nunca
+  deixe `attach` ou qualquer coisa chamada de `open`/`message`/`close` lançar para o uWS.
 - **`logout-refused` vai SÓ a quem pediu** (`#presentLogoutRefused`, todas as abas dele), nunca à sessão: a
   mensagem montada UMA vez, fora do laço (o `EncodeCache`). O texto da recusa é do cliente (OW-23).
 - **O mundo não é recolhido.** `#collectResting` só visita `hz <= 0`, e o mundo roda a 10 Hz com ou sem

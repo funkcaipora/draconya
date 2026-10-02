@@ -803,13 +803,21 @@ hospedeiro") e fechou seis detalhes que a decisão deixava em aberto:
 - **O `logout` do mundo é intenção, e a resposta é na hora.** O hospedeiro chama `requestLogout` e drena o evento
   sem esperar o ciclo seguinte, como o `leave-hunt`. A recusa (`logout-refused`) vai só a quem pediu, a todas as
   abas dele. Na hunt e na Cidade o `logout` segue como era. Sem veredicto (`requestLogout` devolve `null`: o
-  `sim` não conhece o personagem) o `logout` é o `release` de sempre: a saída que falhou já tirou o personagem do
-  `sim` e não o soltou do hospedeiro, e o `logout` seguinte é o retry que o checkpoint prevê (OW-16) — sem este
-  ramo seria engolido, porque não há personagem para o `sim` decidir.
+  `sim` não conhece o personagem) o `logout` é o `release` de sempre — sem este ramo seria engolido, porque não
+  há personagem para o `sim` decidir.
+- **A saída que falha é repetida pelo hospedeiro, e a reconexão que a encontra perde.** O `release` que o Redis
+  recusou já tirou o personagem do `sim` (o `departure-requested` é um só) e não o soltou do hospedeiro, e o x-log
+  não tem jogador que peça outra vez: o hospedeiro registra a saída que falhou e a repete no ciclo de checkpoint e
+  no `prepare` de quem reconecta, em vez de deixar o personagem mapeado — com o slot da conta renovado a cada
+  ciclo — até o processo reiniciar. O x-log vence no instante em que o cliente reconecta sozinho: com a saída em
+  voo, o `prepare` espera por ela e recusa o ticket (503), o `attach` recusa quem está saindo, e o `open` do
+  servidor fecha esse socket (1013) em vez de deixar a exceção virar `uncaughtException` — o mundo é um processo
+  só (decisão 2c), e um descuido de reconexão derrubaria todo jogador.
 - **Os quatro motivos de saída são cumpridos desde já.** `logout`, `xlog`, `death` e `idle-kick` entram na união
   que o `sim` emite desde a OW-14; o hospedeiro traduz `death` em `EndReason` `death` — o ledger registra
   `session-death`, como na hunt — e os outros três em `manual-exit`, o que o `logout` de antes já gravava. O motivo
   original fecha o socket (`1000` e o texto). Quem emite `death` e `idle-kick` é a OW-32 e a OW-47.
 
 **Efeito no que esta decisão escreveu:** nenhum. As decisões 6c e 7 continuam valendo; esta emenda só registra o
-que o hospedeiro entrega e cumpre, que a chegada sem visualizador inclui o login, e de onde a âncora de saída sai.
+que o hospedeiro entrega e cumpre, que a chegada sem visualizador inclui o login, de onde a âncora de saída sai, e
+quem repete a saída que falhou.

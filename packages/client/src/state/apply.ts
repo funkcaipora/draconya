@@ -792,11 +792,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
-    // `logout-refused` e `world-full` (OW-11, #832, ADR 0060 d.7 e d.2b): contratos do MUNDO, que
-    // nenhum servidor emite ainda — quem os produz é a saída do `sim` e a entrada pelo repouso
-    // (OW-14, OW-21), e quem os mostra é a sessão `world` do cliente (OW-23). Ficam como NÃO
-    // aplicados, e de propósito: o `satisfies never` abaixo existe para que mensagem nova não seja
-    // ignorada por esquecimento, e aqui a omissão é a decisão, declarada.
+    // `logout-refused` e `world-full` (OW-11, #832, ADR 0060 d.7 e d.2b): contratos do MUNDO, e quem os
+    // mostra é a sessão `world` do cliente (OW-23). O `logout-refused` o hospedeiro já emite desde a
+    // OW-19 (#840) — a cada `logout` que `canLogout` recusa, a quem pediu —, e o `world-full` ainda não:
+    // quem o produz é a entrada pelo repouso (OW-21). Ficam como NÃO aplicados, e de propósito: o
+    // `satisfies never` abaixo existe para que mensagem nova não seja ignorada por esquecimento, e aqui
+    // a omissão é a decisão, declarada.
     case 'logout-refused':
     case 'world-full':
       return;
