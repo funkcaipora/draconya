@@ -663,6 +663,8 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       loyaltyBonusPercent: 'none',
       // A âncora do mundo é uma COORDENADA absoluta (OW-13): nenhum instante, nada a traduzir.
       worldPosition: 'none',
+      // #836, OW-15: a cidade é um id, sem âncora em relógio nenhum — atravessa como está.
+      townId: 'none',
     };
 
     interface StampField {

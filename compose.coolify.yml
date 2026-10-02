@@ -43,6 +43,21 @@ services:
       # O pacote de arte servido pelo `web` (`/things/<versão>`). O boot recusa subir se o
       # conteúdo foi conferido contra outro (packages/server/src/served-pack.ts).
       THINGS_VERSION: ${THINGS_VERSION:-1533}
+      # O mundo aberto do Tibia sem PvP (ADR 0060, docs/open-world-plan.md): DESLIGADO por padrão —
+      # com `0` o jogo é o de hoje. Ligar (`OPEN_WORLD=1`) vale para os três papéis de uma vez, e
+      # este compose os roda juntos; ver docs/runtime-configuration.md. Ligado, o `game` se recusa a subir
+      # se há outro `game` vivo (OW-18) — e o próprio `NODE_ID` não conta, então o `NODE_ID` PRECISA ser
+      # o mesmo de um deploy para o outro (abaixo).
+      OPEN_WORLD: ${OPEN_WORLD:-0}
+      # A identidade do nó no diretório de sessões. Sem isto o default é o hostname — o id do contêiner,
+      # que muda a cada redeploy —, e o `game` novo veria o batimento do antigo (vivo por até 30 s depois
+      # de ele parar) como "outro nó" e cairia no boot, levando `api` e `jobs` junto (um processo só). Este
+      # compose roda UM contêiner `app`, então o id fixo é o certo; sobrescreva `NODE_ID` no Coolify se quiser outro.
+      NODE_ID: ${NODE_ID:-game-1}
+      # De quanto em quanto tempo (ms) o `game` grava o checkpoint do mundo — o lote com o extrato de todo
+      # personagem sujo, num `MULTI` só (ADR 0060 d.10d). Só vale com `OPEN_WORLD=1`; ver
+      # docs/runtime-configuration.md.
+      WORLD_CHECKPOINT_MS: ${WORLD_CHECKPOINT_MS:-60000}
       LOG_LEVEL: info
     depends_on:
       postgres: { condition: service_healthy }

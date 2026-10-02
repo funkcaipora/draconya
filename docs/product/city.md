@@ -89,7 +89,8 @@ um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — 
   recomeça a contar dele, com a semântica de delta do `leave`: o segundo checkpoint leva só o que
   rendeu desde o primeiro, o `seq` cresce, e o `leave`/`end` seguinte leva só o resto. Não zera a
   soma da sessão, não toca a janela de DPS, não sorteia nem agenda — o resultado é o mesmo com ou
-  sem checkpoint, a 1 Hz ou a 10 Hz. Nenhum hospedeiro o chama ainda (OW-16).
+  sem checkpoint, a 1 Hz ou a 10 Hz. O hospedeiro o chama desde a OW-16 (#837): um lote a cada 60 s e
+  em toda saída, para a sessão `checkpointed` (`docs/product/open-world.md`, "O checkpoint do mundo").
 - **Tetos por sessão**: `maxPendingDomainEvents` e `maxEventsPerAdvance` (default, as constantes
   de hoje) e `maxNotableEventsPerCharacter` (sem default — sem ele a lista cresce sem limite, como
   sempre cresceu). É o que permite ao mundo aparar a lista de eventos notáveis sem que a hunt
@@ -97,9 +98,10 @@ um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — 
 
 ### O mundo no protocolo (OW-11, ADR 0060 d.2b, d.7 e d.8)
 
-O protocolo ganha os contratos de que o mundo precisa. **Nenhum servidor os emite ainda** — quem
-os produz são o `canLogout` e a saída no `sim` (OW-10, OW-14), a entrada pelo repouso (OW-21), o
-portão no-pvp (OW-27) e o cliente que os mostra (OW-23). Os quatro contratos são opcionais ou
+O protocolo ganha os contratos de que o mundo precisa. **Só o `world-full` é emitido por um servidor** — o
+`game` o manda no handshake do mundo cheio (OW-21, #842, [Mundo aberto](open-world.md#a-entrada-pelo-repouso-ow-21-842)).
+Quem produz os outros são o `canLogout` e a saída no `sim` (OW-10, OW-14), o portão no-pvp (OW-27) e o cliente
+que os mostra (OW-23). Os quatro contratos são opcionais ou
 novos, para o deploy em ondas: um nó `game` anterior continua falando com um cliente novo, e o
 inverso também.
 
@@ -148,8 +150,8 @@ O que ficou escrito é a regra do gold, que vale para todo serviço que move gol
 
 O ramo do mundo (sair por extrato de delta, transição, drenagem) já existe no hospedeiro e é
 exercitado em teste com um ruleset de mentira; o ruleset real existe desde a OW-13
-(`WorldRuleset`, `docs/product/open-world.md`), e falta quem o hospede (OW-18) e o checkpoint com
-timer (OW-16).
+(`WorldRuleset`, `docs/product/open-world.md`), o checkpoint com timer existe desde a OW-16, e quem o
+hospeda existe desde a OW-18 (`WorldShard`, atrás de `OPEN_WORLD`).
 
 ### Desconectar não tira ninguém da praça na hora
 

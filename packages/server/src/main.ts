@@ -18,8 +18,8 @@ import { buildCatalogue } from './game/catalogue.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  CityShard, createBotConfigLoader, createBotConfigValidator, createCitySessionFactory,
-  createLateJoiner, createSessionBuilder, createSessionRestorer,
+  createBotConfigLoader, createBotConfigValidator, createLateJoiner, createSessionRestorer,
+  createSessionWiring,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { createSingletonLock } from './jobs/lock.js';
@@ -31,6 +31,7 @@ import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
+import { WorldQueue } from './world-queue.js';
 import { readCachedBoostedMonsterId, WorldDailyStore } from './world-daily.js';
 import { createLoyaltyBonusResolver } from './loyalty.js';
 import type { Role } from './role.js';
@@ -108,10 +109,19 @@ async function main(): Promise<void> {
     'Content loaded',
   );
 
-  // A cópia da Cidade deste nó (FUN-71, ADR 0023). Uma por processo `game`, e é assim que
-  // "Cidade 2" nasce: dois nós já são duas praças, sem nada a mais.
+  // O espaço compartilhado deste nó (FUN-71, ADR 0023; OW-18, ADR 0060 d.2). Uma cópia da Cidade por
+  // processo `game` — é assim que "Cidade 2" nasce: dois nós já são duas praças, sem nada a mais — e,
+  // com `OPEN_WORLD` ligado, UM mundo por `world_id`, onde o login cai no lugar da Cidade. A flag
+  // desligada (o default) é o jogo de hoje, byte a byte. As duas costuras (criar a sessão do login e
+  // construir o destino de uma transição) saem do MESMO conjunto de shards: duas instâncias dariam duas
+  // praças — ou dois mundos — que nunca se veem, e o defeito seria invisível até alguém tentar encontrar
+  // um amigo.
   const nowMs = (): number => Date.now();
-  const cityShard = new CityShard(content, nowMs);
+  const sessions = createSessionWiring(content, nowMs, {
+    openWorld: configuration.OPEN_WORLD,
+    // A fila do mundo cheio (OW-21): só com o mundo ligado — sem ele nenhuma consulta ao Redis é feita.
+    ...(configuration.OPEN_WORLD ? { worldQueue: new WorldQueue(redis) } : {}),
+  });
   // O catálogo do que existe (FUN-79, FUN-89), montado UMA vez: a versão de conteúdo é fixada
   // e não muda enquanto o processo vive.
   const catalogue = buildCatalogue(content);
@@ -135,6 +145,10 @@ async function main(): Promise<void> {
             restedSince: (characterId: string) => directory.restedSince(characterId),
           },
         }),
+        // A hunt idle direta do login (OW-21): o `api` confere que a hunt pedida existe, no conteúdo fixado no boot.
+        hasHunt: (huntId: string) => content.hunts.has(huntId),
+        // As hunts que o menu de entrada oferece (OW-23): as do catálogo, na mesma ordem em que o jogo as lista.
+        entryHunts: () => catalogue.hunts,
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}
@@ -205,6 +219,8 @@ async function main(): Promise<void> {
                   receipts,
                   logger: apiLogger,
                   progression: content.progression,
+                  // O checkpoint sem valor movido é aplicado sem linha de ledger (#838, OW-17).
+                  ...(configuration.OPEN_WORLD ? { openWorld: true } : {}),
                 }),
             }),
       });
@@ -213,17 +229,17 @@ async function main(): Promise<void> {
       directory,
       tickets,
       contentVersion: content.version,
-      // A MESMA cópia da Cidade nos dois caminhos (FUN-71, ADR 0023): quem entra no jogo e
-      // quem volta de uma hunt chegam na mesma praça. Duas instâncias de `CityShard` aqui
-      // dariam duas praças que nunca se veem, e o defeito seria invisível até alguém tentar
-      // encontrar um amigo.
-      createSession: createCitySessionFactory(content, nowMs, cityShard),
+      // O login cai na Cidade, ou no mundo com `OPEN_WORLD` (OW-18). O MESMO conjunto de shards
+      // nos dois caminhos: quem entra no jogo e quem volta de uma hunt chegam no mesmo lugar.
+      createSession: sessions.createSession,
+      // A fila do mundo cheio (OW-21): o login do repouso pergunta a ela antes de criar a sessão do mundo.
+      ...(sessions.worldEntry === undefined ? {} : { worldEntry: sessions.worldEntry }),
       // O recém-chegado numa hunt em curso (#402): o MESMO `characterFromTicket` do caminho solo.
       createParticipant: createLateJoiner(content, nowMs),
       snapshots,
       receipts,
       restoreSession: createSessionRestorer(content),
-      buildSession: createSessionBuilder(content, nowMs, cityShard),
+      buildSession: sessions.buildSession,
       // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
       // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
       acceptBotConfig: createBotConfigValidator(content),
@@ -280,6 +296,8 @@ async function main(): Promise<void> {
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
+      // O checkpoint sem valor movido é aplicado sem linha de ledger (#838, OW-17).
+      ...(configuration.OPEN_WORLD ? { openWorld: true } : {}),
       botConfigs,
       metrics: new JobsMetrics(configuration.NODE_ID),
       // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`

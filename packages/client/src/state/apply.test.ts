@@ -1413,15 +1413,120 @@ describe('a saída pendente da hunt (#802)', () => {
   });
 });
 
-describe('as mensagens do mundo ainda sem tela (OW-11, #832)', () => {
-  it('logout-refused e world-full chegam sem derrubar o cliente nem mexer no HUD', () => {
-    // Nenhum servidor as emite ainda (OW-14, OW-21) e a tela é da OW-23. O que se prende é que o
-    // `switch` exaustivo as conhece — sem o caso, o `satisfies never` não compilaria — e que
-    // aplicá-las não fabrica estado: o HUD continua exatamente como estava.
-    const before = hud.get();
-    applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 1);
-    applyMessage({ type: 'world-full', position: 3, retryAfterMs: 10_000, huntAvailable: true }, 2);
-    expect(hud.get()).toBe(before);
+describe('a sessão world no cliente (OW-23, #846)', () => {
+  const stats = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'player-stats',
+    health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+    level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+    ammo: { arrow: null, bolt: null }, vocationId: null, promoted: false, fightMode: 'attack',
+    speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+    ...over,
+  } as S2CMessage);
+  const stateMessage = (sessionType = 'world'): S2CMessage => ({
+    type: 'session-state', sessionType, elapsedMs: 0,
+    self: {
+      creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+    },
+    world: { groundItems: [], tileUpdates: [], fields: [], mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+  } as S2CMessage);
+
+  describe('a zona e a luta (player-stats)', () => {
+    it('guarda a zona do tile e se está em luta — o que alimenta os dois ícones', () => {
+      applyMessage(stats({ zone: 'protection', inFight: false }), 0);
+      expect(hud.get().zone).toBe('protection');
+      expect(hud.get().inFight).toBe(false);
+      applyMessage(stats({ zone: 'normal', inFight: true }), 1);
+      expect(hud.get().zone).toBe('normal');
+      expect(hud.get().inFight).toBe(true);
+    });
+
+    it('ausente é "este servidor não diz" (null), e nunca "normal, sem luta"', () => {
+      applyMessage(stats({ zone: 'protection', inFight: true }), 0);
+      applyMessage(stats(), 1);
+      // Mutação que mata: `message.zone ?? 'normal'` e `message.inFight ?? false` — a tela passaria a afirmar o
+      // que o servidor não disse, e um nó anterior apagaria o ícone de PZ que o outro acabou de acender.
+      expect(hud.get().zone).toBeNull();
+      expect(hud.get().inFight).toBeNull();
+    });
+
+    it('o session-state zera a zona e a luta: eram de uma sessão que já não é esta', () => {
+      applyMessage(stats({ zone: 'protection', inFight: true }), 0);
+      applyMessage(stateMessage('hunt'), 1);
+      expect(hud.get().zone).toBeNull();
+      expect(hud.get().inFight).toBeNull();
+    });
+
+    it('a sessão world é guardada como o tipo que o servidor mandou, sem virar hunt', () => {
+      applyMessage(stateMessage('world'), 0);
+      expect(hud.get().analyzer.sessionType).toBe('world');
+    });
+  });
+
+  describe('o logout recusado (logout-refused)', () => {
+    it('guarda o motivo e o instante LOCAL da chegada, e não mexe no resto do HUD', () => {
+      const before = hud.get();
+      applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 1_234);
+
+      expect(hud.get().exitRefusal).toEqual({ reason: 'in-fight', atMs: 1_234 });
+      expect(hud.get().health).toBe(before.health);
+      expect(hud.get().analyzer).toBe(before.analyzer);
+    });
+
+    it('vira uma linha de aviso no registro, em português, com o motivo certo', () => {
+      applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 10);
+      applyMessage({ type: 'logout-refused', reason: 'no-logout-tile' }, 20);
+
+      expect(hud.get().systemMessages.map(({ level, text }) => ({ level, text }))).toEqual([
+        { level: 'warning', text: 'Você não pode sair durante uma luta.' },
+        { level: 'warning', text: 'Você não pode sair daqui.' },
+      ]);
+    });
+
+    it('a recusa seguinte SUBSTITUI a anterior (o aviso novo aparece mesmo com o velho na tela)', () => {
+      applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 10);
+      applyMessage({ type: 'logout-refused', reason: 'no-logout-tile' }, 20);
+      expect(hud.get().exitRefusal).toEqual({ reason: 'no-logout-tile', atMs: 20 });
+    });
+
+    it('o session-state zera a recusa: a sessão nova não herda o aviso da anterior', () => {
+      applyMessage({ type: 'logout-refused', reason: 'in-fight' }, 10);
+      applyMessage(stateMessage('hunt'), 20);
+      expect(hud.get().exitRefusal).toBeNull();
+    });
+  });
+
+  describe('a fila do mundo cheio (world-full)', () => {
+    it('guarda a posição, o prazo e a oferta da hunt, com o instante local em que chegou', () => {
+      expect(hud.get().worldQueue).toBeNull();
+      applyMessage({ type: 'world-full', position: 3, retryAfterMs: 10_000, huntAvailable: true }, 5_000);
+      expect(hud.get().worldQueue).toEqual({
+        position: 3, retryAfterMs: 10_000, huntAvailable: true, receivedAtMs: 5_000,
+      });
+    });
+
+    it('cada tentativa SUBSTITUI a fila — a posição de agora, nunca a de antes', () => {
+      applyMessage({ type: 'world-full', position: 7, retryAfterMs: 20_000, huntAvailable: true }, 1_000);
+      applyMessage({ type: 'world-full', position: 4, retryAfterMs: 10_000, huntAvailable: false }, 21_000);
+      expect(hud.get().worldQueue).toEqual({
+        position: 4, retryAfterMs: 10_000, huntAvailable: false, receivedAtMs: 21_000,
+      });
+    });
+
+    it('o session-state tira o personagem da fila: ele entrou', () => {
+      applyMessage({ type: 'world-full', position: 1, retryAfterMs: 5_000, huntAvailable: true }, 1_000);
+      applyMessage(stateMessage('world'), 6_000);
+      expect(hud.get().worldQueue).toBeNull();
+    });
+
+    it('a fila não é uma sessão: o analisador e o tipo de sessão ficam como estavam', () => {
+      const before = hud.get().analyzer;
+      applyMessage({ type: 'world-full', position: 2, retryAfterMs: 5_000, huntAvailable: true }, 1);
+      expect(hud.get().analyzer).toBe(before);
+      expect(hud.get().analyzer.sessionType).toBeNull();
+    });
   });
 });
 

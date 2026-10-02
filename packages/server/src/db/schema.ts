@@ -14,6 +14,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -325,6 +326,51 @@ export const characters = pgTable(
      */
     durableVersion: bigint('durable_version', { mode: 'number' }).notNull().default(0),
 
+    /**
+     * O mundo a que o personagem pertence (#836, OW-15, ADR 0060 decisão 2.a): o `id` de
+     * `content.worlds` (`data/worlds/<id>.json`), escolhido na criação, como no Tibia. `'main'` é o
+     * único mundo hoje. Nada o lê ainda — quem o usa é a escolha de mundo (OW-50). A admissão do
+     * `WorldShard` (OW-18) NÃO o lê: o ticket não leva o id, e ela usa a constante `DEFAULT_WORLD_ID`
+     * (`'main'`) até a OW-50 trazê-lo.
+     */
+    worldId: text('world_id').notNull().default('main'),
+    /**
+     * A POSIÇÃO ABSOLUTA do Tibia (a do `otservbr.otbm`) onde o personagem saiu (#836, OW-15, ADR
+     * 0060 decisão 3.b): o `loginPosition` do Canary (`player.cpp:12332-12336`). Os três juntos ou
+     * nenhum (CHECK `character_world_position_complete`); nulo é o `0,0,0` do Canary
+     * (`iologindata_load_player.cpp:207-210`) e quer dizer "nasce no templo". É ABSOLUTA desde o
+     * primeiro dia — o mapa de hoje é um recorte, e a sessão a traduz pelo `source.region` — para que
+     * o mundo crescer até o mapa inteiro não custe migração. ABSOLUTA e última escrita vence,
+     * guardada por `durable_version`.
+     */
+    worldX: integer('world_x'),
+    worldY: integer('world_y'),
+    worldZ: smallint('world_z'),
+    /**
+     * A cidade do personagem (#836, OW-15): o `id` de `content.worlds[].towns[]`, cujo templo é para
+     * onde ele volta ao morrer (`player.cpp:4041`). `'thais'` é a única hoje. Escrita pelo ledger
+     * como o resto do estado absoluto, guardada por `durable_version`.
+     */
+    townId: text('town_id').notNull().default('thais'),
+    /**
+     * A vida e a mana com que o personagem SAIU (#836, OW-15, ADR 0060 decisão 10.f): é o que faz
+     * deslogar a 10 HP não curar ninguém. NULO é CHEIO — todo personagem existente, e quem nunca
+     * saiu do mundo —, e o ticket só as aplica quando existem, sempre limitadas pelo máximo do level
+     * (`characterFromTicket`). ABSOLUTAS e última escrita vence (DESCEM com o dano), guardadas por
+     * `durable_version`. CHECK `character_vitals_not_negative`.
+     */
+    health: integer('health'),
+    mana: integer('mana'),
+    /**
+     * As condições ativas do personagem (#836, OW-15): `ConditionState[]` com `expiresAtMs` e
+     * `nextTickAtMs` como PRAZO RESTANTE — milissegundos que faltavam ao salvar, não instante de
+     * relógio de sessão nenhum —, porque o repouso não conta tempo (o Canary guarda os `ticks` que
+     * faltavam, `condition.cpp:300`) e o relógio lógico de cada sessão nasce em zero. NULO é nenhuma.
+     * `jsonb` lido INTEIRO no ticket e escrito INTEIRO pelo ledger, como `charms` — ABSOLUTO,
+     * última escrita vence, guardado por `durable_version`.
+     */
+    conditions: jsonb('conditions'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 
@@ -341,6 +387,16 @@ export const characters = pgTable(
     fightModeVocabulary: check(
       'character_fight_mode',
       sql`${t.fightMode} in ('attack', 'balanced', 'defense')`,
+    ),
+    // #836, OW-15: a coordenada absoluta é inteira ou não é — a mesma garantia da migração 0029.
+    worldPositionComplete: check(
+      'character_world_position_complete',
+      sql`(${t.worldX} is null and ${t.worldY} is null and ${t.worldZ} is null)
+        or (${t.worldX} is not null and ${t.worldY} is not null and ${t.worldZ} is not null)`,
+    ),
+    vitalsNotNegative: check(
+      'character_vitals_not_negative',
+      sql`(${t.health} is null or ${t.health} >= 0) and (${t.mana} is null or ${t.mana} >= 0)`,
     ),
     byAccount: index('character_by_account').on(t.accountId),
   }),

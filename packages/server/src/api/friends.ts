@@ -57,17 +57,20 @@ async function who(
 }
 
 /**
- * `directory.lookup` só dá `type` — sem `huntId` (DT-05). `'city'` é a Cidade viva
- * (invariante 8); qualquer outro tipo colapsa em `'hunt'`, porque o mínimo do §21 só precisa
- * saber se o amigo está na Cidade ou fora dela.
+ * `directory.lookup` só dá `type` — sem `huntId` (DT-05). `'city'` é a Cidade viva e `'world'` o mundo aberto
+ * (OW-18, só com `OPEN_WORLD`; invariante 8); qualquer outro tipo colapsa em `'hunt'`, porque o mínimo do §21
+ * só precisa saber se o amigo está num espaço compartilhado ou fora dele. O `'world'` é um valor NOVO do
+ * contrato, e o rótulo dele no cliente é da OW-23: até lá, um amigo no mundo aparece com o ponto de online e
+ * o texto de quem não tem lugar (`FriendsModal`).
  */
 async function statusOf(
   deps: Pick<FriendRouteDependencies, 'locateSession'>,
   characterId: string,
-): Promise<{ online: boolean; where: 'city' | 'hunt' | null }> {
+): Promise<{ online: boolean; where: 'city' | 'world' | 'hunt' | null }> {
   const location = await deps.locateSession(characterId);
   if (location === null) return { online: false, where: null };
-  return { online: true, where: location.type === 'city' ? 'city' : 'hunt' };
+  const where = location.type === 'city' ? 'city' : location.type === 'world' ? 'world' : 'hunt';
+  return { online: true, where };
 }
 
 export function registerFriendRoutes(app: FastifyInstance, deps: FriendRouteDependencies): void {

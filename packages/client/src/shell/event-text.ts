@@ -55,6 +55,8 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
       return `Entrou em ${hunt}`;
     }
     case 'entered-city': return 'Voltou para a cidade';
+    // O mundo aberto (#846, OW-23): o `sim` grava `entered-world` com o dono no detalhe, e a linha só diz que entrou.
+    case 'entered-world': return 'Entrou no mundo';
     case 'level-up': {
       // Em party o detalhe é `id/level` (#190): diz DE QUEM. Em solo, só o level, como sempre.
       const [who, level] = detail.includes('/') ? detail.split('/') : [undefined, detail];

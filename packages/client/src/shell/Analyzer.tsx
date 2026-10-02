@@ -246,7 +246,9 @@ export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?
     <FloatingWindow
       name="analyzer"
       className="ui-floating-window--analyzer"
-      title="Analisador de caçada"
+      // O mundo aberto (#846, OW-23) tem o analisador POR PERSONAGEM (`analyzer` só leva o que é dele, OW-18), mas não é
+      // uma caçada: o título diz o que a janela é.
+      title={analyzer.sessionType === 'world' ? 'Analisador' : 'Analisador de caçada'}
       // "Sessão" + relógio hh:mm:ss no cabeçalho (kit: Hud.jsx:190) — a segunda coluna do kit
       // ("Próximo level") fica de fora (RF-05): a curva de XP não trafega.
       meta={`Sessão ${formatClock(elapsedMs)}`}

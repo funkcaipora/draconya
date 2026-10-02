@@ -138,6 +138,15 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
     o restante passaria a depender da frequência do hospedeiro (invariante 2). O vínculo com o relógio
     é transiente (fora de `getState`) e o restore de snapshot o religa com `bindClock`, SEM traduzir:
     o relógio é o mesmo, e a janela quente atravessa. A entrada recusada desfaz a tradução.
+  - **O repouso é o prazo restante, e `CharacterRuntime.conditionsAsRemaining()` é quem o devolve**
+    (#836, OW-15): as condições com `expiresAtMs`/`nextTickAtMs` menos o relógio a que o personagem
+    está ligado (o instante EXATO da saída se a sessão já o tirou; zero para o do ticket, que nunca
+    entrou numa sessão) — o mesmo `rebase` da transição, para o relógio zero. É o que a linha
+    `characters.conditions` guarda: o repouso não conta tempo, e o relógio de cada sessão nasce em
+    zero. Só LÊ. Só o personagem sabe de qual relógio os instantes dele são (numa transição o
+    destino é construído antes de a origem encerrar), então o hospedeiro nunca subtrai o `nowMs` da
+    sessão por conta própria. O caminho de volta é `Conditions.rebase(0, session.nowMs)` ANTES do
+    `enter`, que não traduz o personagem do ticket (`carryRestoredConditions`, no `server`).
   - O teste que força a escolha é a tabela `SESSION_CLOCK_POLICY` de `session.test.ts`, um
     `Record<keyof CharacterState, 'stamp' | 'duration' | 'none'>`: o campo novo não compila até ser
     classificado. Duração sem âncora num relógio (`fedMs`, `durationRemainingMs`) é `none` e atravessa.
@@ -485,7 +494,9 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   ninguém a reescreve por passo. `WorldRuleset#worldPositionOf` traduz o `position` de agora; quem
   grava a âncora é o dono da sessão, e **a leitura tem de vir ANTES de o personagem ser movido** —
   numa transição o destino é construído antes de a origem encerrar, e o `position` já é o do
-  destino (o mesmo defeito do `onLeave` da Cidade). (3) **Posição salva inutilizável cai no
+  destino (o mesmo defeito do `onLeave` da Cidade). `townId` (#836, OW-15) é a cidade do ticket: um
+  id que o `sim` só carrega entre sessões, para o dono devolvê-la no extrato — nada no `sim` a lê
+  ainda (a morte do mundo, OW-32, é quem busca o templo por ela). (3) **Posição salva inutilizável cai no
   templo, nunca lança**: parede, fora do recorte, andar sem chão e o `0,0,0` do Canary são o
   caminho esperado; só o templo recusado lança (conteúdo quebrado, que o boot já recusa). (4) **O
   mundo não cura na entrada** (a Cidade curava): a vida e a mana são as do ticket, e a regeneração
@@ -506,7 +517,15 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   sozinha ("não encontram o personagem"), e isso só é verdade até o mesmo id voltar — o passo, a
   regeneração e o bot achariam o `CharacterRuntime` novo e empilhariam uma cadeia por relogue. Um
   no-op na instância (o id de quem entra nunca esteve na fila). Subject por personagem NOVO que o
-  `onEnter` não cancele é a mesma regressão. (10) **A âncora do tempo cobrado só anda com evento**:
+  `onEnter` não cancele é a mesma regressão — e `cancelEvents` é de subject EXATO: o do anel é
+  `<id>:<slot>:<recurso>` (`ITEM_REGEN`), que o `onLeave` cancela por slot vestido (#839). (9b) **A
+  transição constrói o destino ANTES de a origem soltar o MESMO `CharacterRuntime`** (#839): o
+  observer de equipamento tem DONO (`EquipmentObserver.owner`, a sessão) e o `onLeave`/`onEnd` só o tira
+  por `releaseEquipmentObserver(session)` — `setEquipmentObserver(null)` apagaria o do destino; e o
+  restante do prazo do anel é publicado por `Ruleset.onBeforeLeave` (`Session.beforeLeave`, chamado pelo
+  hospedeiro antes de construir o destino), porque o destino o lê do `overlay` na entrada e o
+  `#parkEquipment` da origem chegaria tarde. O hook só publica: nada que cancele ou desfaça, para a
+  transição recusada deixar a origem intacta. (10) **A âncora do tempo cobrado só anda com evento**:
   o mundo vazio não tem evento, e `onEnter` do mundo cobra os que já estavam e leva
   `#staminaAnchorMs` para agora — senão o primeiro a entrar paga a comida do intervalo vazio. (11)
   **O id de item novo nasce em `#newInstanceId` e só lá**: o critério é `partyOptions` OU
@@ -1412,3 +1431,18 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   da sessão — o hospedeiro traduz no do checkpoint. `'death'` é da OW-32 e `'idle-kick'` da OW-47;
   a união os traz desde já para o hospedeiro tratar os quatro. Saída do mundo tira o personagem da
   party de mundo quando ela existir (OW-43): é o `onLeave`.
+- **O `canLogout` respondido sem agir é `WorldRuleset#logoutVerdictOf`, e o mundo recebe o morto da hunt
+  (OW-20, #841, ADR 0060 d.6a e d.6c).** Duas peças do `WorldRuleset`, nenhuma em `hunt.ts`: a instância
+  continua a de sempre. (1) **`logoutVerdictOf(session, characterId)` só LÊ** — devolve o veredicto de
+  `canLogout` (PZ sempre, no-logout nunca, o resto só sem luta) ou `null` para quem não está na sessão ou
+  morreu —, ao contrário de `requestLogout`, que EMITE `departure-requested`. É a pergunta de quem quer
+  deixar o mundo por outra porta que o `logout`: o hospedeiro a faz na entrada numa instância e na largada
+  de uma party (`SessionHost#transition`, `#partyMemberInFight`), e quem a implementasse por `requestLogout`
+  soltaria do mundo quem só queria saber se podia caçar. Mesmo veredicto a 1 Hz e a 10 Hz (relógio lógico).
+  (2) **`WorldRuleset#onEnter` devolve ao máximo e ao templo quem chega MORTO**: a hunt que acaba por morte
+  volta ao mundo — com alguém olhando — com `alive = false` e `health = 0` (a Cidade curava em `onEnter`; o
+  mundo não cura), e a topologia o recolocaria na âncora de antes. Vida e mana viram o máximo, `alive` volta
+  e `worldPosition` cai para `null`, que é o templo (`player.cpp:4034-4041, 4226-4252`) — o MESMO
+  personagem que `receiptWorldStateOf` grava para quem morre e vai ao repouso. É a única regra de morte do
+  mundo que existe até a OW-32; **só o morto**: quem chega vivo traz a vida do ticket ou da hunt, ferida ou
+  não. Fica antes de `super.onEnter`, que lê o personagem para a regeneração e a colocação.

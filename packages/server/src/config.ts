@@ -95,6 +95,34 @@ const EnvironmentSchema = z.object({
    */
   THINGS_VERSION: z.string().default('1533'),
 
+  /**
+   * O mundo aberto do Tibia sem PvP (ADR 0060). DESLIGADO por default: com a flag desligada tudo
+   * funciona exatamente como antes — a Cidade é o espaço compartilhado, o ticket nasce cheio, o
+   * repouso é `'city'`, e nenhuma coluna de mundo é lida nem escrita. Ligada, o personagem passa a
+   * existir no mundo em repouso (posição, cidade, vida, mana e condições, #836 OW-15), e as peças
+   * seguintes do plano (`docs/open-world-plan.md`) se apoiam nela.
+   *
+   * Aceita `1`/`true` e `0`/`false`: o plano chama de `OPEN_WORLD=1`. Quem a lê são o `api` (o ticket
+   * leva os vitais, a lista de personagens reporta o repouso como `'offline'`) e o `game` (todo
+   * extrato leva a posição, a cidade, a vida, a mana e as condições); o `jobs` escreve as colunas que
+   * o extrato trouxer e a lê só para uma coisa (#838, OW-17): ligada, o CHECKPOINT versionado sem valor
+   * movido é aplicado como estado absoluto, sem linha de ledger — e a liquidação do ticket, no `api`,
+   * faz o mesmo. O extrato de fim de sessão e de saída segue com a linha. Tem de ser a MESMA no `api` e no `game`: um `game` ligado com o `api` desligado
+   * emite extratos sobre personagens que nasceram cheios, e é por isso que o extrato só leva o mundo de
+   * quem o ticket trouxe (`receiptWorldStateOf`).
+   */
+  OPEN_WORLD: z.enum(['1', '0', 'true', 'false']).default('false').transform((v) => v === '1' || v === 'true'),
+
+  /**
+   * A cadência do checkpoint do mundo, em milissegundos (#837, OW-16, ADR 0060 d.10d): de quanto em
+   * quanto tempo o `game` grava num `MULTI` só o extrato de todo personagem sujo do mundo. O default é
+   * 60 000 (60 s) — o que a decisão compra, 3,3 transações por segundo com 200 personagens caçando — e
+   * é também o que o mundo PERDE numa queda do nó. O Canary salva de hora em hora
+   * (`canary/config.lua.dist:356-362`), e é por isso que o teto é uma hora. Só o `game` a lê, e só tem
+   * efeito com `OPEN_WORLD` ligado: sem ele nenhuma sessão é `checkpointed`.
+   */
+  WORLD_CHECKPOINT_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });

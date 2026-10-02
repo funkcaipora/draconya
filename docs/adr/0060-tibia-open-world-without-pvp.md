@@ -180,7 +180,7 @@ Todo número será medido na arquitetura de destino (ADR 0013:41-45).
 
 **b. O teto vale só na entrada.**
 - O `capacity` do mundo limita quem entra vindo do repouso.
-- Quem volta de uma instância é sempre admitido, porque já estava no mundo.
+- Quem volta de uma instância é sempre admitido, porque já estava no mundo — só quem SAIU do mundo para ela; a hunt que nasceu do repouso respeita o teto e a fila na volta (emenda de 2026-10-02, #841).
 - Mundo cheio responde como a fila do Canary, com posição e tempo para tentar de novo (`canary/src/server/network/protocol/protocolgame.cpp:1005-1008`), e oferece entrar direto numa hunt idle (decisão 6b).
 - Nunca se abre “Thais 2”.
 - O teto começa em 200 (`CITY_SHARD_CAPACITY`, `packages/server/src/game/sessions.ts:70`) e o `bench:world` o fixa (decisão 11).
@@ -645,3 +645,328 @@ A decisão 4 lista o que a `SessionTopology` isola. A OW-12 a implementou (`pack
 - **A costura não estende a topologia a todo o roster.** Os usos de roster que só rodam com `partyOptions`, bolsa compartilhada, votação, rota ou líder ficam no ruleset, guardados — o mundo não os passa. Dez usos são roster de party **sem guarda** e ficam abertos, cada um com dono: a XP pelo roster e os `killers` do Bosstiary na OW-28; o alvo de cura de party, as magias de party, o teto de medo, o nível de hazard da party e o custo por golpe de `#armHealersOf` na OW-43. A extração do resto é a dívida registrada na decisão 4, nas OW-61 a OW-65.
 
 **Efeito no que esta decisão escreveu:** nenhum. A decisão 4 continua valendo; esta emenda só registra que a lista de perguntas cresceu em três e onde mora a auditoria.
+
+## Emenda — 2026-10-02 (#836, OW-15): as condições persistem como prazo restante, e a flag `OPEN_WORLD` nasce na primeira peça que precisa dela
+
+A decisão 10.f manda persistir vida, mana e condições (`characters.health/mana/conditions`) e levá-las no ticket. A OW-15 as implementou (`docs/product/open-world.md`, "O personagem em repouso") e fechou quatro detalhes que a decisão deixava em aberto:
+
+- **`conditions` guarda PRAZO RESTANTE, não instante de relógio.** `ConditionState.expiresAtMs` e `nextTickAtMs` são instantes do relógio lógico da sessão que os gravou, e o relógio de cada sessão nasce em zero (ADR 0020). O repouso não conta tempo — o Canary guarda os `ticks` que faltavam (`canary/src/creatures/combat/condition.cpp:300`) —, então a linha leva quanto faltava (`CharacterRuntime.conditionsAsRemaining()`), a condição que já venceu não vai, e quem entra traz o restante para o relógio da sessão que o recebe (`carryRestoredConditions`, antes de `Session.enter`, que não traduz o personagem do ticket). Gravar o instante da sessão ressuscitaria a condição no relógio errado, ou a daria por vencida na entrada de uma sessão que já andou.
+- **A flag `OPEN_WORLD` nasce aqui, e não na OW-18.** A OW-15 é a primeira peça que muda o que o `api` e o `game` leem e escrevem, e o portão do plano diz que todo comportamento novo do mundo fica atrás dela. Ela só guarda o liga/desliga (`packages/server/src/config.ts`, default desligado); a recusa de subir com outro `game` vivo continua da OW-18. Com ela desligada nenhuma coluna nova é lida nem escrita, o ticket e o extrato são os de antes e o repouso é `'city'`.
+- **Quem morreu grava a vida e a mana cheias, a posição nula e nenhuma condição** (`player.cpp:4226-4252`). A vida zero nunca chega à linha, e o ticket trata a que chegar como um morto que entra cheio.
+- **O extrato só leva o mundo de quem o ticket trouxe.** A `town_id` viaja SEMPRE com a flag ligada e é a marca: sem ela o personagem nasceu de um ticket sem o mundo (a flag desligada no `api`, ou um `api` anterior numa implantação em rolagem), e gravar a posição nula ou a vida cheia apagaria o que a linha guarda.
+
+O `upgrade-existing-schema.sql` não ganha as colunas, como não ganhou a `durable_version` (#823): é o upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a migração `0029` falhar ao rodar depois dele.
+
+**Efeito no que esta decisão escreveu:** nenhum. A decisão 10.f continua valendo; esta emenda só registra o formato das condições, onde a flag nasce e as duas regras de segurança do extrato.
+
+## Emenda — 2026-10-02 (#837, OW-16): o que é "sujo", o extrato que não pousou e a âncora da transição
+
+A decisão 10d manda gravar a cada 60 s, e em saída, transição, morte e drenagem, um lote com todo personagem sujo, num `MULTI` só. A OW-16 o implementou no hospedeiro (`docs/product/open-world.md`, "O checkpoint do mundo") e fechou sete detalhes que a decisão deixava em aberto:
+
+- **"Sujo" é o que o banco ainda não tem**, medido no personagem e na sessão, nunca num visualizador (invariante 3): mudou de posição absoluta, de vida, de mana ou de *chaves* de condição desde o último lote; rendeu algo (qualquer agregado além de `durationMs`, ou uma instância vendida); mudou o que carrega (a quantidade de uma pilha, uma instância que entrou ou saiu); ou mexeu em estado durável por uma intenção (`dirty`). O prazo de uma condição não suja — encolhe a cada segundo —, e o `goldDelta` também não, porque só é liquidado depois de gravar e um lote que falhou o deixaria sujo para sempre. O parado na PZ, sem render nada, não gera linha.
+- **Toda saída grava uma linha, suja ou não.** A decisão 7 diz que toda saída grava o checkpoint; a saída leva o `reason` e a âncora, e é a única linha que o parado gera.
+- **O extrato que `leave` e `checkpoint` emitem uma vez não pode morar só na pilha de quem falhou.** Os dois zeram o que o extrato leva ao emiti-lo. Se `saveBatch` falha, as linhas voltam inteiras — mesmo `seq`, mesma versão durável — para uma fila do hospedeiro (`CheckpointState.unsaved`) e vão na frente do lote seguinte; um `release` que falha não solta o personagem, e o seguinte as grava antes de soltá-lo. Repetir é seguro pela chave do Redis e pelo `UNIQUE (session_id, seq)` do ledger (invariante 10).
+- **Os lotes de uma sessão são serializados, e o timer não empilha.** O lote seguinte só é montado depois que o anterior terminou, para o que falhou entrar nele e para a saída de um personagem esperar o lote em voo que pode levar o crédito dele.
+- **O motivo da linha periódica é `'checkpoint'`**, só do hospedeiro (`ReceiptReason`): o `EndReason` do `sim` não tem como dizer "ninguém saiu", e acrescentá-lo arrastaria o protocolo e o cliente para uma issue de servidor. Vira o `type` `session-checkpoint` do ledger.
+- **A âncora de saída é lida antes de o destino ser construído.** Numa transição o destino é construído antes de a origem encerrar, com o mesmo `CharacterRuntime` — a decisão 6 já dizia isso —, e depois disso o `position` dele é o da hunt. O checkpoint e a saída leem a posição absoluta de agora e a escrevem em `CharacterRuntime.worldPosition` antes de montar a linha; `#runTransition` a lê antes de `buildSession`.
+- **O `acquired` cumulativo não basta para o inventário.** A sessão do mundo nunca termina, então todo item que o personagem pega nela leva o prefixo dela e entra na linha de todo checkpoint — e o ledger o insere sem tocar a linha que já existe. A *existência* da linha é idempotente; a *quantidade* não é: a pilha que o loot engordou ou o jogador comeu ficaria com a quantidade do primeiro checkpoint, e a que acabou voltaria no login (`Inventory.consumeOne` e `destroy` não passam por `removedInstances`). A linha do mundo leva, além do `acquired`, **`quantities`** (a quantidade de toda instância carregada, absoluta e inteira — o ledger só escreve absoluto de extrato mais novo, e um delta se perderia com o velho descartado) e um **`removedInstances` ampliado** com tudo o que estava no inventário do último extrato e já não está (`inventoryDeltaOf`, contra `CheckpointMark.items`). A hunt e a Cidade não os levam: o extrato delas não mudou.
+
+O lote **não é fatiado**: um `MULTI` com todo o mundo é o que a decisão compra, e o tamanho do comando — cada linha leva o estado absoluto inteiro e o `acquired` da sessão — é número do `bench:world` (OW-35). A cadência é `WORLD_CHECKPOINT_MS` (`docs/runtime-configuration.md`), de 1 s a 1 h.
+
+**Efeito no que esta decisão escreveu:** nenhum. A decisão 10d continua valendo; esta emenda só registra o que "sujo" quer dizer, onde mora o extrato que não pousou, e o que a transição precisa ler antes de construir o destino.
+
+## Emenda — 2026-10-02 (#838, OW-17): o checkpoint sem valor movido é estado sob versão, e a flag chega ao `jobs`
+
+A decisão 10.d diz que a linha sem valor movido não cria linha de ledger e leva só estado absoluto, idempotente
+pela versão (10.e). A OW-17 a implementou em `packages/server/src/jobs/ledger.ts` e fechou seis detalhes que a
+decisão deixava abertos (`docs/product/open-world.md`, "A liquidação do checkpoint no `jobs`"):
+
+- **"Sem valor" tem definição fechada** (`movesValue`): `xpGained`, `goldGained`, `goldSpent`, `kills` e `deaths`
+  iguais a zero, `removedInstances` vazio e nenhum item NOVO em `acquired`. A XP negativa da penalidade de morte
+  e o gold que entra e sai na mesma sessão contam como valor. Os campos monotônicos (Bestiário, Bosstiary,
+  magias, vocação, promoção) não contam — já são idempotentes por si — e entram em todo extrato, também no
+  atrasado.
+- **`acquired` é cumulativo, então só o item novo é valor.** O emissor lista todo item com o prefixo da sessão
+  que ainda está na mochila, e o id de loot não muda: a espada de t0 está em todo checkpoint seguinte. Contar a
+  lista não vazia como valor prenderia no ledger todo personagem que já lootou uma vez, e os 288 mil por dia
+  seriam o caso típico. O `jobs` pergunta ao banco, sob a trava da linha, quais ids o dono já tem em
+  `item_instance`; se todos, o extrato é estado puro.
+- **Só o extrato VERSIONADO pula o ledger.** Sem versão não há a guarda que torna a aplicação idempotente, e a
+  chave `(session_id, seq)` é a única idempotência dele: o extrato de um nó anterior (deploy em rolagem) segue
+  com linha de ledger mesmo sem valor.
+- **Só o CHECKPOINT pula o ledger (`reason: 'checkpoint'`); o fim de sessão e a saída, não.** A liquidação de um
+  snapshot irrestaurável reemite o mesmo `seq = ledgerSeq + 1` do extrato final com uma versão NOVA, e a linha de
+  ledger do final é o que a reconhece: sem ela a versão maior a deixaria sobrescrever o estado final com o de
+  alguns segundos antes. A sessão do mundo, a única que faz checkpoint, não tem snapshot (10.a), então não há
+  gêmeo a reconhecer. A saída sem valor custa uma linha por logout, que vem dos logins e não do relógio.
+- **A flag `OPEN_WORLD` chega ao `jobs` e à liquidação do ticket.** A emenda da OW-15 dizia que o `jobs` não a
+  lê; agora a lê para uma coisa só, o pulo do ledger. Com ela desligada — o default — todo extrato grava a linha,
+  como antes. Uma divergência de flag entre `jobs` e `api` é inofensiva: o mesmo extrato dá o mesmo estado, com
+  uma linha de ledger a mais ou a menos.
+- **O estado aplicado sem ledger não toca em `xp`, `gold` nem `level`, nem insere `item_instance`.**
+  `characters.gold` segue sendo a projeção do ledger.
+
+**Efeito no que esta decisão escreveu:** estreita a 10.d num ponto. A frase "linha sem valor movido não cria linha
+de ledger" vale para a linha PERIÓDICA do lote (`'checkpoint'`); a linha de saída, que a 10.d também chama de
+linha do lote, leva a de ledger de delta zero, pelo snapshot acima. O invariante 10 fica intacto, porque ele fala
+de movimentação de valor e o checkpoint sem valor não move nenhum. Os números do custo (3,3 transações/s e até 288
+mil linhas de ledger por dia por mundo com 200 personagens a 60 s) seguem os da decisão 10.d, agora com o teto
+explicado: o teto é o de todo checkpoint ter valor, e o `acquired` cumulativo não o faz o caso típico.
+
+## Emenda — 2026-10-02 (#839, OW-18): o mundo hospedado — o teto só na entrada, o grafo sem aresta entre mundo e Cidade, o serviço em PZ e a recusa de subir
+
+A decisão 2 manda uma sessão por mundo num processo `game`, a 6 põe `'world'` no centro do grafo, e a 2c diz que
+`OPEN_WORLD` só liga com um `game`. A OW-18 as implementou (`docs/product/open-world.md`, "O mundo hospedado") e
+fechou nove detalhes que as decisões deixavam em aberto:
+
+- **O teto é uma função da ORIGEM da entrada, e mora no `WorldShard`.** `admit(worldId, personagem, 'rest' |
+  'instance')`: o login (`'rest'`) conta para o `capacity` do mundo e o mundo cheio o recusa (`WorldFullError`);
+  quem volta de uma instância (`'instance'`) nunca é recusado. A decisão 2b já dizia isto; faltava dizer ONDE: no
+  shard, e não no hospedeiro nem no `api`, porque só ele conhece a população da sessão. A fila e a hunt idle
+  direta que respondem ao `WorldFullError` são da OW-21.
+- **O mundo padrão é `main` até a OW-50.** `characters.world_id` existe desde a OW-15, mas o ticket não o leva, e
+  todo login e toda volta caem em `DEFAULT_WORLD_ID`. Conteúdo sem `worlds/main.json` com a flag ligada **não
+  sobe**: a recusa é na construção do `WorldShard`, e não no primeiro ticket de cada jogador.
+- **O mundo e a Cidade não se tocam no grafo.** `ALLOWED` ganha `world: [hunt, training, quest, boss, guild-war]`
+  e cada instância ganha `world` ao lado de `city`; mas `world → city` e `city → world` não existem. A decisão 6
+  diz que `'city'` continua enquanto a flag existir, e não diz que as duas se ligam: uma aresta entre elas
+  contornaria, a partir do mundo, o `canLogout` da 6a. Quem está numa Cidade sob a flag ligada — o fim de uma hunt
+  ainda volta a ela até a OW-20 — sai do jogo e entra de novo.
+- **A tabela diz o que é possível, não quando.** A entrada na instância por `canLogout` (6a) e a volta só com
+  alguém olhando (6c) são do hospedeiro (OW-20). Até lá, `enter-hunt` e `enter-training` no mundo passam sem
+  `canLogout`.
+- **O serviço de Cidade tem DOIS níveis de pergunta no hospedeiro.** A sessão oferece serviço? (`offersCityServices`,
+  OW-04: a Cidade e o mundo sim, a hunt e o treino nunca) e, só no mundo, o tile aceita? (`Ruleset.acceptsCityServices`,
+  OW-13: PZ). Entram nele a bênção, a promoção, a compra, o livro do offline training, a entrada no treino e o
+  nível de hazard — os que já eram serviço da Cidade — e, **só no mundo**, a venda da mochila e o aprender magia,
+  que a Cidade e a hunt aceitam de onde estão (a emenda do ADR 0058 d.2 que a tabela da decisão 16 anunciava).
+  A recusa fora de PZ é uma frase só e não debita nada. Os Charms seguem valendo de qualquer sessão (ADR 0052 d.4).
+- **O `leave-hunt` no mundo é recusado.** O `WorldRuleset` é um `HuntRuleset` e herda `requestExit`; concluído, ele
+  vira `member-left` e a sucessão de sempre leva o personagem à Cidade — por fora do `canLogout` e de `ALLOWED`. O
+  mundo sai por logout (OW-19) e por transição (OW-20).
+- **O mundo não leva identidade de hunt no fio.** O `huntId` (`world:main`) e a `difficulty` (`world`) do
+  `HuntRuleset` são sintéticos — o `Hunt` e a rota que o motor exige —, e o `instance-enter` e o `session-state`
+  não os mandam.
+- **O cursor do analisador é absoluto e por personagem.** Os dois restos que a OW-13 deixou para o hospedeiro: o
+  teto de eventos notáveis (`maxNotableEventsPerCharacter`) desloca a lista, e o evento de outro personagem
+  provocava um `analyzer` sem evento novo para quem não o vê — uma mensagem para os duzentos do mundo por evento
+  de qualquer um.
+- **A recusa de subir é proteção de boot, e é simples.** Com a flag ligada o `game` lê `aliveNodes` e cai com
+  `MultipleGameNodesError` antes de abrir a porta e de bater o coração, se há outro `NODE_ID` vivo; o próprio não
+  conta (a encarnação anterior bate até o fim do lease), e o Redis que falha também derruba o boot. Duas subidas
+  simultâneas passam: a trava de verdade, que deixa mais de um nó, é a `world:{id}:owner` da decisão 13 (OW-59).
+  O default de `NODE_ID` é o `hostname()`, e o contêiner reiniciado vê o anterior por até um lease.
+
+Corrige, de passagem, um defeito que a Cidade já tinha e o mundo tornaria pior: o personagem que a fábrica põe na
+sessão compartilhada e cujo registro no diretório é recusado ficava em `participants` sem quem o hospedasse — um
+tile bloqueado e, no mundo, uma vaga do teto que nunca volta, numa sessão que não esvazia. `#createAndRegisterSession`
+o tira dela.
+
+**O que a OW-18 deixa, com dono:** a stamina do mundo conta como recuperação na próxima transição e no próximo login
+(o `materializeStamina` da fronteira e o marco do extrato tratam o mundo como "offline", contra a decisão 14b —
+OW-46); `player-stats.zone` e `inFight` existem no protocolo e nenhum servidor os emite (a OW-23 os lê, e nenhuma
+issue do M48 os produz); e largar a party a partir do mundo não passa por `canLogout` (o `api` só vê o tipo da
+sessão — OW-20, `member-in-fight`).
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 2, 6 e 13 continuam valendo; esta emenda só registra
+onde mora o teto, o que o grafo não liga, os dois níveis do serviço de Cidade e o que a recusa de subir é e não é.
+
+## Emenda — 2026-10-02 (#840, OW-19): o hospedeiro entrega a intenção e cumpre o evento, e a chegada sem visualizador vale já no login
+
+A decisão 7 manda o hospedeiro entregar ao `sim` `presence-lost` quando o último visualizador se solta ou quando o
+personagem chega sem nenhum, `presence-restored` ao reanexar, e tratar a saída que o `sim` decide: o checkpoint e o
+`release` para o repouso. A OW-19 a implementou no `SessionHost` (`docs/product/open-world.md`, "A presença no
+hospedeiro") e fechou seis detalhes que a decisão deixava em aberto:
+
+- **O hospedeiro não decide nada de gameplay.** Entrega três intenções (`presenceLost`, `presenceRestored`,
+  `requestLogout`), cumpre um evento (`departure-requested`) e repassa a mensagem de outro (`logout-refused`). Não
+  olha tile, luta nem relógio de parede: se o personagem pode sair, quando e de onde, é do `sim`
+  (`canLogout`, o relógio lógico, a janela de luta). Os três métodos são pedidos por forma
+  (`worldPresenceOf`), e a Cidade e a hunt, que não os têm, não recebem presença nenhuma.
+- **Presença é a troca de zero para um visualizador e de um para zero.** A segunda aba não é presença: fechar uma
+  de duas não faz nada. O `release` tira o visualizador do conjunto antes de fechar o socket, e o `detach` que o
+  `close` do servidor chama de volta ignora quem já saiu — quem o servidor solta não perdeu a conexão.
+- **"Chegar ao mundo sem visualizador" vale já no login.** A decisão 6c descreve a corrida entre a desconexão e a
+  chegada de uma instância, e a decisão 7 diz "qualquer chegada com zero visualizadores". No login a chegada É
+  sem visualizador por construção — o ticket é consumido no handshake e o websocket anexa depois —, então todo
+  login entrega `presence-lost` e o primeiro `attach` devolve `presence-restored`, milissegundos depois e sem
+  efeito: os dois são idempotentes. O que isso compra é o login cujo socket nunca abre, que sai aos 60 s em vez
+  de ficar parado e vulnerável para sempre, porque o recolhimento por repouso de 5 minutos é da Cidade, e o
+  mundo, que roda a 10 Hz, nunca é visitado por ele (`#collectResting` só vê `hz <= 0`). A outra chegada é a
+  volta de uma instância cujo visualizador caiu no meio da transição (`#replace`).
+- **A saída vale com ou sem visualizador, e a âncora é a posição do evento.** `departure-requested` é gameplay, e o
+  x-log é o caso em que não há visualizador. O personagem sem dono pode ter andado entre o instante em que o `sim`
+  decidiu e o ciclo que o hospedeiro lê (o medo, um empurrão), e o login seguinte volta ao tile de onde ele saiu:
+  o `release` recebe a posição do evento. O `{0, 0, 0}` do Canary é "sem posição" e cai na posição de agora. A
+  saída é idempotente por personagem, e quem já está numa transição não é solto por ela — o `release` resolve o
+  personagem pela sessão de destino.
+- **O `logout` do mundo é intenção, e a resposta é na hora.** O hospedeiro chama `requestLogout` e drena o evento
+  sem esperar o ciclo seguinte, como o `leave-hunt`. A recusa (`logout-refused`) vai só a quem pediu, a todas as
+  abas dele. Na hunt e na Cidade o `logout` segue como era. Sem veredicto (`requestLogout` devolve `null`: o
+  `sim` não conhece o personagem) o `logout` é o `release` de sempre — sem este ramo seria engolido, porque não
+  há personagem para o `sim` decidir.
+- **A saída que falha é repetida pelo hospedeiro, e a reconexão que a encontra perde.** O `release` que o Redis
+  recusou já tirou o personagem do `sim` (o `departure-requested` é um só) e não o soltou do hospedeiro, e o x-log
+  não tem jogador que peça outra vez: o hospedeiro registra a saída que falhou e a repete no ciclo de checkpoint e
+  no `prepare` de quem reconecta, em vez de deixar o personagem mapeado — com o slot da conta renovado a cada
+  ciclo — até o processo reiniciar. O x-log vence no instante em que o cliente reconecta sozinho: com a saída em
+  voo, o `prepare` espera por ela e recusa o ticket (503), o `attach` recusa quem está saindo, e o `open` do
+  servidor fecha esse socket (1013) em vez de deixar a exceção virar `uncaughtException` — o mundo é um processo
+  só (decisão 2c), e um descuido de reconexão derrubaria todo jogador.
+- **Os quatro motivos de saída são cumpridos desde já.** `logout`, `xlog`, `death` e `idle-kick` entram na união
+  que o `sim` emite desde a OW-14; o hospedeiro traduz `death` em `EndReason` `death` — o ledger registra
+  `session-death`, como na hunt — e os outros três em `manual-exit`, o que o `logout` de antes já gravava. O motivo
+  original fecha o socket (`1000` e o texto). Quem emite `death` e `idle-kick` é a OW-32 e a OW-47.
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 6c e 7 continuam valendo; esta emenda só registra o
+que o hospedeiro entrega e cumpre, que a chegada sem visualizador inclui o login, de onde a âncora de saída sai, e
+quem repete a saída que falhou.
+
+## Emenda — 2026-10-02 (#842, OW-21): a fila é a `WaitingList` do Canary, em Redis; a hunt idle direta vem do ticket e só com a flag
+
+A decisão 2b manda o mundo cheio responder como a fila do Canary, e a 6b manda a entrada direta numa hunt idle a
+partir do repouso. A OW-21 as implementou (`docs/product/open-world.md`, "A entrada pelo repouso") e fechou oito
+detalhes que as decisões deixavam em aberto:
+
+- **A fila é a `WaitingList` do Canary inteira, e não só a posição.** Quem chega com o mundo cheio entra no fim e
+  recebe a posição e a espera; mas a regra que importa é a de `clientLogin` (`canary/src/creatures/players/
+  management/waitlist.cpp:69-93`): **com fila, mesmo havendo vaga, o recém-chegado vai para o fim** e só entra se a
+  posição dele couber nas vagas. É o que impede furar a fila quando uma vaga abre e o primeiro ainda não voltou. A
+  espera segue `getTime` (5 s até a posição 4, 10 s até a 9, 20 s até a 19, 60 s até a 49, 120 s dali) e o prazo
+  para voltar é a espera mais 15 s (`TIMEOUT_EXTRA`); quem não volta sai da fila sozinho. **Premium vai na frente**
+  dos comuns, como a lista de prioridade do Canary (`waitlist.cpp:95-115`) — a decisão não dizia, e "tudo como
+  Canary" a trouxe.
+- **A fila mora em Redis** (`world:{id}:queue`, `…:until`, `…:seq`, todas com TTL), num script Lua só: limpar,
+  entrar e decidir são uma operação. O mundo vive num processo (invariante 9) e a fila poderia ser um `Map` dele;
+  fica no Redis porque o processo cai, e porque a trava `world:{id}:owner` (OW-59) troca o dono do mundo de nó sem
+  a fila precisar andar junto. É estado de apresentação, não quente: perdê-lo custa um lugar na fila, nunca um
+  resultado (invariante 3).
+- **Quem conta as vagas é o `WorldShard`**, no instante da chamada ao Redis. A corrida entre a fila e a entrada
+  (dois logins veem a mesma vaga) volta à fila, até três vezes. O teto continua sendo da ENTRADA do repouso (2b):
+  quem volta de uma instância nunca passa pela fila, e `vacanciesOf` nunca é negativo, porque quem volta pode
+  passar do teto.
+- **O mundo cheio abre o socket só para entregar a mensagem.** O handshake é aceito, o `game` manda `world-full`
+  e fecha com o código 4001; nenhum visualizador, nenhuma sessão, nenhum registro. Um `409` cru no upgrade não
+  carregaria a posição. `huntAvailable` é verdade enquanto o nó aceita sessões novas e o catálogo tem hunt.
+- **O slot de personagem ativo da conta não é devolvido na recusa.** O varredor de tickets o devolve no prazo,
+  como a todo ticket que não virou sessão; devolvê-lo na hora faria o segundo ticket do mesmo personagem ser
+  recusado como não autorizado em vez de receber o `world-full`.
+- **A hunt idle direta é `entry: { hunt }` no pedido de ticket**, conferida pelo `api` contra o conteúdo e levada
+  no claim, assinada como o resto (invariante 4). O `game` a cria como PRIMEIRA sessão — criação, não transição —
+  pela mesma construção da transição do menu, com o bot do ticket compilado na criação. Não cai no mundo se a hunt
+  sumiu: recusa o handshake (`409`), porque quem pediu a hunt idle e recebe uma multidão sem ter pedido é uma
+  surpresa pior que uma recusa que se explica.
+- **A hunt direta só vale com `OPEN_WORLD` e só para quem não tem sessão.** Com a flag desligada o `{ hunt }` é
+  IGNORADO — o repouso é a Cidade e a hunt se escolhe no menu, o jogo de hoje —, e ignorado, não recusado, para o
+  cliente do mundo aberto contra um servidor que desligou a flag entrar do mesmo jeito. Quem já tem sessão a
+  reencontra, e o snapshot de uma sessão interrompida (ADR 0010) tem precedência sobre as duas entradas: o
+  personagem está nela, não no repouso.
+- **Quem entra numa hunt direta sai da fila**, para a vaga que guardava não ficar ocupada até o prazo.
+
+**O que a OW-21 deixa, com dono:** o fim da hunt que começou do repouso ainda volta à Cidade (OW-20 decide mundo
+com alguém olhando, repouso sem); o cliente ainda ignora o `world-full` e reconecta pelo recuo de sempre, que
+pode passar do prazo da fila (OW-23); o ticket ainda não leva `world_id`, e a fila é a do `main` (OW-50).
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 2b e 6b continuam valendo; esta emenda só registra
+que a fila é a do Canary por inteiro (premium e a regra de não furar, inclusive), onde ela mora, e o que o
+`entry` do ticket é e não é.
+
+## Emenda — 2026-10-02 (#841, OW-20): a entrada é o portão do logout, a volta decide pelo visualizador depois de gravar, e o repouso solta sem encerrar
+
+A decisão 6a manda o mundo deixar o personagem entrar numa instância só quando `canLogout` passa, e a 6c manda a
+volta ir ao mundo com visualizador e ao repouso sem. A OW-20 as implementou no `SessionHost`
+(`docs/product/open-world.md`, "O mundo e a hunt idle") e fechou sete detalhes que as decisões deixavam em aberto:
+
+- **A pergunta é feita antes de qualquer efeito, e a resposta é a mensagem do logout.** `transition()` consulta o
+  `sim` (`WorldRuleset#logoutVerdictOf`, que só lê — `requestLogout` emite a saída e soltaria do mundo quem só
+  queria saber se podia caçar) antes da âncora, do destino e do extrato: a recusa não mexe em nada. O motivo vai
+  como `logout-refused` — o MESMO do logout recusado, sem opcode novo —, e não como `system-message`: o Canary
+  tem uma frase só para as duas portas, e o cliente (OW-23) a escreve uma vez. Vale para toda instância, o
+  treino inclusive: o tile `P` (PZ + no-logout) o recusa, porque o no-logout vale por cima da PZ (`player.cpp:6972`).
+- **A decisão de para onde volta é DEPOIS de gravar o extrato.** O visualizador que cai durante o `await` do Redis
+  vale como desanexado; decidir antes poria no mundo, sem ninguém, quem acabou de fechar o navegador — a
+  alternativa que o ADR já descartou ("Fim de hunt desanexada volta ao mundo").
+- **O extrato que acabou de pousar é o checkpoint do repouso.** `#persistReceipt` já leva a âncora, a vida, a mana e
+  as condições do dono (decisão 10f, OW-15); a tabela da 6c ("repouso: checkpoint com posição e vitais + `release`")
+  não pede uma segunda gravação, só soltar o personagem. A morte grava posição nula, vida e mana cheias e nenhuma
+  condição, como `receiptWorldStateOf` já fazia.
+- **Soltar para o repouso não é `release`.** `release` de uma sessão privada a encerra (`session.end('manual-exit')`),
+  e quem sai por dentro de uma party (a morte, a regra de saída) não pode encerrar a hunt dos outros. O repouso
+  esquece o personagem — visualizadores, mapas, snapshot, diretório, slot — sem tocar na sessão, que só some do nó
+  quando não sobra ninguém dela. A metade comum com `release` é a `#unhost`.
+- **O morto chega ao mundo cheio e no templo, e quem chega vivo não é curado.** A hunt que acaba por morte volta ao
+  mundo com `alive = false`, e a Cidade curava em `onEnter`; o mundo não cura ninguém (OW-13). `WorldRuleset#onEnter`
+  devolve vida e mana ao máximo e zera a âncora só de quem chega morto, e é o que faz as duas voltas darem o MESMO
+  personagem — o repouso o grava assim. É a única regra de morte do mundo até a OW-32.
+- **A drenagem leva todos ao repouso, com ou sem visualizador.** O `drainAll` já soltava por `release`; o que a OW-20
+  registra é que é assim de propósito: pôr no mundo de um nó que está caindo não faria sentido, e o cliente volta pelo
+  ticket, que traz a âncora e os vitais do extrato.
+- **A largada de party passa por `canLogout` no `game`, no primeiro ticket, e o `api` não sabe.** O `api` só vê o tipo
+  da sessão. O primeiro ticket cria a hunt com todos e tira cada membro do mundo; é aí que se confere cada um que está
+  no mundo do nó, antes de mover qualquer um, e um recusado derruba a largada inteira (`member-in-fight`, 409 no
+  upgrade, e o culpado recebe o `logout-refused`). O formulário que o `api` gravou continua `hunting` até os tickets
+  expirarem (30 s) e a carência de `disbandIfDead` (45 s) o desfazer — o `game` não escreve o `party-store`, que é do
+  `api` (invariante 9, o espírito dele). E a âncora de cada membro atravessa a largada: a party constrói o
+  personagem do ticket — a linha do banco, um checkpoint atrás —, e sem herdar a de agora o fim da hunt a gravaria
+  por cima, com versão maior.
+
+- **O passe de volta é de quem saiu do mundo.** A decisão 2b diz que quem volta de uma instância "já estava no
+  mundo", e isso só é verdade para quem entrou nela vindo dele. A hunt idle direta (6b) e a party largada de quem
+  estava em repouso nunca ocuparam vaga: se a volta fosse sempre `'instance'`, o mundo cheio engordaria com quem
+  escolheu a hunt justamente por ele estar cheio, e esse personagem furaria a fila em que os outros ainda esperam.
+  O hospedeiro lembra de onde cada um saiu (`leftWorld`): quem saiu do mundo guarda o passe — o teto não o alcança
+  (a emenda da OW-21, "quem volta pode passar do teto") —, e quem nunca esteve nele bate na porta como o login
+  (`WorldEntryGate#login`, premium na frente) e passa pelo teto do shard (`'instance-from-rest'`). Sem lugar, o
+  destino é o repouso, e nada se perde: o extrato que acabou de pousar É o checkpoint, o visualizador recebe o
+  resumo da hunt e reconecta pelo ticket — ao mundo ou à fila, que já guarda a posição dele. A marca não sobrevive ao
+  nó: uma hunt retomada de snapshot não a tem, e com o mundo cheio vai ao repouso — o lado seguro.
+- **A âncora da largada de party vale com os tickets juntos.** Dois tickets da mesma party que chegam dentro da
+  janela do primeiro constroem uma `Session` cada, e só a primeira que hospeda fica; a âncora herdada é escrita no
+  personagem da sessão que sobrou, depois de hospedar, e não na que cada ticket construiu.
+
+**O que a OW-20 deixa, com dono:** o texto do `member-in-fight` no cliente (o do `logout-refused` e o `HuntsModal` que
+mostra o `in-fight` a OW-23 já escreveu); a party recusada que só se desfaz pelo prazo (se o dono quiser desfazê-la na hora, é o
+`game` falar com o `party-store`); a morte no mundo, que continua levando a Cidade pelo `member-left` até a OW-32.
+
+**Efeito no que esta decisão escreveu:** as decisões 6a e 6c continuam valendo; esta emenda registra quando se
+pergunta, em que mensagem a recusa volta, onde mora o checkpoint do repouso, por que soltar não é `release`, quem
+cura o morto e onde a largada de party se confere. A decisão 2b ganha uma precisão: o passe do teto na volta é de
+quem saiu do mundo, e não de toda instância.
+
+## Emenda — 2026-10-02 (#846, OW-23): o cliente do mundo — a rota do menu, o que o fechamento do socket quer dizer e o canal da recusa
+
+A decisão 6b manda o menu oferecer o mundo ou uma hunt idle, a 2b manda a fila mostrar a posição, e a 7 manda
+`logout` passar por `canLogout`. A OW-23 as pôs na tela (`docs/product/open-world.md`, "O cliente do mundo") e
+fechou seis detalhes que as decisões deixavam abertos:
+
+- **O menu precisa de uma rota, e ela é a única peça de `server` da issue.** O catálogo de hunts só chega pelo
+  socket (`catalogue`, depois do `welcome`), e o menu decide o PRIMEIRO ticket — antes de qualquer socket. `GET
+  /api/entry-options` (autenticada, só leitura) devolve `{ openWorld, hunts: [{ id, name, recommendedLevel }] }`; com
+  a flag desligada as hunts vão vazias, e o cliente cai no botão único. A alternativa — uma variável de build do
+  cliente espelhando a flag — diverge do servidor sem ninguém ver, e carregar a lista de hunts no cliente viola a
+  versão de conteúdo fixada (invariante 7). Quem confere a hunt pedida continua sendo o `POST /api/tickets`.
+- **O mundo não é uma hunt para a casca.** `isHunting('world')` é falso, e a casca o trata à parte: faixa com
+  "Caçar (idle)" e "Sair do jogo", overlay de área, analisador "por personagem". Sem isso o `!== 'city'` de antes o
+  trataria como caçada, com "Sair da caçada" (que o servidor recusa no mundo) e party loot.
+- **"Sair do jogo" existe só no mundo, e o fechamento `1000` + `logout` quer dizer "o personagem saiu".** Sem um
+  `logout` na tela o `logout-refused` seria inalcançável e o roteiro da OW-24 ("logout a 10 HP e relogin") não teria
+  como começar. O servidor já fecha todo visualizador com esse código e esse motivo (`SessionHost.release`); o
+  cliente, ao vê-los, NÃO reconecta — volta à escolha de personagem. Qualquer outro fechamento (a drenagem, o
+  `session-moved`) continua sendo queda. É um contrato implícito do `release`: mudar o código ou o motivo exige mudar
+  `LOGOUT_CLOSE` no cliente.
+- **A fila volta no prazo que o servidor mandou, não no recuo de uma queda.** O `world-full` traz `retryAfterMs`, e o
+  prazo do lugar é a espera mais 15 s (OW-21): o recuo exponencial voltaria antes (e o ticket novo seria uma tentativa
+  que a fila recusa) ou depois (e devolveria o personagem ao fim). O cliente soma até 500 ms — nunca antes — e a
+  conexão fica em `queued`, que não conta como falha.
+- **O canal da recusa de entrar numa hunt a partir do mundo é suposto, e a OW-20 o confirma.** A decisão 6a diz que
+  essa entrada só passa onde o Tibia deixaria deslogar, e `logout-refused` é o veredicto do `canLogout`. O cliente lê
+  como recusa da entrada o `logout-refused` que chega DEPOIS do pedido, e também a linha de aviso do sistema mais
+  recente depois dele: a OW-20 pode responder por qualquer um dos dois. O `HuntsModal` no mundo não fecha ao enviar —
+  fecha quando a sessão muda.
+- **Os ícones dependem de um emissor que ainda não existe.** O cliente lê `player-stats.zone` e `inFight` com as
+  regras do Canary (a PZ é só `'protection'`; a luta apaga dentro dela; ausente é "o servidor não diz", nunca "normal,
+  sem luta"), mas nenhuma issue do M48 os produz: em jogo os selos não acendem até alguém os emitir no hospedeiro.
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 2b, 6b e 7 continuam valendo; esta emenda só registra
+a rota que o menu exige, o que o cliente faz com cada fechamento de socket e com a fila, e o que a OW-20 e o emissor
+da zona ainda devem.

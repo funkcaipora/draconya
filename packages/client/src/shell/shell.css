@@ -107,7 +107,7 @@ body {
   border-radius: 50%; background: var(--text-faint);
 }
 .world-status-dot-connected { background: var(--online); }
-.world-status-dot-connecting, .world-status-dot-reconnecting { background: var(--warn); }
+.world-status-dot-connecting, .world-status-dot-reconnecting, .world-status-dot-queued { background: var(--warn); }
 .world-status-dot-failed { background: var(--danger); }
 .world-status-dot-idle { background: var(--text-faint); }
 
@@ -489,6 +489,17 @@ body {
 
 .entry-select-footer { display: flex; align-items: center; justify-content: flex-end; gap: 22px; margin-top: 26px; }
 .entry-select-hint { margin: 0; color: var(--text-muted); font-size: 11px; }
+/* As duas portas do personagem em repouso (#846, OW-23): o mundo e a hunt idle, e o seletor de hunt que a
+   segunda abre. O hint reusa `.entry-select-hint`; a fileira acompanha o rodapé do cartão. */
+.entry-door-menu { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; margin-top: 26px; }
+.entry-door-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
+.entry-door-menu .entry-select-hint { text-align: right; }
+.entry-hunt-choice {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface-panel);
+}
+/* A fila do mundo cheio (#846, OW-23): a frase de posição e espera, dentro do cartão da entrada. */
+.world-queue-status { margin: 0 0 18px; color: var(--parchment-2); font-size: 12px; line-height: 1.5; }
 .entry-enter-button { min-width: 250px; }
 .entry-avatar {
   width: 58px; height: 66px; display: grid; place-items: center;
@@ -1798,7 +1809,9 @@ div.hunt-pill-pending { cursor: default; }
 
 /* --- A barra de condições ativas sobre o mundo (#348, SV-12) ------------------------------ */
 .buff-bar {
-  position: absolute; left: 12px; bottom: calc(var(--actionbar-h) + 58px);
+  /* `left` depois da coluna esquerda (opaca do topo ao rodapé, #251): com `12px` a barra ficava POR BAIXO dela —
+     e, com os ícones de PZ e de luta do mundo (#846), o selo que o jogador mais precisa ver ficava escondido. */
+  position: absolute; left: calc(var(--sidebar-w) + 12px); bottom: calc(var(--actionbar-h) + 58px);
   z-index: 5;
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   pointer-events: none;
@@ -1806,6 +1819,18 @@ div.hunt-pill-pending { cursor: default; }
 
 @media (max-width: 720px) {
   .shell > .buff-bar { order: 1; position: static; padding: 4px 10px 0; z-index: auto; }
+}
+
+/* ---- O aviso "não pode sair" sobre o mundo (#846, OW-23) ----------------------------------- */
+/* A linha de status do Tibia: no centro, acima das pills de caçada, por cima de modais (z 50) — e sem pegar
+   clique, para o mundo continuar jogável por baixo. O texto é o do `logout-refused`. */
+.exit-refusal-notice {
+  position: absolute; left: 50%; bottom: calc(var(--actionbar-h) + 44px); transform: translateX(-50%);
+  z-index: 55; max-width: min(520px, calc(100% - 32px)); box-sizing: border-box;
+  padding: 7px 14px; border: 1px solid var(--blood-4); border-radius: 3px;
+  background: var(--surface-panel); box-shadow: var(--shadow-panel);
+  color: var(--parchment-1); font: 600 11px var(--font-body); text-align: center;
+  pointer-events: none;
 }
 
 /* ---- Overlay: área da hunt (#348, SV-12) ------------------------------------------------- */

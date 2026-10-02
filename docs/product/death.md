@@ -25,6 +25,10 @@ level nenhum, e o Draconya alinhou a isso — o personagem pode cair até o leve
 
 - Morte encerra a hunt e devolve o personagem à PZ.
 - HP e Mana são restaurados totalmente (ao entrar na Cidade, não pela penalidade).
+- **Com `OPEN_WORLD` (OW-20, #841) a morte na hunt não passa pela Cidade**: com visualizador o personagem volta ao
+  mundo, no templo, de vida e mana cheias (`WorldRuleset#onEnter` devolve ao máximo quem chega morto); sem
+  visualizador vai ao repouso, e a linha de `characters` guarda a posição nula (o templo no login), a vida e a mana
+  cheias e nenhuma condição. Ver [`open-world.md`](open-world.md#o-mundo-e-a-hunt-idle-ow-20-841).
 - Sem debuff temporário. Perda de item: implementada e desligada (#571) — ver "Perda de item na
   morte".
 - Abaixo do level 24 (`cubicFromLevel`): perde 10% da XP acumulada (`flatFraction`).

@@ -736,6 +736,22 @@ sobre o estado quente (invariante 9) — não há lock sobre o gold porque nunca
 escrita ao mesmo tempo, e essa frase só é verdade enquanto a transição for de fato exclusiva. Um
 furo aqui não apareceria como bug de sessão; apareceria meses depois como gold duplicado.
 
+**Com o mundo aberto (`OPEN_WORLD`, ADR 0060, OW-20), o centro é o mundo, e a Cidade não é parada de ninguém.** A
+hunt idle é o adicional do Tibia, e a entrada e a volta mudam:
+
+- **Entra-se do mundo, e só quando o Tibia deixaria deslogar**: `canLogout` — PZ sempre, tile de no-logout nunca, o
+  resto só fora de luta (60 s desde o último golpe). A recusa devolve o motivo (`logout-refused`) e não move nada.
+  Do repouso entra-se direto, pelo ticket (OW-21), sem passar pelo mundo.
+- **Volta-se ao mundo só com alguém olhando.** O fim da hunt — a regra de saída, a morte, o `leave-hunt` — leva o
+  personagem de volta ao tile de onde saiu (o templo na morte) se há visualizador, e ao **repouso** se não há: o
+  personagem desanexado nunca acaba sozinho no mundo, onde ficaria parado e vulnerável. O repouso não cura, como a
+  Cidade curava: a vida e a mana são as do fim da hunt, e quem morreu sai de vida e mana cheias, no templo.
+- **A hunt em si não muda**: o mesmo motor, os mesmos eventos, a mesma matemática a 1 Hz e a 10 Hz. Só o que vem
+  antes e depois dela.
+
+Detalhe e testes em [`open-world.md`](open-world.md#o-mundo-e-a-hunt-idle-ow-20-841). Sem a flag nada disto existe:
+a Cidade continua o centro, e o fim da hunt volta a ela, com ou sem visualizador.
+
 **A sessão de destino é construída ANTES de a antiga ser encerrada.** Se a hunt não existe, ou
 se a dificuldade não é uma das que ela define, o personagem fica exatamente onde estava — em vez
 de ficar sem sessão porque a antiga já tinha sido fechada.

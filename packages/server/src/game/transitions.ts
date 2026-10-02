@@ -10,7 +10,7 @@
 // transição for de fato exclusiva. Um furo aqui não aparece como bug de sessão: aparece meses
 // depois como gold duplicado, e ninguém liga uma coisa à outra.
 
-import type { SessionType } from '@draconya/sim';
+import type { LogoutRefusal, SessionType } from '@draconya/sim';
 
 /**
  * Para onde cada estado pode ir. **A Cidade é o centro**, e é de propósito: não se vai de hunt
@@ -20,29 +20,51 @@ import type { SessionType } from '@draconya/sim';
  * de estados vira um caminho de transição que ninguém testou, e a transição é justamente o
  * único momento em que o estado quente troca de dono. Passar pela Cidade dá a cada troca um
  * ponto de parada conhecido, onde o personagem está curado, sem instância e sem nada em voo.
+ *
+ * **Com o mundo aberto (OW-18, ADR 0060 d.6) o centro é o MUNDO, e a Cidade continua enquanto a
+ * flag `OPEN_WORLD` existir.** Do mundo se vai a toda instância e de toda instância se volta a ele
+ * — é o mesmo desenho, com o mesmo ponto de parada, e é a Cidade que sai quando o mundo cobrir todo
+ * serviço dela. Quem constrói o destino decide se ele existe: com a flag desligada nenhum nó
+ * hospeda um mundo, `'world'` aqui não passa de uma aresta que o construtor de sessões recusa
+ * (`unknown-destination`), e nenhuma mensagem do cliente pede esse destino. O que NÃO está aqui: o
+ * mundo não vai à Cidade nem a Cidade ao mundo — quem está numa Cidade sob a flag ligada sai do jogo e entra
+ * de novo. Nada o põe lá: o fim de uma hunt vai ao mundo ou ao repouso (OW-20).
+ *
+ * **Esta tabela diz só o que é possível, não quando.** A entrada numa instância a partir do mundo
+ * só quando o Tibia deixaria deslogar (`canLogout`, d.6a) é do hospedeiro (OW-20), que a consulta
+ * ao ruleset (`'cannot-logout'`, abaixo); a volta só com alguém olhando também, e é a decisão do
+ * fim da instância (`SessionHost#settleOne`): com visualizador o mundo, sem ele o repouso — que
+ * não é um estado desta tabela, porque é o personagem sem sessão.
  */
 const ALLOWED: Readonly<Record<SessionType, readonly SessionType[]>> = {
   city: ['hunt', 'training', 'quest', 'boss', 'guild-war'],
-  hunt: ['city'],
-  // O mundo (OW-13, ADR 0060 d.6) tem sessão desde a OW-13, mas ninguém o hospeda: o hospedeiro o
-  // constrói na OW-18, atrás de `OPEN_WORLD`, e é a OW-20 que o põe no CENTRO deste grafo (mundo ↔
-  // hunt idle, sob `canLogout`). Até lá nenhuma transição o toca, e a entrada vazia é só o que o
-  // `Record<SessionType, …>` exige para compilar — nenhum estado de hoje passa a poder ir a ele.
-  world: [],
-  training: ['city'],
-  quest: ['city'],
-  boss: ['city'],
-  'guild-war': ['city'],
+  world: ['hunt', 'training', 'quest', 'boss', 'guild-war'],
+  hunt: ['city', 'world'],
+  training: ['city', 'world'],
+  quest: ['city', 'world'],
+  boss: ['city', 'world'],
+  'guild-war': ['city', 'world'],
 };
 
 export type TransitionRefusal =
   | 'same-state'
   | 'not-allowed'
   | 'already-transitioning'
-  | 'unknown-destination';
+  | 'unknown-destination'
+  /**
+   * O mundo não deixaria o personagem sair agora (OW-20, ADR 0060 d.6a): `canLogout` disse não. Quem entra
+   * numa instância sai do mundo, e no Tibia isso passa pela regra do logout — tile de no-logout nunca,
+   * luta fora da PZ nunca, PZ sempre. O motivo vai em `TransitionError.logoutRefusal`.
+   */
+  | 'cannot-logout';
 
 export class TransitionError extends Error {
-  constructor(readonly refusal: TransitionRefusal, message: string) {
+  constructor(
+    readonly refusal: TransitionRefusal,
+    message: string,
+    /** Só com `'cannot-logout'`: o motivo do Canary (`logout-refused.reason`). */
+    readonly logoutRefusal?: LogoutRefusal,
+  ) {
     super(message);
     this.name = 'TransitionError';
   }
@@ -77,4 +99,7 @@ export const REFUSAL_TEXT: Readonly<Record<TransitionRefusal, string>> = {
   // vez de ficar esperando uma resposta que não vem.
   'already-transitioning': 'Uma mudança de atividade já está em andamento.',
   'unknown-destination': 'Esta atividade não existe neste servidor.',
+  // O jogador recebe o MOTIVO pelo `logout-refused` (e o cliente o escreve); este texto é o de reserva, para
+  // quem só lê o `system-message` — e ainda diz o que fazer.
+  'cannot-logout': 'Você não pode sair do mundo agora: vá para uma zona de proteção e espere a luta acabar.',
 };

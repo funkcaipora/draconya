@@ -69,7 +69,11 @@ function build(
 ) {
   const { character: characterOptions, ...hostOptions } = options;
   const saved: SavedReceipt[] = [];
-  const receipts = { save: async (receipt: SavedReceipt) => { saved.push(receipt); } } as unknown as ReceiptStore;
+  const receipts = {
+    save: async (receipt: SavedReceipt) => { saved.push(receipt); },
+    // O mundo grava em lote (#837, OW-16): cada extrato do lote é um extrato como os outros.
+    saveBatch: async (batch: readonly SavedReceipt[]) => { saved.push(...batch); },
+  } as unknown as ReceiptStore;
   // O shard é UMA sessão para todos, como `CityShard.admit`; a privada é uma por personagem.
   let shared: Session | null = null;
   const open = (id: string): Session =>
@@ -175,22 +179,16 @@ describe('um canal de gold por sessão (OW-04, ADR 0060 d.10c)', () => {
 
   describe('o mundo — shard que credita: o gold vai pelo agregado E pelo `goldDelta`, e uma vez só', () => {
     it('100 de loot + 50 de venda, dois checkpoints e um logout: o ledger soma exatamente 150', async () => {
-      // O teste do mundo que a OW-16 herda (plano §4, "um canal de gold"). O checkpoint do
-      // hospedeiro ainda não existe; aqui ele é feito à mão, com o que ele fará: o extrato parcial
-      // do `sim`, gravado, e DEPOIS `settleGoldDelta`. A OW-16 troca `checkpoint()` pelo dela, e a
-      // aritmética que este teste prova — gold que anda pelos dois canais e é contado uma vez —
-      // continua sendo o critério.
+      // O teste do mundo do plano §4 ("um canal de gold"). Nasceu com o checkpoint feito à mão — o
+      // extrato parcial do `sim`, gravado, e DEPOIS `settleGoldDelta` —; desde a OW-16 (#837) é o do
+      // hospedeiro: `checkpointWorlds` monta o lote, grava num `MULTI` e liquida o delta. A aritmética
+      // que este teste prova — gold que anda pelos dois canais e é contado uma vez — é o critério.
       const f = build(WORLD);
       const { viewer, hero, session } = await f.enter('p1');
-      const checkpoint = () => {
-        const receipt = session.checkpoint('p1', 'manual-exit');
-        if (receipt === null) throw new Error('the session produced no checkpoint receipt');
-        f.saved.push(receipt);
-        hero.settleGoldDelta();
-      };
+      const checkpoint = async () => { await f.host.checkpointWorlds(); };
 
       lootGold(session, hero, 100);
-      checkpoint();
+      await checkpoint();
       expect(hero.goldDelta).toBe(0);
 
       give(hero, 'g1', 'gem');
@@ -198,7 +196,7 @@ describe('um canal de gold por sessão (OW-04, ADR 0060 d.10c)', () => {
       f.host.handle(viewer, { type: 'sell-items', instanceIds: ['g1', 's1'] });
       f.host.flush();
       expect(hero.goldDelta).toBe(50);
-      checkpoint();
+      await checkpoint();
 
       await f.host.release('p1', 1000, 'logout');
 
@@ -290,6 +288,12 @@ describe('um canal de gold por sessão (OW-04, ADR 0060 d.10c)', () => {
               attempts += 1;
               await gate;
               written.push(receipt);
+            },
+            // O mundo grava a saída num lote (#837, OW-16): uma tentativa por lote, não por extrato.
+            saveBatch: async (batch: readonly SavedReceipt[]) => {
+              attempts += 1;
+              await gate;
+              written.push(...batch);
             },
           } as unknown as ReceiptStore,
           snapshots: {

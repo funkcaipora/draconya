@@ -32,9 +32,92 @@ precisa fornecer um endereço `wss`. O runtime permite hosts e caminhos por nó;
 de staging continua validando `wss://<APP_ORIGIN>/ws`. WSS descreve o endereço **público**:
 o TLS pode terminar no proxy, enquanto o `game` escuta HTTP/WebSocket na rede interna.
 
-`CONTENT_DIR`, `THINGS_VERSION`, `NODE_ID`, `LOG_LEVEL` e `NODE_ENV` continuam comuns ao boot.
+`CONTENT_DIR`, `THINGS_VERSION`, `NODE_ID`, `LOG_LEVEL`, `NODE_ENV`, `OPEN_WORLD` e `WORLD_CHECKPOINT_MS`
+(adiante) continuam comuns ao boot.
 `THINGS_DIR` pertence a importação, inventário e testes de assets; não aparece no objeto
 `Configuration` do servidor. Sua remoção não muda os scripts nem a localização dos assets.
+
+## O mundo aberto: `OPEN_WORLD` (#836, OW-15; #839, OW-18)
+
+`OPEN_WORLD` liga o mundo aberto do Tibia sem PvP ([ADR 0060](adr/0060-tibia-open-world-without-pvp.md),
+[plano](open-world-plan.md)). Aceita `1`/`true` e `0`/`false`; qualquer outro valor — inclusive vazio
+— recusa o boot, em vez de desligar o mundo em silêncio. **O default é desligado**, e com ele o jogo
+é o de hoje, byte a byte: a Cidade é o espaço compartilhado, o ticket nasce cheio, o repouso é
+`'city'` e as colunas de mundo de `characters` não são lidas nem escritas. O `compose.coolify.yml`
+a repassa como `OPEN_WORLD` (default `0`).
+
+| Papel | O que a flag muda |
+|---|---|
+| `api` | o ticket (solo e de cada membro da party) leva o mundo e os vitais da linha (`worldPosition`, `townId`, `health`, `mana`, `conditions`); a lista e a seleção de personagens reportam o repouso como `'offline'`; a liquidação do ticket aplica o checkpoint sem valor movido sem linha de ledger (OW-17); a party se forma e se larga do **mundo** como da Cidade, e a lista de amigos responde `where: 'world'` (OW-18) |
+| `game` | **o login cai no mundo**, no templo ou na posição salva, em vez da Cidade (OW-18, abaixo); o mundo sai pelo `logout` que passa por `canLogout` e pelo x-log de 60 s de quem ficou sem visualizador, e o personagem vai ao repouso (OW-19); **entrar numa instância passa por `canLogout` e o fim dela volta ao mundo com visualizador e ao repouso sem (OW-20)**; todo extrato — fim de hunt, estado da Cidade, snapshot irrestaurável — leva o mundo e os vitais do dono; o nó **se recusa a subir** se há outro `game` vivo |
+| `jobs` | escreve as colunas que o extrato trouxer, guardadas por `durable_version`; e o **checkpoint** versionado **sem valor movido** é aplicado só como estado absoluto, **sem linha de ledger** (OW-17, #838): `draconya_jobs_receipts_state_only_total` os conta. O fim de sessão e a saída seguem com a linha |
+
+**Tem de ser a MESMA no `api` e no `game`.** Um `game` ligado com o `api` desligado recebe tickets sem o
+mundo, e por isso o extrato só leva o mundo de quem o ticket trouxe (a `townId` é a marca) — ligar
+metade do par não apaga a posição de ninguém, mas também não persiste nada. Ligar em produção é
+operação à parte: o `bench:world` (OW-35) é o portão da flag em produção. A entrada pelo repouso (OW-21) existe: o mundo cheio vira fila com posição, e o ticket pode
+pedir uma hunt idle direta — sem a flag, o pedido de hunt direta é ignorado e o login cai na Cidade.
+
+Desligar depois de ligada é seguro: nenhuma coluna é apagada, e quem voltar a ligar encontra o último
+estado salvo — a vida e a posição de antes, não as de agora.
+
+### O mundo hospedado: um `game` só (#839, OW-18)
+
+Com a flag ligada o processo `game` hospeda **um mundo por `world_id`** (`WorldShard`, `game/sessions.ts`), e o
+login cai nele — no templo, ou no tile onde o personagem saiu — no lugar da Cidade. A Cidade continua
+existindo ao lado, até o mundo cobrir todo serviço dela (ADR 0060 d.3a): ninguém chega a ela com a flag ligada —
+o fim de uma hunt vai ao mundo, com visualizador, ou ao repouso (OW-20). Sem a flag nada disto existe, e o jogo é o
+de hoje: o fim de uma hunt volta à Cidade.
+
+**O nó se recusa a subir se há outro `game` vivo.** Um mundo é uma sessão num processo só (invariante 9): com
+dois nós e a flag ligada, cada um criaria o SEU mundo — o "Thais 2" que o ADR 0060 descarta —, e o mesmo
+personagem poderia ser hospedado nos dois. No `start` o `game` lê o batimento dos nós (`aliveNodes`), e se
+algum outro `NODE_ID` bate, **o processo cai com `MultipleGameNodesError` antes de abrir a porta e de bater o
+coração** (`game/open-world-guard.ts`) — o `api` nunca emite ticket para um nó que vai cair. Quatro detalhes de
+operação:
+
+- **O próprio `NODE_ID` não conta.** O batimento dura um lease (30 s) além da morte, e o contêiner que
+  reinicia com o mesmo `NODE_ID` encontra o batimento da encarnação anterior e sobe normalmente. **O default
+  de `NODE_ID` é o `hostname()`** — o id do contêiner, que muda a cada subida —, e então o contêiner novo vê o
+  batimento do anterior como "outro nó" e recusa, até ele expirar (até 30 s): o orquestrador reinicia o
+  contêiner recusado, e a tentativa seguinte passa — um crash-loop de boot de até um lease a cada deploy, que
+  leva `api` e `jobs` junto quando os três papéis são um processo só. **Defina `NODE_ID` fixo** (`NODE_ID=game-1`,
+  como no `.env.example`) no `game` com `OPEN_WORLD` ligado, para o restart e o deploy em rolagem não passarem
+  por isso. O `compose.coolify.yml` já o fixa (`NODE_ID: ${NODE_ID:-game-1}` no `app`, que é um contêiner só;
+  a variável do Coolify o sobrescreve); o `compose.prod.yml` o lê do `.env`, e aí é do operador.
+- **A drenagem para o batimento**, e a chave dele expira em até um lease: um deploy que sobe o novo
+  contêiner enquanto o antigo ainda drena recusa a primeira tentativa, pelo mesmo motivo — **com `NODE_ID`
+  diferente**: com o id fixo o batimento do antigo é o próprio, e não conta.
+- **Redis fora do ar também recusa.** Não saber se há outro nó é a forma de abrir dois mundos, e o `main` já
+  falha para o Redis fora do ar.
+- **É proteção de BOOT, não trava.** Duas subidas ao mesmo tempo, nenhuma vendo a outra, passam; e um `game` com
+  `OPEN_WORLD=0` ao lado de um ligado não se recusa (a flag desligada é o jogo de hoje, e a recusa é do
+  mundo). O mesmo valor da flag em todo `game` é instrução de operação. A trava de verdade — a chave
+  `world:{id}:owner` com TTL, que deixa o mundo viver num nó e os outros servirem só instâncias — é a OW-59.
+
+O teto de gente (`capacity`) vem de `data/worlds/<id>.json` (`main.json`: 200) e vale **só na entrada vinda do
+repouso**: quem volta de uma instância é sempre admitido (ADR 0060 d.2b). O mundo cheio recusa o login com
+`WorldFullError`, que o hospedeiro converte em fila com posição (`world-full`, em Redis: `world:{id}:queue`) e a
+hunt idle direta, que não passa pelo mundo (OW-21, #842).
+
+### O checkpoint do mundo: `WORLD_CHECKPOINT_MS` (#837, OW-16)
+
+`WORLD_CHECKPOINT_MS` é de quanto em quanto tempo, em milissegundos, o `game` grava o **lote de
+checkpoint** do mundo: o extrato de todo personagem sujo (moveu, mudou de vida, mana ou condição, rendeu
+algo), num `MULTI` só do Redis. **O padrão é `60000`** (60 s), o valor que o [ADR 0060](adr/0060-tibia-open-world-without-pvp.md)
+d.10d escolheu: com 200 personagens caçando são até 3,3 transações por segundo (a 10 s seriam 20) e até 288
+mil linhas de ledger por dia por mundo. É também **o que o mundo perde numa queda do nó** — até um
+intervalo, de todo mundo ao mesmo tempo, e todos voltam ao mesmo instante. O Canary salva de hora em hora
+(`canary/config.lua.dist:356-362`), e é por isso que o teto é uma hora.
+
+| Aceita | Recusa o boot |
+|---|---|
+| inteiro de `1000` (1 s) a `3600000` (1 h) | `0`, negativo, decimal, texto, vazio, acima de uma hora |
+
+Só o `game` a lê, e só tem efeito com `OPEN_WORLD` ligado: sem a flag nenhuma sessão é `checkpointed`, e o
+timer não encontra o que gravar. **A saída, a transição e a drenagem não esperam o tique** — gravam o lote
+inteiro na hora (`docs/product/open-world.md`, "O checkpoint do mundo"). A hunt idle não é afetada: ela
+continua com o snapshot de 10 s e o extrato do fim (ADR 0018:57), que é outro mecanismo.
 
 ## Exemplos de produção
 

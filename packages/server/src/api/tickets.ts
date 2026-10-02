@@ -13,8 +13,9 @@ import type {
 import {
   isAmmoSelection, isBestiaryState, isBosstiaryState, isCharmsState, isLearnedSpellsState, isStockMap,
 } from '../tickets.js';
-import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
+import type { InitialCharacter, IssueFailure, TicketEntry, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
+import { worldStateOfRow } from '../world-state.js';
 
 export interface Principal {
   readonly accountId: string;
@@ -86,6 +87,20 @@ export interface TicketRouteDependencies {
    */
   readonly pendingDurableVersion?: (characterId: string) => Promise<number>;
   /**
+   * A flag `OPEN_WORLD` (#836, OW-15, ADR 0060 d.10.f): com ela ligada o ticket leva o mundo e os
+   * vitais do personagem (`worldPosition`, `townId`, `health`, `mana`, `conditions`), lidos da linha
+   * — é o que faz deslogar a 10 HP voltar com 10 HP. Ausente ou `false` — o default — é o ticket de
+   * antes, byte a byte: o personagem nasce cheio, e as colunas novas não são lidas.
+   */
+  readonly openWorld?: boolean;
+  /**
+   * A hunt existe no conteúdo fixado no boot? (#842, OW-21). Confere o `entry: { hunt }` do pedido — o
+   * `game` a cria como primeira sessão, e uma hunt que não existe falharia só no handshake, com o ticket já
+   * queimado. Ausente é `api` montado sem conteúdo: o pedido de hunt direta é recusado (`unknown-hunt`),
+   * nunca aceito às cegas.
+   */
+  readonly hasHunt?: (huntId: string) => boolean;
+  /**
    * O gasto do banco de offline training na emissão do ticket (#631, ADR 0059 d.3, ADR 0052 d.5).
    *
    * Vive AQUI, e não no `game`, pela razão do ADR 0052 d.5: é um cálculo que precisa saber que
@@ -113,7 +128,20 @@ export interface SettlementResult {
   readonly failed: number;
 }
 
-const RequestBody = z.object({ characterId: z.string().min(1).max(128) });
+/**
+ * Onde a primeira sessão nasce (#842, OW-21, ADR 0060 d.6b): `'world'` — o default — é o mundo (a Cidade com a
+ * flag desligada), e `{ hunt }` é uma hunt idle direta, sem passar por ele. Objeto estrito: um campo a mais é
+ * pedido torto, e o ticket que carregasse "o que sobrou" decidiria por quem o escreveu.
+ */
+const EntrySchema = z.union([
+  z.literal('world'),
+  z.object({ hunt: z.string().min(1).max(128) }).strict(),
+]);
+
+const RequestBody = z.object({
+  characterId: z.string().min(1).max(128),
+  entry: EntrySchema.default('world'),
+});
 
 /** Falha de emissão → código HTTP. Nenhuma delas é erro do servidor. */
 const STATUS: Record<IssueFailure, number> = {
@@ -153,6 +181,18 @@ export function createTicketHandler(
     // rota num verificador de id de personagem para qualquer conta autenticada.
     if (!await ownsCharacter(principal.accountId, body.data.characterId)) {
       return reply.code(404).send({ error: 'character-not-found' });
+    }
+
+    // A entrada pelo repouso (#842, OW-21). `{ hunt }` só vale com `OPEN_WORLD`: sem a flag o repouso é a
+    // Cidade, o primeiro contato sempre cria a dela e a hunt se escolhe no menu — o jogo de hoje. Pedido de
+    // hunt direta com a flag desligada é IGNORADO, e não recusado: quem o faz (um cliente do mundo aberto
+    // contra um servidor que desligou a flag) entra do mesmo jeito, na Cidade, em vez de ficar sem login.
+    // Hunt que o conteúdo não tem é recusa — aí o pedido é que está errado, e `game` nenhum o atenderia.
+    const entry: TicketEntry | undefined = deps.openWorld === true && body.data.entry !== 'world'
+      ? { hunt: body.data.entry.hunt }
+      : undefined;
+    if (entry !== undefined && deps.hasHunt?.(entry.hunt) !== true) {
+      return reply.code(400).send({ error: 'unknown-hunt' });
     }
 
     // O nó é resolvido FORA da trava de linha (FUN-53). Qual nó de jogo está vivo não tem
@@ -222,19 +262,23 @@ export function createTicketHandler(
           ? null
           : offlineSpendOf(row, restedSince, deps.offlineTraining);
         const character = spend === null ? row : { ...row, skills: spend.skills, training: spend.training };
-        const result = await deps.tickets.issue(
-          principal.accountId,
-          character.id,
-          initialCharacterOf(
-            character,
-            await deps.listItemInstances?.(character.id) ?? [],
-            await deps.listCharacterStorages?.(character.id) ?? [],
-            boostedMonsterId,
-            loyaltyBonusPercent,
-            pendingDurableVersion,
-          ),
-          resolution.node,
+        const initialCharacter = initialCharacterOf(
+          character,
+          await deps.listItemInstances?.(character.id) ?? [],
+          await deps.listCharacterStorages?.(character.id) ?? [],
+          boostedMonsterId,
+          loyaltyBonusPercent,
+          pendingDurableVersion,
+          deps.openWorld === true,
         );
+        // Dois ramos, e não `issue(..., undefined, entry)` sempre: o pedido sem entrada — todo pedido de hoje —
+        // chama `issue` com os quatro argumentos de antes, e o contrato de quem o substitui (um duplo, um
+        // `api` em rolagem) não muda para quem não pediu hunt direta (OW-21).
+        const result = entry === undefined
+          ? await deps.tickets.issue(principal.accountId, character.id, initialCharacter, resolution.node)
+          : await deps.tickets.issue(
+            principal.accountId, character.id, initialCharacter, resolution.node, undefined, entry,
+          );
         // Só grava com o ticket na mão: recusado (`active-limit`), o banco não foi gasto por quem
         // não vai jogar — a escolha do livro fica para o próximo login.
         if (!result.ok || spend === null) return { result, spend: null };
@@ -328,6 +372,8 @@ export function initialCharacterOf(
   loyaltyBonusPercent?: number,
   /** A maior versão durável ainda pendente no Redis (#823). Ver `TicketRouteDependencies`. */
   pendingDurableVersion = 0,
+  /** A flag `OPEN_WORLD` (#836, OW-15): leva o mundo e os vitais. Ver `TicketRouteDependencies`. */
+  openWorld = false,
 ): InitialCharacter {
   return {
     level: character.level,
@@ -344,6 +390,11 @@ export function initialCharacterOf(
     // versão. `max` porque os pendentes que o teto de liquidação deixou para trás ainda não
     // subiram a coluna.
     durableVersion: Math.max(character.durableVersion, pendingDurableVersion),
+    // O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f), SÓ com a flag: a posição onde saiu, a
+    // cidade, a vida e a mana com que saiu e as condições que faltavam. Cada campo é conferido ao
+    // sair da linha (`worldStateOfRow`): nulo é "cheio, no templo, sem condição", e o `game` ainda
+    // limita a vida e a mana pelo máximo do level. Sem a flag nada é lido — o ticket é o de antes.
+    ...(openWorld ? worldStateOfRow(character) : {}),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),

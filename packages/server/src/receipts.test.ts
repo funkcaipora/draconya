@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   BosstiaryState, CharmsState, FamiliarState, HazardState, LearnedSpellsState, OfflineTrainingState,
 } from '@draconya/sim';
@@ -304,6 +304,25 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('removedInstances');
   });
 
+  it('carries the quantity of every carried instance through Redis and back, dropping what the column rejects (#837)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: sem a linha em `parseReceipt` a pilha do mundo
+    // volta a ficar com a quantidade do primeiro checkpoint, sem erro nenhum. E o `ledger` grava o valor
+    // direto na coluna `integer`: zero, fração, texto e o que estoura a coluna são dado torto e somem.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, {
+      quantities: { 'w:p1:0': 3, 'w:p1:1': 1, zero: 0, half: 1.5, text: '4', huge: 2_147_483_648 } as never,
+    }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3, quantities: [1, 2] as never }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.quantities).toEqual({ 'w:p1:0': 3, 'w:p1:1': 1 });
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('quantities');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('quantities');
+  });
+
   it('carries the soul points through Redis and back, and a receipt without one stays without (#593)', async () => {
     // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: alma gravada tem de voltar inteira,
     // e o extrato sem ela não pode ganhar a chave — diferente do Bestiário, o ledger NÃO funde
@@ -357,6 +376,52 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)?.fightMode).toBe('attack');
     expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('fightMode');
     expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('fightMode');
+  });
+
+  it('carries the world and the vitals through Redis and back, and a receipt without them stays without (#836, OW-15)', async () => {
+    // A mesma lista de PERMISSÃO. Posição, cidade, vida, mana e condições voltam inteiras; o extrato
+    // sem os campos não ganha chave nenhuma (o ledger não toca as colunas); e `worldPosition: null`
+    // e `conditions: []` são EXPLÍCITOS — "volta ao templo" e "nenhuma" — e atravessam, ao contrário
+    // da ausência. Mutação que mata: esquecer o `...readReceiptWorldState` de `parseReceipt`.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const poison = { key: 'poison', expiresAtMs: 4_000, tick: { amount: 3, intervalMs: 1_000, kind: 'damage' as const } };
+    await store.save(receiptOf(randomUUID(), characterId, {
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 0, conditions: [poison],
+    }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 2, worldPosition: null, townId: 'thais', health: 150, mana: 40, conditions: [],
+    }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+
+    const found = await store.pendingFor(characterId);
+    const bySeq = (seq: number) => found.find((receipt) => receipt.seq === seq);
+
+    expect(bySeq(1)).toMatchObject({
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 0, conditions: [poison],
+    });
+    expect(bySeq(2)).toMatchObject({ worldPosition: null, health: 150, mana: 40, conditions: [] });
+    for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+      expect(bySeq(3)).not.toHaveProperty(field);
+    }
+  });
+
+  it('drops a malformed world or vital field on the way back, field by field (#836, OW-15)', async () => {
+    // O ledger grava estes campos direto nas colunas: uma coordenada fora do mapa, uma vida negativa
+    // ou uma condição com prazo `NaN` não pode chegar lá. O campo torto some e os outros seguem.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, {
+      worldPosition: { x: 1, y: 2 } as never, townId: '', health: -4, mana: 12,
+      conditions: [{ key: 'haste' }] as never,
+    }));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found).toMatchObject({ mana: 12 });
+    for (const field of ['worldPosition', 'townId', 'health', 'conditions']) {
+      expect(found).not.toHaveProperty(field);
+    }
   });
 
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
@@ -589,5 +654,167 @@ describe.runIf(available)('the previous receipt format is still read, and never 
 
     expect(await store.pendingFor(characterId)).toEqual([]);
     expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
+  });
+});
+
+describe.runIf(available)('the world checkpoint batch is ONE transaction (#837, OW-16, ADR 0060 d.10d)', () => {
+  const batchOf = (sessionId: string, characters: readonly string[]) =>
+    characters.map((characterId, index) =>
+      receiptOf(sessionId, characterId, { seq: index + 1, durableVersion: 10 + index, reason: 'checkpoint' }));
+
+  it('writes every receipt of the batch, each under its own key and in its own character index', async () => {
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const [a, b, c] = [randomUUID(), randomUUID(), randomUUID()] as const;
+
+    await store.saveBatch(batchOf(sessionId, [a, b, c]));
+
+    for (const [index, characterId] of [a, b, c].entries()) {
+      expect(await redis.exists(`receipt:${sessionId}:${characterId}:${index + 1}`)).toBe(1);
+      const found = await store.pendingFor(characterId);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatchObject({ sessionId, characterId, seq: index + 1, durableVersion: 10 + index });
+    }
+    expect(await store.pending()).toHaveLength(3);
+  });
+
+  it('goes to Redis in a SINGLE MULTI — so the node dying leaves the last whole batch, never half of it', async () => {
+    // A atomicidade é do `MULTI`: o cliente enfileira tudo e manda um `EXEC`. Três `save`s seriam três
+    // transações, e uma queda entre elas devolveria o mundo inteiro dividido em dois instantes.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const multi = vi.spyOn(redis, 'multi');
+    try {
+      await store.saveBatch(batchOf(sessionId, [randomUUID(), randomUUID(), randomUUID()]));
+      expect(multi).toHaveBeenCalledTimes(1);
+      const pipeline = multi.mock.results[0]?.value as { length: number };
+      // Três comandos por extrato (`SET`, `ZADD`, `PEXPIRE`), mais o `MULTI` e o `EXEC` do próprio
+      // ioredis — todos na mesma transação.
+      expect(pipeline.length).toBe(3 * 3 + 2);
+    } finally {
+      multi.mockRestore();
+    }
+  });
+
+  it('is what a node that dies BEFORE the EXEC leaves behind: nothing of the new batch, all of the old one', async () => {
+    // Simula a queda entre dois lotes: o segundo lote é enfileirado e nunca executado (a conexão
+    // caiu antes do `EXEC`). O Redis fica com o primeiro lote INTEIRO e com nada do segundo.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const characters = [randomUUID(), randomUUID(), randomUUID()];
+    await store.saveBatch(batchOf(sessionId, characters));
+
+    const dying = new ReceiptStore(redis);
+    const multi = vi.spyOn(redis, 'multi').mockImplementationOnce(() => {
+      const pipeline = redis.multi();
+      // `exec` é o que a queda impede: o que foi enfileirado nunca chega ao servidor.
+      vi.spyOn(pipeline, 'exec').mockRejectedValue(new Error('connection lost'));
+      return pipeline;
+    });
+    try {
+      await expect(dying.saveBatch(characters.map((characterId, index) =>
+        receiptOf(sessionId, characterId, { seq: 50 + index, durableVersion: 90 + index }))))
+        .rejects.toThrow('connection lost');
+    } finally {
+      multi.mockRestore();
+    }
+
+    for (const [index, characterId] of characters.entries()) {
+      const found = await store.pendingFor(characterId);
+      expect(found.map((receipt) => receipt.seq)).toEqual([index + 1]);
+    }
+  });
+
+  it('an empty batch does not talk to Redis', async () => {
+    const store = new ReceiptStore(redis);
+    const multi = vi.spyOn(redis, 'multi');
+    try {
+      await store.saveBatch([]);
+      expect(multi).not.toHaveBeenCalled();
+    } finally {
+      multi.mockRestore();
+    }
+    expect(await redis.dbsize()).toBe(0);
+  });
+
+  it('stamps the whole batch with ONE instant, and gives every key and index the TTL', async () => {
+    const store = new ReceiptStore(redis, { now: () => 1_234, ttlMs: 60_000 });
+    const sessionId = randomUUID();
+    const characters = [randomUUID(), randomUUID()];
+
+    await store.saveBatch(batchOf(sessionId, characters));
+
+    for (const [index, characterId] of characters.entries()) {
+      const [found] = await store.pendingFor(characterId);
+      expect(found?.endedAtMs).toBe(1_234);
+      expect(await redis.pttl(`receipt:${sessionId}:${characterId}:${index + 1}`)).toBeGreaterThan(0);
+      expect(await redis.pttl(`receipts:char:v2:${characterId}`)).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps several receipts of the SAME character apart, oldest version first, whatever the batch order', async () => {
+    // O lote que um `release` falho deixou para o próximo leva o extrato atrasado e o novo do mesmo
+    // personagem: os dois entram, e a liquidação os lê em ordem de versão.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const characterId = randomUUID();
+
+    await store.saveBatch([
+      receiptOf(sessionId, characterId, { seq: 3, durableVersion: 8 }),
+      receiptOf(sessionId, characterId, { seq: 1, durableVersion: 6 }),
+      receiptOf(sessionId, characterId, { seq: 2, durableVersion: 7 }),
+    ]);
+
+    expect((await store.pendingFor(characterId)).map((receipt) => receipt.durableVersion)).toEqual([6, 7, 8]);
+    expect(await store.highestPendingVersion(characterId)).toBe(8);
+  });
+
+  it('writing the same batch again (a lost acknowledgement) neither duplicates nor reorders anything', async () => {
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const characters = [randomUUID(), randomUUID()];
+    const batch = batchOf(sessionId, characters);
+
+    await store.saveBatch(batch);
+    await store.saveBatch(batch);
+
+    for (const characterId of characters) {
+      expect(await redis.zcard(`receipts:char:v2:${characterId}`)).toBe(1);
+    }
+    expect(await store.pending()).toHaveLength(2);
+  });
+
+  it('reports a command that fails INSIDE the transaction, like `save` — and the retry is safe', async () => {
+    // O Redis não desfaz os outros comandos de um `MULTI` quando um falha em tempo de execução, mas o
+    // erro volta para quem chamou (`exec`), e repetir o lote é idempotente: o chamador mantém os
+    // extratos e tenta de novo.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const [a, b] = [randomUUID(), randomUUID()] as const;
+    await redis.set(`receipts:char:v2:${b}`, 'not a sorted set');
+
+    await expect(store.saveBatch(batchOf(sessionId, [a, b]))).rejects.toThrow(/WRONGTYPE/);
+
+    await redis.del(`receipts:char:v2:${b}`);
+    await store.saveBatch(batchOf(sessionId, [a, b]));
+    expect(await store.pendingFor(a)).toHaveLength(1);
+    expect(await store.pendingFor(b)).toHaveLength(1);
+  });
+
+  it('round-trips the `checkpoint` reason, and the world fields of a checkpoint line', async () => {
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+
+    await store.saveBatch([receiptOf(randomUUID(), characterId, {
+      reason: 'checkpoint', durableVersion: 4, townId: 'thais', health: 90, mana: 12,
+      worldPosition: { x: 32_369, y: 32_241, z: 7 },
+      conditions: [{ key: 'haste', expiresAtMs: 5_000, speedPercent: 30 }],
+    })]);
+
+    const [found] = await store.pendingFor(characterId);
+    expect(found).toMatchObject({
+      reason: 'checkpoint', townId: 'thais', health: 90, mana: 12, worldPosition: { x: 32_369, y: 32_241, z: 7 },
+    });
+    expect(found?.conditions).toHaveLength(1);
   });
 });

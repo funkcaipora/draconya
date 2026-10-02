@@ -8,6 +8,11 @@
 // partido. `hunt-exit-actions` os mantém colados, enquanto a pill de detalhes fica separada à
 // esquerda como no kit.
 //
+// No MUNDO (#846, OW-23) a faixa é a da Cidade com um rótulo próprio — "Caçar (idle)", porque entrar numa hunt
+// do mundo é sair dele para a hunt idle — e mais uma pill, "Sair do jogo": é o `logout` do Tibia, que o
+// servidor pode recusar (`logout-refused`) em luta ou num tile que proíbe sair. Só o mundo a tem: na Cidade e
+// na hunt sair do jogo nunca foi uma ação da tela, e a hunt tem a própria saída.
+//
 // Com uma saída PENDENTE (#802 — o servidor espera a contagem do `exitDelayMs` e a janela de
 // combate), a pill de saída dá lugar à `HuntExitPending`: o estado e, na saída manual, o cancelar.
 
@@ -28,10 +33,21 @@ export function leaveHunt(send: (message: C2SMessage) => boolean): boolean {
   return send({ type: 'leave-hunt' });
 }
 
-export function HuntActions({ hunting, training = false, onChoose, onTraining }: {
+/**
+ * Manda `logout` (#846, OW-23): o jogador pede para sair do jogo, e quem decide se pode é o servidor
+ * (`canLogout`, ADR 0060 d.7) — aceito, ele fecha a conexão; recusado, responde `logout-refused`. Exportada
+ * para teste direto, como `leaveHunt`.
+ */
+export function logoutOfGame(send: (message: C2SMessage) => boolean): boolean {
+  return send({ type: 'logout' });
+}
+
+export function HuntActions({ hunting, training = false, world = false, onChoose, onTraining }: {
   hunting: boolean;
   /** O personagem está numa sessão de Treino (#631): mostra o estado dela, não as pills de caçada. */
   training?: boolean;
+  /** O personagem está no mundo aberto (#846, OW-23): "Caçar (idle)" e "Sair do jogo". */
+  world?: boolean;
   onChoose: () => void;
   /** Abre a tela de Treino (#631) — só na Cidade. Ausente: o pill "Treino" não existe. */
   onTraining?: () => void;
@@ -52,12 +68,19 @@ export function HuntActions({ hunting, training = false, onChoose, onTraining }:
     return (
       <div className="hunt-actions">
         <button type="button" className="hunt-pill" onClick={onChoose}>
-          <span aria-hidden="true">⚔</span> Escolher caçada
+          <span aria-hidden="true">⚔</span> {world ? 'Caçar (idle)' : 'Escolher caçada'}
         </button>
         {/* O Treino (#631): só com o servidor que o tem (`catalogue.training`) e só na Cidade. */}
         {onTraining !== undefined && hasTraining && (
           <button type="button" className="hunt-pill training-pill" onClick={onTraining}>
             <span aria-hidden="true">⚒</span> Treino
+          </button>
+        )}
+        {/* `.training-stop` fecha os 4 cantos do `.hunt-pill-danger` (que é a metade de um botão partido). */}
+        {world && (
+          <button type="button" className="hunt-pill hunt-pill-danger training-stop"
+            onClick={() => { logoutOfGame(sendIntent); }}>
+            <span aria-hidden="true">✕</span> Sair do jogo
           </button>
         )}
       </div>

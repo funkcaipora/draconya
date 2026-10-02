@@ -17,7 +17,10 @@ Persistência, diretório de sessão e roteamento.
   resolvida, loot, XP ou resultado de transação. Se uma mensagem de entrada carrega resultado, é
   bug de protocolo, não recurso.
 - **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único (invariante 10).
-  Retry nunca duplica. Ver ADR 0006.
+  Retry nunca duplica. Ver ADR 0006. O CHECKPOINT que NÃO move valor (o do mundo, só posição e
+  vitais) é aplicado como estado absoluto sob `durable_version`, sem linha de ledger (#838, OW-17, com
+  `OPEN_WORLD`): a definição de "valor" é `movesValue` em `jobs/ledger.ts`. O fim de sessão e a saída
+  seguem com a linha, com ou sem valor.
   **A guarda de stamina compara DOIS RELÓGIOS** (FUN-101). `characters.stamina_updated_at`
   nasce de `defaultNow()` — relógio do Postgres; `receipt.staminaUpdatedAtMs` sai de
   `Date.now()` do nó `game`. A guarda só vale enquanto o skew for menor que o tempo entre duas
@@ -28,7 +31,9 @@ Persistência, diretório de sessão e roteamento.
   **Todo campo ABSOLUTO do extrato é guardado por `characters.durable_version`** (#823, OW-02):
   o `jobs` só o escreve quando a versão do extrato é maior que a da coluna, e extrato atrasado
   entra só com os deltas — a guarda de instante de stamina e skills deixou de ser a única ordem
-  (ver "Ordem e versão durável" mais abaixo).
+  (ver "Ordem e versão durável" mais abaixo). O mundo e os vitais em repouso (`world_x/y/z`,
+  `town_id`, `health`, `mana`, `conditions`, #836 OW-15) são campos absolutos como os outros, e só
+  viajam com `OPEN_WORLD` ligado (ver "O mundo e os vitais em repouso").
   **`characters.gold` é PROJEÇÃO, não fonte** (FUN-57). A verdade é a soma do ledger; a coluna
   existe para não somar linhas a cada leitura, e é escrita na mesma transação da linha. O que
   a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
@@ -107,7 +112,10 @@ Duas coisas, e a distinção entre elas é a arquitetura inteira:
 - o **visualizador** é um socket olhando essa sessão, e entra e sai sem consequência nenhuma.
 
 Duas abas do mesmo personagem são dois visualizadores da MESMA sessão, nunca duas sessões.
-Se desanexar encerrar, pausar, creditar ou zerar qualquer coisa, o modelo está errado.
+Se desanexar encerrar, pausar, creditar ou zerar qualquer coisa, o modelo está errado. **No mundo aberto
+o último visualizador que se solta é uma INTENÇÃO ao `sim`** (`presence-lost`, OW-19) — o personagem fica
+parado e vulnerável, e é o `sim` quem decide se, e quando, ele sai —, e a sessão continua sem ser encerrada,
+pausada ou creditada por isso: ver "A presença do mundo", mais abaixo.
 
 A `Session` do `sim` guarda só IDS de visualizador — ela não pode conhecer socket
 (invariante 1). A ponte é `session.attached`, que decide a taxa de tick: a sessão sabe SE
@@ -383,9 +391,9 @@ ticket (`InitialCharacter.durableVersion = max(characters.durable_version, maior
 pendente)`, lido pelo `api` DEPOIS de liquidar) e sobe a cada extrato gravado, de qualquer sessão
 do personagem neste nó — a `seq` é por sessão e recomeça. O `jobs` (`writeReceipts`) agrupa os
 extratos por personagem e liquida em ordem de versão; todo campo ABSOLUTO (ammo, alma, estoques,
-comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, storages,
-stamina, skills) só é escrito quando `receipt.durableVersion > characters.durable_version`, e a
-coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
+comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, quantidades, storages,
+stamina, skills, e o mundo e os vitais da OW-15) só é escrito quando `receipt.durableVersion >
+characters.durable_version`, e a coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
 monotônico por natureza (Bestiário e Bosstiary pelo máximo, magias aprendidas pela união, vocação
 por `coalesce`, promoção por `OR`) entram SEMPRE: seguem sob `UNIQUE (session_id, seq)`.
 
@@ -875,15 +883,17 @@ shard não creditava nada, as quatro respostas coincidiam. O mundo aberto é um 
 elas se separam. Cada pergunta agora tem nome em `game/ruleset-traits.ts`, e **o host não lê mais
 `ruleset.shared` nem `ruleset.progress` diretamente** — lê um predicado. A hunt e a Cidade não
 declaram `progress` (ADR 0060 d.10b), então os cinco predicados dão, para elas, exatamente o que
-`shared` dava: a refatoração não muda nada observável.
+`shared` dava: a refatoração não muda nada observável. **Um sexto, `checkpointsProgress`** (OW-16, #837), é
+a conjunção `leavesOnExit && progress === 'checkpointed'` — a sessão que grava por LOTE: só o mundo.
 
 | Predicado | Pergunta | Privada (hunt, treino) | Cidade | Mundo (`shared` + `progress: 'checkpointed'`) |
 |---|---|---|---|---|
 | `leavesOnExit` | sair é `leave` e a sessão continua para quem fica? | não (`end`) | sim | sim |
 | `creditsAggregates` | o gold anda pelo agregado, e o extrato o leva? | sim | **não** | **sim** |
-| `keepsSnapshot` | o host guarda snapshot dela? | sim | não | não (checkpoint, OW-16) |
+| `keepsSnapshot` | o host guarda snapshot dela? | sim | não | não (checkpoint, `checkpointsProgress`, OW-16) |
 | `usesAreaOfInterest` | cada visualizador recebe só a vizinhança? | não | sim | sim |
 | `offersCityServices` | aceita serviço de Cidade (bênção)? | não | sim | sim, e só no tile PZ: `Ruleset.acceptsCityServices` (OW-13) |
+| `checkpointsProgress` | grava o progresso em lote, por timer e na saída? (OW-16) | não | não | **sim** |
 
 **A regra de gold** (`SessionHost#mirrorGold`, e a guarda de `#saveDurableReceipt`):
 
@@ -934,21 +944,558 @@ extrato próprio: `#leaveWithReceipt` espera `exitSaves` (`#awaitExitSaves`), in
 de o `release` soltar diretório, slot e snapshot. É o contrato do `release` concorrente da sessão
 privada (#267), por outro caminho; `gold-channel.test.ts` o prende nas duas variantes.
 
-**Ainda não é o mundo.** Nenhum ruleset declara `progress`, então os ramos de `creditsAggregates &&
-leavesOnExit` (a coluna "Mundo") só rodam em teste, com um ruleset de mentira
-(`game/gold-channel.test.ts`). O que a OW-16 acrescenta é o timer, o lote num `MULTI` e a
-antecipação na saída — e um extrato de saída que sobreviva a uma falha do Redis: `leave` emite o
-extrato uma vez, e se a gravação falhar depois dele o extrato só existe em memória (a saída de
-membro de party, #194, tem a mesma janela). **Perguntas por `ruleset.type === 'city'`** — `promote`,
-`buy-item`, o livro do offline training, e a marca `dirty` do `use-slot` — não são ramos de
-`shared`, ficam como estão. O mundo ganhou tipo próprio na OW-13 (`'world'`) e a pergunta do tile
-tem resposta no `sim` (`Ruleset.acceptsCityServices`), mas nenhuma sessão de mundo é hospedada
-ainda: trocar essas conferências por ela é do `WorldShard` (OW-18). **Eventos notáveis por
+**O mundo hospedado (OW-18, #839).** Só o `WorldRuleset` (OW-13) declara `progress: 'checkpointed'`, e é o
+`WorldShard` que o hospeda (ver "O mundo hospedado", adiante): os ramos de `creditsAggregates &&
+leavesOnExit` (a coluna "Mundo") rodam em produção atrás de `OPEN_WORLD`, e em teste com um ruleset de
+mentira (`game/gold-channel.test.ts`, `game/world-checkpoint.test.ts`), com o mundo real
+(`game/world-checkpoint-real.test.ts`) e hospedado de ponta a ponta (`game/world-host.test.ts`,
+`game/world-boot.test.ts`). **A OW-16 (#837) trouxe o timer, o lote num `MULTI` e a antecipação na saída**, e
+fechou a janela que esta seção deixava aberta — o extrato que `leave` emite uma vez e que, se a gravação
+falhasse, só existia em memória — com a fila `CheckpointState.unsaved` (ver "O checkpoint do mundo"
+adiante); a saída de membro de party (#194) tem a mesma janela, e continua sem o remédio. **O serviço de
+Cidade** — `promote`, `buy-item`, o livro do offline training, `enter-training`, o hazard, a bênção — é
+perguntado por `#cityServiceRefusal`, que soma "a sessão oferece?" (`offersCityServices`) com "o tile
+aceita?" (`Ruleset.acceptsCityServices`, só o mundo a declara): a Cidade e a hunt respondem como sempre, e
+o mundo só em PZ. A marca `dirty` do `use-slot` segue só na Cidade: no mundo a conjuração já suja pela
+mana (a marca do checkpoint) e pelo gold e `suppliesUsed` (os agregados). **Eventos notáveis por
 personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
 `Session.notableEventsFor(characterId, from)`, nunca `session.notableEvents` crua — no mundo cada
 evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
-Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
-na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
+Na instância é a fatia inteira, como sempre foi. **O cursor do analisador é a posição ABSOLUTA**
+(`notableEventsTotal`, o descarte do teto somado ao tamanho da lista), e o `analyzer` só sai quando há
+evento novo PARA o personagem: o de outro entra na lista, o cursor avança e nada é enviado (OW-18).
+
+## O mundo hospedado: `WorldShard`, o grafo com `world` no centro e o serviço em PZ (#839, OW-18, ADR 0060 d.2 e d.6)
+
+Com `OPEN_WORLD` o login cai no MUNDO, e o que o hospeda é o `WorldShard` (`game/sessions.ts`), ao lado da
+`CityShard`. A flag escolhe o espaço compartilhado do nó em `createSessionWiring` (o `main.ts` só o chama): a
+desligada dá a Cidade de sempre e `to: 'world'` devolve `null`; a ligada dá o mundo. Produto:
+`docs/product/open-world.md`, "O mundo hospedado".
+
+- **Uma sessão por `world_id`, descartada quando vazia.** `admit(worldId, character, entry)`. O mundo é UM
+  (o `Game` do Canary): o segundo login entra na MESMA sessão, e "Thais 2" não existe — para caber mais gente,
+  outro `world_id` (OW-50) e mais nós. A sessão vazia é esquecida na próxima `admit`, e a nova nasce com `id`
+  novo — o ledger é `UNIQUE (session_id, seq)` e o `seq` recomeça em zero, então reusar o id colidiria com os
+  extratos da anterior (invariante 10) — e com a versão de conteúdo de agora (invariante 7).
+- **O teto vale só na ENTRADA do repouso.** `entry: 'rest'` (o login) recusa o mundo cheio com
+  `WorldFullError`; `entry: 'instance'` (quem volta de uma instância para a qual SAIU do mundo) NUNCA recusa. Quem
+  aplica o teto a toda entrada deixa o personagem sem sessão ao voltar. `entry: 'instance-from-rest'` (#841, OW-20:
+  a hunt idle direta e a party largada do repouso, que nunca ocuparam vaga) recusa como o `'rest'`, mas não roda
+  `carryRestoredConditions` — ver "O mundo e a hunt idle", adiante. O erro sobe por `createSession` antes de qualquer registro; quem o
+  converte em fila com posição é a porta do hospedeiro (`WorldEntryGate`, OW-21 — ver "A entrada pelo
+  repouso", adiante), e um nó sem a fila injetada ainda falha o handshake, como a OW-18 o deixou.
+- **`carryRestoredConditions` é do `'rest'`.** O personagem do ticket nasce com as condições no relógio de zero, e
+  o mundo que já andou tem outro: sem a tradução `armConditions` as daria por vencidas na entrada. Quem vem de uma
+  instância já foi traduzido por `moveToClock`.
+- **O mundo padrão é `'main'`** (`DEFAULT_WORLD_ID`): o ticket ainda não leva `world_id` (OW-50). Conteúdo sem
+  `worlds/main.json` com a flag ligada não sobe — a recusa é na construção do `WorldShard`.
+- **`ALLOWED` tem `world` no centro** (`game/transitions.ts`): do mundo a toda instância, de toda instância ao
+  mundo; a Cidade continua, e mundo e Cidade NÃO se tocam. A tabela diz só o que é POSSÍVEL — `canLogout` na
+  entrada da instância e a volta só com alguém olhando são do hospedeiro (OW-20, ver "O mundo e a hunt idle",
+  abaixo): com a flag ligada o fim de uma hunt vai ao mundo ou ao repouso (`#settleOne`), e só sem ela volta à
+  Cidade (`buildSession({ to: 'city' })`).
+- **`worldFor` (o builder) lê `request.worldEntry`** (`'instance'`, o padrão, ou `'instance-from-rest'`; quem diz é
+  o hospedeiro, `#buildWorldReturn`), e a âncora que o `placeOnEnter` usa é a que a saída gravou em
+  `CharacterRuntime.worldPosition` (`#anchorWorldPosition`, OW-16) — lida ANTES de o destino ser construído.
+
+**O serviço de Cidade por PZ.** `#cityServiceRefusal(hosted, characterId, cityText)` soma `offersCityServices`
+(a sessão oferece) com `Ruleset.acceptsCityServices` (só o mundo: o tile é PZ?) e devolve o texto da recusa ou
+`null`. Serviço novo copia o padrão — nunca `ruleset.type === 'city'`. `#zoneServiceRefusal` é só a metade do
+tile, para o serviço que a hunt também aceita (`sell-items`, `learn-spell`): Cidade e hunt respondem `null`.
+O ouro continua por `#mirrorGold`.
+
+Outras decisões do hospedeiro, cada uma com teste que a mata (`game/world-host.test.ts`):
+
+- **`leave-hunt` no mundo é recusado** ("Você já está aqui."). O `WorldRuleset` herda `requestExit` do
+  `HuntRuleset`, e ele concluiria por `onExitFinished` → `member-left` → `#settleOne` → a Cidade, por fora do
+  `canLogout` e da tabela de transições. O mundo sai por logout (OW-19) e por transição (OW-20).
+- **O mundo não leva identidade de hunt no fio.** `huntIdentityOf` omite `huntId` e `difficulty` do
+  `instance-enter` e do `session-state` quando `type === 'world'`: são os sintéticos do motor (`world:main`,
+  `world`), e o cliente procuraria no catálogo uma hunt que não existe.
+- **O cursor do analisador é absoluto** (`notableEventsTotal`) e o `analyzer` só sai com evento novo PARA o
+  personagem — o evento de outro avança o cursor sem mandar nada. Contar o tamanho da lista mandaria a todos
+  do mundo uma mensagem por evento de qualquer um, e o teto (`notableEventsDropped`) a cegaria.
+- **O registro recusado não deixa fantasma.** Se `#register` lança depois de a fábrica já ter posto o personagem
+  na sessão compartilhada, `#createAndRegisterSession` o tira dela (`leave`): senão ele ficaria em `participants`
+  de uma sessão que ninguém hospeda por ele — um tile bloqueado e, no mundo, uma vaga do teto que nunca volta.
+
+**A recusa de subir com outro `game`** (`game/open-world-guard.ts`, chamada pelo `start` do `game/server.ts`):
+`OPEN_WORLD` só liga com um processo (invariante 9; a trava `world:{id}:owner` é a OW-59). Lê `aliveNodes`,
+ignora o próprio `NODE_ID` (a encarnação anterior bate até o fim do lease), e cai com `MultipleGameNodesError`
+ANTES de abrir a porta e de bater o coração. O Redis que falha também derruba o boot. **O default de `NODE_ID` é
+o `hostname()`** — o id do contêiner —, então um contêiner reiniciado vê o anterior por até 30 s: fixe `NODE_ID`
+no `game` com a flag ligada. O `compose.coolify.yml` o fixa (`${NODE_ID:-game-1}`); o `compose.prod.yml` o lê do `.env`.
+
+**Party e amigos no `api`:** `inSharedSpace(location)` (`api/party.ts`) aceita `null`, `'city'` e `'world'` onde
+só `'city'` valia — o nome da recusa não mudou. `api/friends.ts` responde `where: 'world'`. A party largada do
+mundo passa por `canLogout` no `game`, não no `api` (que só vê o tipo da sessão): é o `member-in-fight` da OW-20
+(ver "O mundo e a hunt idle").
+
+## A presença do mundo: socket vira intenção, evento vira I/O, e o hospedeiro não decide (#840, OW-19, ADR 0060 d.7)
+
+No mundo, desanexar NÃO é inofensivo como na hunt: o personagem fica parado e vulnerável, e sai depois, se
+`canLogout` deixar. O que o `sim` decide (`WorldRuleset`, OW-14) e o que o hospedeiro faz está em
+`game/world-presence.ts` (o contrato por forma) e nos pontos de `game/host.ts` abaixo. Produto:
+`docs/product/open-world.md`, "A presença no hospedeiro".
+
+**A regra que manda: nenhuma decisão de gameplay no hospedeiro.** Ele entrega TRÊS intenções (`presenceLost`,
+`presenceRestored`, `requestLogout`) e cumpre UM evento (`departure-requested`), mais a mensagem de UM outro
+(`logout-refused`). Não olha tile, luta nem relógio de parede. `worldPresenceOf(ruleset)` pede os métodos
+POR FORMA e devolve `undefined` para a Cidade e a hunt — é o que as mantém byte a byte como eram.
+
+Quando cada intenção sai, e armadilhas, todas com teste que as mata (`game/world-presence.test.ts`, mutação
+conferida):
+
+- **`presenceLost` no ÚLTIMO visualizador que se solta** (`detach`) **e na chegada sem visualizador**
+  (`#createLocal`: o ticket consumido e o socket que ainda não conectou, ou nunca vai; `#replace`: a volta de
+  uma instância cujo visualizador caiu no meio da transição). **`presenceRestored` no PRIMEIRO que anexa**
+  (`attach`). A segunda aba não é presença: só a troca de zero para um e de um para zero conta
+  (`#watchers`). O instante é o lógico — o `sim` agenda a partir do `nowMs` da sessão —, nunca um relógio
+  lido aqui (invariante 3).
+- **O visualizador que o SERVIDOR solta não é conexão perdida.** O `close` do uWS chama `detach` de volta
+  quando o `release` fecha o socket, e `#dropViewers` fecha DEPOIS de tirar do conjunto: `detach` só entrega
+  `presence-lost` se `viewers.delete` devolveu `true`. Inverter a ordem deixa um x-log pendente de quem
+  acabou de sair — e, se o mesmo id voltar, de quem acabou de chegar.
+- **O `logout` do mundo é `#requestLogout`**: `requestLogout` do `sim` e `#presentMoves` na hora — o jogador
+  tem a resposta sem esperar o ciclo. Na hunt e na Cidade segue `#logout` (encerra a sessão, sem
+  `canLogout`). O `leave-hunt` no mundo continua recusado (OW-18) e NUNCA vira `logout`.
+  **Veredicto `null` (o `sim` não conhece o personagem) é `release`, e não silêncio**: sem este ramo o
+  `logout` seria engolido — não há personagem para o `sim` decidir. Quem já está saindo (`#departing`,
+  `#transitions`) não pede nada; é o `#releaseFromWorld`, o ÚNICO `release` do mundo por decisão do `sim`,
+  que marca e desmarca `#departing`.
+- **`departure-requested` vale COM ou SEM visualizador.** `#presentMoves` o trata nos dois ramos — o sem
+  ninguém é o x-log. É por personagem, e `#departFromWorld` chama `release` com o `EndReason` (`endReasonOf`:
+  `death` → `death`, o resto → `manual-exit`) e a **posição do EVENTO** como âncora
+  (`ReleaseDeparture.worldPosition` → `#leaveWithReceipt(…, decidedAt)` → `#anchorWorldPosition`): o
+  personagem sem dono pode ter andado entre o instante da decisão e o ciclo que a lê. `{0, 0, 0}`
+  (`NO_WORLD_POSITION`) é "sem posição" e cai na posição de agora.
+- **O checkpoint e o repouso são UM passo**: `release` sai pela sessão `checkpointed` e antecipa o lote
+  inteiro (OW-16). Código novo que tire alguém do mundo continua por `release`/`#saveReceipt`, nunca por
+  `#persistReceipt` direto.
+- **`#departing` e `#transitions`.** Dois pedidos do mesmo personagem no mesmo ciclo viram uma saída (o
+  `sim` já o tirou, mas o hospedeiro só o esquece depois dos `await`s); quem está numa transição já está
+  deixando o mundo, e soltá-lo soltaria a sessão DE DESTINO, que o `release` resolve pelo personagem.
+  `#departing` guarda a PROMESSA da saída (que nunca rejeita), e quem chega no meio espera por ela.
+- **A saída que falha NUNCA fica sem dono** (`#failedDepartures`). O `release` que o Redis recusou já tirou o
+  personagem do `sim` — o `departure-requested` é um só, e o x-log não tem jogador que peça outro —, e um
+  log deixaria o personagem mapeado, com diretório e slot renovados a cada ciclo, até o processo reiniciar.
+  A saída falha fica registrada e é repetida por `#retryDepartures` (o início de `checkpointWorlds`, antes
+  dos lotes) e pelo `#prepare` de quem reconecta. Código novo que dispare um `release` do mundo passa por
+  `#releaseFromWorld`, que é quem registra a falha — e o `release` limpa o registro quando solta.
+- **A reconexão que corre contra a saída perde** (`#awaitDeparture`). O x-log vence no instante em que o
+  cliente reconecta sozinho: com a saída em voo (ou falha), `#prepare` espera por ela e recusa o ticket com
+  `refused: 'leaving'` (503), e a recusa vale também se a saída começa ou acaba enquanto o `#prepare`
+  espera o diretório (a conferência é DEPOIS do `#register`). `attach` recusa o personagem que está saindo
+  (lança), e o `open` do `server.ts` **captura** a exceção e fecha o socket com 1013: uma exceção que escape
+  de um handler do uWebSockets é `uncaughtException`, `process.exit(1)` — e o mundo é um processo só. Nunca
+  deixe `attach` ou qualquer coisa chamada de `open`/`message`/`close` lançar para o uWS.
+- **`logout-refused` vai SÓ a quem pediu** (`#presentLogoutRefused`, todas as abas dele), nunca à sessão: a
+  mensagem montada UMA vez, fora do laço (o `EncodeCache`). O texto da recusa é do cliente (OW-23).
+- **O mundo não é recolhido.** `#collectResting` só visita `hz <= 0`, e o mundo roda a 10 Hz com ou sem
+  visualizador: o recolhimento de 5 min é da Cidade. Quem tira o personagem em luta, sem visualizador, é a
+  saída do `sim` — não um prazo do hospedeiro.
+
+**Um ruleset de teste que fale a língua do mundo** (os três métodos) é tratado como mundo, e um que não os
+tenha (o `CITY` de `world-checkpoint.test.ts`) não recebe presença nenhuma: as suítes de checkpoint, que
+montam o mundo à mão, continuam valendo sem tocar nelas.
+
+## A entrada pelo repouso: a fila do mundo cheio e a hunt idle direta (#842, OW-21, ADR 0060 d.2b e d.6b)
+
+Quem está em repouso entra por um de dois caminhos, e o ticket diz qual. Produto:
+`docs/product/open-world.md`, "A entrada pelo repouso".
+
+- **O pedido** (`api/tickets.ts`): `POST /api/tickets { characterId, entry }`, `entry: 'world' | { hunt }`,
+  default `'world'`. O `EntrySchema` é estrito (campo a mais é `invalid-body`). `{ hunt }` é conferido contra
+  `hasHunt` (o `main` passa `content.hunts.has`; ausente recusa) — `400 unknown-hunt`, DEPOIS da posse e ANTES de
+  resolver nó ou liquidar. **Só com `OPEN_WORLD`**: desligada, o `{ hunt }` é ignorado e o ticket sai sem entrada.
+  `TicketService.issue` ganhou o 6º argumento (`entry`), e a rota só o passa quando há entrada: o pedido de hoje
+  chama `issue` com os mesmos quatro argumentos, e o claim sem entrada não tem a chave (teste em `tickets.test.ts`).
+  `parseClaim` recusa um `entry` torto — nunca o trata como "o mundo".
+- **A fábrica** (`game/sessions.ts`): `SessionFactory` ganhou `entry` como 4º argumento. Só `createWorldSessionFactory`
+  o lê (`huntEntryFor`: o `huntFor` da transição, com o bot do ticket compilado pelo `createBotConfigLoader` e a
+  boosted do personagem); `createCitySessionFactory` o ignora — com a flag desligada o primeiro contato é a Cidade.
+  A hunt que não existe lança `HuntEntryUnavailableError` (`game/rest-entry.ts`) e **não cai no mundo**. O ticket de
+  party vence a entrada.
+- **A fila** (`world-queue.ts`, Redis, banco 29 dos testes): `WorldQueue.clientLogin(world, personagem,
+  { vacancies, premium })` é a `WaitingList::clientLogin` do Canary num script Lua só — limpar os vencidos, entrar
+  no fim (ou reencontrar o lugar), decidir se a posição cabe nas vagas. A tabela de espera (5/10/20/60/120 s) e os
+  15 s de folga do prazo moram NO SCRIPT, uma cópia só; o teste de `world-queue.test.ts` a prende nos limites.
+  Premium vai na frente (a parte alta da nota). **O contador de ordem (`…:seq`) tem de viver mais que a fila**
+  (1 h contra 150 s): se expirasse antes, o próximo da fila ganharia uma ordem MENOR que a de quem espera e
+  furaria. E é renovado a CADA chamada que deixa a fila de pé (recusa, ou entrada que deixou gente esperando),
+  não só na chegada de um novo: quem espera volta e mantém a fila viva por horas sem ninguém chegar, e um
+  contador renovado só na chegada expiraria no meio dela.
+- **A porta** (`WorldEntryGate`, `game/rest-entry.ts`): `login(personagem, premium)` e `leave(personagem)`. O
+  `createSessionWiring` a monta (`worldEntry`) com o `WorldShard` (vagas) e a `WorldQueue` (ordem) — **só com a
+  flag E a fila injetada** (o `main` a injeta só com `OPEN_WORLD`). O `main` passa `sessions.worldEntry` ao `game`,
+  que a passa ao `SessionHost` (`worldEntry`).
+- **O hospedeiro** (`#createAndRegisterSession`): o login que cairia no mundo — sem party, sem `hostedParty`, sem
+  retomada de snapshot e sem `entry` — pergunta à porta ANTES da fábrica (`#createInWorld`); a recusa sobe como
+  `WorldFullRefusal` e `prepare` a converte em `{ created: false, refused: 'world-full', worldFull }`. A corrida
+  (a fila admitiu e a fábrica achou o mundo cheio) volta à fila, até `WORLD_ENTRY_ATTEMPTS` (3). O snapshot tem
+  precedência sobre a fila: é a sessão em que o personagem estava (ADR 0010). `entry` só vale para quem não tem
+  sessão — quem reconecta reencontra a sua, e trocar de sessão é transição (invariante 8). A hunt direta tira o
+  personagem da fila (`gate.leave`, depois do registro, sem poder falhar o handshake).
+- **O socket** (`game/server.ts`): `refused: 'world-full'` aceita o upgrade com `SocketData.worldFull`, e o `open`
+  manda `world-full` e fecha com 4001 — sem `attach`, sem visualizador. `huntAvailable` =
+  `acceptingNewSessions && host.offersHunts`. `hunt-unavailable` é `409` no upgrade, sem abrir o socket.
+
+Armadilhas, todas com teste que as mata:
+
+- **A recusa não deixa rastro.** O contador de versão durável nasce ANTES de a fábrica rodar (`#createAndRegister`)
+  e é desfeito quando ela falha; o personagem que a fábrica chegou a pôr no mundo é tirado dele. Um rastro aqui é
+  uma vaga do teto que nunca volta.
+- **O slot de personagem ativo da conta NÃO é devolvido na recusa.** O varredor de tickets o devolve no prazo.
+  Devolver na hora faria o segundo ticket do mesmo personagem (o duplo clique) falhar no `consume` como não
+  autorizado, e o cliente veria 401 em vez do `world-full`.
+- **A conta das vagas é do `WorldShard.vacanciesOf`**, nunca negativa: quem volta de uma instância pode passar do
+  teto, e uma vaga negativa admitiria o contrário do que a fila quer.
+- **Os testes de Redis da OW-21 usam os bancos 29 e 30**, que o Redis local de 16 bancos não tem (`DB index out of
+  range`): lá os arquivos caem no banco 0, que outros arquivos dividem. Por isso eles NÃO fazem `flushdb`: apagam só
+  as chaves da própria fila (`world:{id}:queue*`), e `world-queue.test.ts` usa um mundo de id único por teste. No CI
+  (32 bancos) cada arquivo tem o seu banco.
+
+Testes: `world-queue.test.ts` (a fila, Redis), `game/rest-entry.test.ts` (o hospedeiro com a fila de verdade: o
+terceiro com `capacity: 2` recebe a posição 1 e entra depois que alguém sai; a hunt direta; quem volta de uma
+hunt com o mundo cheio entra), `game/rest-entry-boot.test.ts` (o socket de verdade), `game/world-shard.test.ts`
+(`vacanciesOf` e a fábrica), `api/tickets.test.ts` e `tickets.test.ts` (o pedido e o claim).
+
+**O menu de entrada do cliente (#846, OW-23): `GET /api/entry-options`** (`api/entry-options.ts`). O catálogo de
+hunts só chega pelo socket, e o menu "Entrar no mundo" ou "Caçar (idle)" decide o PRIMEIRO ticket — antes de qualquer
+socket. A rota (autenticada, só leitura) devolve `{ openWorld, hunts: [{ id, name, recommendedLevel }] }`; com
+`OPEN_WORLD` desligado as `hunts` vão VAZIAS, e o cliente cai no botão único de sempre. O `main` a alimenta com
+`catalogue.hunts` (`entryHunts`); sem a dependência a rota não existe (404, e o cliente trata como "sem menu"). Não
+confere nada: a hunt pedida continua sendo conferida pelo `POST /api/tickets` (`hasHunt`). Teste:
+`api/entry-options.test.ts`. O que o cliente faz com ela: `docs/product/open-world.md`, "O cliente do mundo".
+
+## O mundo e a hunt idle: entrada por `canLogout`, volta assistida ao mundo e desassistida ao repouso (#841, OW-20, ADR 0060 d.6a e d.6c)
+
+A promessa central da hunt idle é que o personagem desanexado **nunca acaba sozinho no mundo**, onde morreria sem
+ninguém olhando. Tudo aqui é do `SessionHost` (`game/host.ts`) e só existe com `OPEN_WORLD`: sem a flag o fim de
+uma hunt volta à Cidade, como sempre. Produto: `docs/product/open-world.md`, "O mundo e a hunt idle".
+
+**A entrada passa por `canLogout`** (`SessionHost#transition` → `#refuseIfCannotLogout`). Quem entra numa instância
+sai do mundo, e no Tibia isso é a regra do logout: PZ sempre, no-logout nunca, o resto só sem luta. O hospedeiro
+pergunta ao `sim` (`logoutVerdictOf` de `game/world-presence.ts`, por FORMA — a Cidade e a hunt devolvem
+`undefined` e a transição é a de sempre) **antes de qualquer efeito**: sem âncora, sem destino, sem extrato. A
+recusa é um `TransitionError` `'cannot-logout'` com o motivo (`logoutRefusal`), e `#requestTransition` o entrega
+como a mensagem `logout-refused` — a MESMA do `logout` recusado, para o cliente (OW-23) escrever uma frase só —,
+e não como `system-message`. Vale para toda instância (`enter-hunt`, `enter-training`, a transição por API); o
+tile `P` (PZ + no-logout) recusa o treino também, porque o no-logout vale por cima da PZ.
+
+**A volta decide pelo visualizador, no fim da sessão** (`#settleOne`; só com `openWorld`):
+
+| O fim da instância | Visualizador (`#watchers`) | Vai para |
+|---|---|---|
+| fim, morte, regra de saída, `leave-hunt` | com | o mundo (`#buildWorldReturn`), na âncora — o templo na morte; o REPOUSO se a hunt nasceu do repouso e o mundo não a recebe (abaixo) |
+| idem | sem | o REPOUSO (`#releaseToRest`) |
+| a drenagem (`drainAll`) | com ou sem | o repouso: `release` fecha o socket com 1001 e o cliente volta pelo ticket |
+
+Armadilhas, todas com teste que as mata (`game/world-idle-hunt.test.ts`, mutação conferida):
+
+- **A decisão é DEPOIS de gravar o extrato**, não antes: o visualizador que cai durante o `await` do Redis vale
+  como desanexado. Decidir antes poria no mundo, sem ninguém, quem já fechou o navegador.
+- **O extrato que acabou de pousar É o checkpoint do repouso.** `#persistReceipt` leva o mundo e os vitais do dono
+  (`#worldStateOf`, `receiptWorldStateOf`): a âncora (o tile de saída, ou nula na morte → o templo) e a vida e a mana
+  (as da volta, CHEIAS na morte, sem condição). Não há um segundo gravamento: o repouso só SOLTA.
+- **`#releaseToRest` não é `release`.** `release` de uma sessão privada a ENCERRA (`session.end('manual-exit')`), e
+  quem chega aqui pode ser o membro de uma party que saiu por dentro do `sim` — a hunt continua para os outros. O
+  repouso solta o personagem (visualizadores, mapas, snapshot, diretório, slot — `#unhost`, a metade que `release`
+  também usa) e só descarta a sessão quando não sobra ninguém dela.
+- **O mundo nunca recebe quem não tem visualizador** (ADR 0060, "Alternativas": "Fim de hunt desanexada volta ao
+  mundo" foi descartada). A chegada sem visualizador existe — todo login a faz, e o `sim` a trata com
+  `presence-lost` (OW-19) —, mas pôr no mundo, de propósito, quem fechou o navegador numa hunt é deixá-lo parado e
+  vulnerável por 60 s no tile de saída, onde nada o tira de uma luta. O repouso evita o risco inteiro.
+- **A morte volta o personagem ao máximo e ao templo nas duas saídas**: ao repouso, pelo extrato; ao mundo, por
+  `WorldRuleset#onEnter` (sim), que devolve vida e mana e zera a âncora de quem chega morto. A Cidade curava; o mundo
+  não cura quem chega vivo.
+- **`#homeType()`** é o destino de `leave-hunt` quando ele não passa pelo `requestExit` (o retry manual da
+  sucessão que falhou, o treino): o mundo com a flag, a Cidade sem ela. Dois lugares que decidissem "para onde se
+  volta" divergiriam.
+
+**O teto na volta: o passe é de quem SAIU do mundo** (`#leftWorld`, `#buildWorldReturn`). A volta ao mundo não é
+sempre `'instance'`: só quem saiu do mundo para a instância — a transição (`#replace` marca quando a origem é o
+mundo e desmarca quando o destino é) e a largada de party (`#leaveForParty`) — guarda o passe. A hunt idle direta
+(`entry: { hunt }`) e a party largada do repouso nunca ocuparam vaga: a volta bate na porta como o login
+(`WorldEntryGate#login`, com o `premium` do personagem) e o shard recusa o cheio (`WorldFullError`) — nos dois casos
+o destino é o REPOUSO, e `#settleOne` e `#runTransition` (a volta manual) o cumprem com `#releaseToRest`. Sem esta
+distinção o mundo cheio engordava com quem escolheu a hunt por ele estar cheio e furava a fila. Armadilhas:
+
+- **Ausente é o lado seguro.** `#leftWorld` não sobrevive ao nó: a hunt retomada de snapshot não tem a marca, e com o
+  mundo cheio vai ao repouso. Nunca inverta a polaridade (marcar quem NÃO saiu): o padrão passaria do teto.
+- **O passe sai em `#unhost` e na hunt direta** (`entry` definido): a marca de uma saída anterior não pode valer para
+  a hunt que nasce do repouso depois.
+- **`#releaseToRest` esvazia a fila do visualizador antes de fechar** (`viewer.flush()`): `Viewer#close` não a
+  esvazia, e sem isso o `session-ended` — o resumo da hunt — nunca chega a quem olhava quando o mundo está cheio.
+
+**A largada de party** (`#prepare` → `#partyMemberInFight`). O primeiro ticket da party cria a sessão com TODOS e
+tira cada membro do mundo (`#createAndRegisterSession`, `#leaveForParty`); é ali que se sabe quem está em luta —
+o `api` só vê o tipo da sessão. Antes de mover QUALQUER um, todo membro hospedado no mundo deste nó passa por
+`logoutVerdictOf`; um recusado derruba a largada inteira: `PrepareResult.refused: 'member-in-fight'` (409 no
+upgrade, `server.ts`), ninguém é movido, o culpado recebe o `logout-refused` com o motivo, e a luta que acaba
+libera o ticket seguinte. O ticket de entrada (`join`) de quem está em luta cai do mesmo jeito; uma party cuja
+sessão já está hospedada aqui já foi largada, e o ticket de quem chega depois não tem o que conferir. **A party
+que já está de pé não sabe da recusa**: o `api` gravou o formulário como `hunting` e os tickets expiram em 30 s;
+`disbandIfDead` o desfaz depois da carência de 45 s. Tirar o formulário na hora é do `api`, que não vê o `game`.
+**A âncora atravessa a largada** (`#leaveForParty` devolve o tile de onde o membro saiu do mundo): a party constrói o
+personagem do TICKET — a linha do banco, um checkpoint atrás —, e o extrato do fim da hunt leva a âncora DELE com
+versão maior que a da saída; sem herdar a de agora, a party voltaria ao tile do último checkpoint. Só a âncora:
+vitais e condições são os da hunt, que pode já ter começado. **A âncora é escrita DEPOIS do `#createLocal`**
+(`#adoptAnchors`, pelo id da sessão), nunca na `Session` que `#createAndRegisterSession` construiu: dois tickets da
+mesma party que chegam juntos constroem uma cada, e o `#createLocal` guarda a que hospeda primeiro — escrever na
+descartada perdia a âncora, e o fim da hunt gravava a do ticket (ou nula) por cima. Vale para o membro do próprio
+ticket e para os `others` que o `#leaveForParty` tirou do mundo (só o que há: um `null` nunca sobrescreve); o
+`#admitLateJoiner` escreve no `newcomer`, que já é da sessão viva.
+
+Testes: `game/world-idle-hunt.test.ts` (o hospedeiro com a Thais real e a `rat-cellars`: a recusa de cada motivo, a
+volta ao mesmo tile, o repouso, a morte, a corrida do visualizador, a party e a drenagem; a flag desligada),
+`game/world-idle-hunt.postgres.test.ts` (a linha de `characters` que o próximo ticket lê; o passe do teto, a âncora de dois tickets
+simultâneos e a do `join` estão no primeiro arquivo), `game/world-shard.test.ts` (`'instance-from-rest'`), `sim` —
+`world.test.ts`/`world-presence.test.ts` (`logoutVerdictOf`, o morto que chega).
+
+## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
+
+A sessão `checkpointed` (o mundo: `checkpointsProgress`) não tem `end` nem snapshot, e o progresso dos donos
+chega ao Redis por **lote**: o extrato de todo personagem SUJO, gravado por `ReceiptStore.saveBatch` num
+`MULTI` só. Quem manda é `SessionHost` (`game/host.ts`); o que não precisa dele — a marca, "sujo", a fila
+dos extratos que não pousaram — mora em `game/world-checkpoint.ts`. `HostedSession.checkpoint` é `null` na
+hunt e na Cidade, que não pagam nada por isso. Produto: `docs/product/open-world.md`, "O checkpoint do mundo".
+
+**O funil é um só: `#saveCheckpointBatch(hosted, departures, everyone)`.** O timer (`checkpointWorlds`, a
+cada `worldCheckpointMs`, `WORLD_CHECKPOINT_MS` = 60 s por padrão), a saída (`#saveReceipt` no ramo
+`checkpoint !== null`: `release`, `drainAll`, `#runTransition`, `#leaveForParty`, e a morte por `member-left`
+em `#settleOne`) e o retry de um extrato que ficou para trás passam todos por ele. Por isso a saída
+**antecipa o lote inteiro** sem cada chamador saber: quem sai leva a linha dele e o checkpoint de todo outro
+sujo. Código novo que tire alguém do mundo grava por `#saveReceipt`/`#leaveWithReceipt`, nunca por
+`#persistReceipt` direto — senão a linha vai sozinha e uma queda logo depois divide o mundo em dois instantes.
+
+Armadilhas, todas com teste que as mata (`world-checkpoint.test.ts`, mutação conferida):
+
+- **"Sujo" é o personagem e a sessão, nunca um visualizador** (invariante 3). `#isDirty`: `dirty` (intenção
+  durável), sem marca, instância vendida, qualquer agregado além de `durationMs` (`hasActivity`), ou a marca
+  (`CheckpointMark`: posição absoluta, vida, mana, `alive`, CHAVES das condições, e o que ele carrega —
+  `instanceId → quantidade`) difere da gravada. Quem
+  gravar `#presentMoves`/`viewers` aqui quebra o mundo desanexado. `durationMs` corre para todo presente e
+  **não** suja — um parado na PZ teria o agregado "não zero" a partir do primeiro segundo. As condições
+  entram pela chave, não pelo prazo (o prazo encolhe sempre). **O `goldDelta` não é sinal**: ele só é
+  liquidado depois de gravar, e um lote que falhou o deixaria sujo para sempre — o agregado é o sinal certo
+  (zera na emissão, não na gravação). A marca nasce na ENTRADA (`#markArrival`, em `#createLocal` e
+  `#replace`): sem ela o primeiro lote gravaria todo mundo.
+- **A saída sempre grava**, suja ou não: ela leva o `reason` e a âncora (ADR 0060 d.7). Só o checkpoint
+  periódico poupa o parado.
+- **A âncora é lida ANTES de o personagem ser movido** (`#anchorWorldPosition`). `#leaveWithReceipt` a lê antes
+  de `leave`; `#runTransition` a lê **antes de `buildSession`** — o construtor leva o MESMO `CharacterRuntime`
+  para o destino, e depois dele o `position` já é o da hunt — e chama `#leaveWithReceipt(..., true)`
+  (`anchored`) para não relê-la. O checkpoint a escreve em `owner.worldPosition` antes de montar a linha
+  (invariante 9: quem escreve é o hospedeiro dono da sessão). `worldPositionOf(ruleset, owner)` consulta o
+  ruleset por FORMA (só o `WorldRuleset` a responde); ausente, o checkpoint segue sem âncora.
+- **Os lotes de uma sessão são SERIALIZADOS** (`CheckpointState.tail`): o seguinte só é MONTADO depois que o
+  anterior terminou, então o que falhou já voltou para `unsaved` e vai nele. O timer não empilha
+  (`state.queued > 0` pula o ciclo). Montar de forma síncrona na chamada (sem fila) deixaria um extrato novo
+  ultrapassar o que falhou, e a saída de um personagem soltaria o que o lote em voo ainda não gravou.
+- **Falha não perde crédito.** `Session.checkpoint` e `leave` zeram o que o extrato leva e o emitem UMA vez; se
+  `saveBatch` lança, as linhas voltam inteiras para `CheckpointState.unsaved` — mesmo `seq`, mesma versão
+  durável — e vão NA FRENTE do próximo lote. Repetir é seguro (chave de Redis igual, ledger `UNIQUE
+  (session_id, seq)`), inclusive a resposta perdida. Um `release` que falha não solta nada, e o seguinte
+  grava o que ficou: `#leaveWithReceipt` com `leave` devolvendo `null` ainda chama
+  `#saveCheckpointBatch(hosted, [], false)`. `false` = só `unsaved`, sem o checkpoint dos outros.
+- **O gold: grava, depois liquida** (`#settleLine`, o canal único da OW-04). O que o personagem ganha enquanto o
+  lote voa entra na base junto (o saldo é `gold + goldDelta`, o mesmo número) e o agregado dele vai no extrato
+  seguinte, que é o que o ledger credita.
+- **`reason: 'checkpoint'`** é só do hospedeiro (`ReceiptReason = EndReason | 'checkpoint'`, `receipts.ts`): o
+  `sim` não tem como dizer "ninguém saiu", e `Session.checkpoint` pede um `EndReason` (passamos
+  `'manual-exit'`, que o hospedeiro descarta). Vira o `type` `session-checkpoint` da linha de ledger.
+- **`saveBatch` é UM `MULTI`, sem fatiar** — a atomicidade é o que a decisão 10d compra. Um comando que falha
+  dentro do `MULTI` não desfaz os outros (o Redis não tem rollback), mas é lançado por `exec` e o lote se
+  repete. Lote vazio não fala com o Redis; sem `receipts` no host o checkpoint não tira nada da sessão
+  (zerar sem gravar perderia o crédito).
+- **Cada linha leva o `acquired` inteiro da sessão**, não só o que caiu desde o último lote: a inserção em
+  `item_instance` é idempotente (`onConflictDoNothing`), então repetir é correto — mas o tamanho do comando
+  cresce com a mochila, e é um dos números que o `bench:world` (OW-35) mede.
+- **Idempotente na EXISTÊNCIA da linha, não na QUANTIDADE** (revisão da #915). A pilha que o loot engorda
+  mantém o `instanceId` (`Inventory.#place`), e `acquired` + `DO NOTHING` congelaria a quantidade do primeiro
+  checkpoint em que ela apareceu. Por isso a linha do mundo leva também **`quantities`** — `instanceId →
+  quantidade` de TODA instância carregada, absoluta e INTEIRA (nunca delta: a guarda de versão do ledger
+  descarta o extrato velho por completo, e um delta se perderia com ele), aplicada por `applyQuantities`
+  atrás de `absolute` — e um `removedInstances` AMPLIADO: o que o `sim` reportou mais o que estava no
+  inventário do último extrato e já não está (`inventoryDeltaOf` contra `CheckpointMark.items`). Comer
+  (`Inventory.consumeOne`) e o anel que vence (`destroy`) NÃO passam por `removedInstances` no `sim`; a
+  diferença entre dois inventários pega todos sem o hospedeiro conhecer cada caminho, e só apaga o que o
+  PRÓPRIO jogo carregou (nunca uma linha que o banco tenha e a sessão não viu). A marca é lida por
+  `#receiptLine` e só é TROCADA depois dele (`#buildCheckpoint`) — inverter a ordem compara o inventário
+  contra ele mesmo. Só o mundo (`hosted.checkpoint !== null`) os leva: o extrato da hunt e da Cidade é
+  byte a byte o de antes. **Com a liquidação da OW-17**, `quantities` é estado (`applyQuantities` dentro de
+  `applyProgression`, atrás de `absolute`), então o checkpoint que só muda a quantidade — nenhuma instância
+  nova, nenhum `removedInstances` — não cria linha de ledger; a instância que SAI vai em `removedInstances`,
+  que é valor (`movesValue`) e vira linha. O ledger registra nascimento e morte de instância, não cada
+  unidade da pilha.
+
+Teste: `receipts.test.ts` (o `MULTI`, a queda antes do `EXEC`, no Redis de verdade),
+`game/world-checkpoint.test.ts` (o mecanismo, ruleset de mentira), `game/world-checkpoint-real.test.ts` (a
+Thais real) e `game/world-checkpoint.postgres.test.ts` (do hospedeiro ao ledger: 100 + 50 = 150, a queda
+entre dois lotes, o retry e a resposta perdida).
+
+## O mundo e os vitais em repouso: coluna → ticket → sessão → extrato → coluna (#836, OW-15, ADR 0060 d.10f)
+
+O personagem em REPOUSO existe na linha de `characters` com o que o Tibia guarda dele: o mundo
+(`world_id`), a posição absoluta (`world_x/y/z`), a cidade (`town_id`), a vida e a mana (`health`,
+`mana`) e as condições (`conditions`, `jsonb`). É o que faz deslogar a 10 HP voltar com 10 HP. A
+migração é a `0029_836-world-vitals.sql`, aditiva (ADR 0014): nada é reescrito, as duas colunas
+`NOT NULL` nascem em `'main'` e `'thais'`, e as demais nulas — NULO é "cheio, no templo, sem
+condição". Dois CHECKs (`character_world_position_complete`, `character_vitals_not_negative`) fixam
+as duas formas que o código garante.
+
+**Tudo atrás de `OPEN_WORLD`** (`config.ts`; `1`/`true`, default desligado). Com a flag desligada o
+`api` não lê as colunas, o ticket é o de antes byte a byte, o extrato não leva os campos e o repouso
+é `'city'`. O `api` (ticket, lista de personagens) e o `game` (extrato) precisam da MESMA flag. O `jobs`
+escreve o que o extrato trouxer e **lê a flag para uma coisa só**, desde a OW-17: pular a linha de ledger
+do CHECKPOINT que não move valor (`LedgerSweepOptions.openWorld`, `JobsDependencies.openWorld`). Quem
+monta o `jobs` ou a liquidação do ticket por outra porta — um runner de desenvolvimento, um segundo
+`api`, o hospedeiro da OW-18 — tem de repassá-la: sem ela nada falha, e o ledger volta, em silêncio, a uma
+linha por checkpoint (ver "A liquidação do checkpoint", abaixo). As colunas existem sempre, com ou sem a
+flag.
+
+O dado atravessa cinco fronteiras e a forma é conferida num arquivo só, `world-state.ts`. A regra é a
+de todo campo do ticket: **torto vira ausente, nunca recusa** (cheio, no templo, sem condição).
+
+1. **Coluna → ticket** (`api/tickets.ts`, `initialCharacterOf(..., openWorld)`; o `api/party.ts` o
+   repete para cada membro). `worldStateOfRow` leva só o que EXISTE: a posição inteira (os três
+   juntos), a vida maior que zero, a mana, as condições não vazias e SEMPRE a `townId`. Vida zero é um
+   morto, e o morto entra cheio.
+2. **Ticket → sessão** (`game/sessions.ts`, `characterFromTicket`). A vida e a mana entram LIMITADAS
+   pelo máximo do level — um level novo, a promoção ou conteúdo que mudou nunca deixam a vida acima do
+   teto —, a vida nunca abaixo de 1. A âncora vai para `CharacterRuntime.worldPosition` (o mundo a lê
+   em `placeOnEnter`: cai no templo se ela não existe) e a cidade para `townId`. As condições entram
+   no `CharacterRuntime` e o `onEnter` do ruleset as rearma como eventos (`HuntRuleset#armConditions`).
+3. **Sessão → extrato** (`game/host.ts`, `#worldStateOf`, SÓ com a flag). Os dois extratos de estado
+   absoluto INTEIRO (`#persistReceipt` e `#saveDurableReceipt`) e o do snapshot irrestaurável
+   (`settleSnapshotAsReceipt`, opção `openWorld`) levam o mesmo conjunto — o hazard-choice
+   (`#saveHazardChoice`), que é parcial de propósito, não. A âncora sai como está: quem a mantém é o
+   dono da sessão, na saída e no checkpoint (OW-16/OW-20).
+4. **Extrato → Redis** (`receipts.ts`). `SessionReceipt extends WorldState`, e `parseReceipt` é lista
+   de PERMISSÃO — o `...readReceiptWorldState(value)` no fim dele é o que impede o campo de sumir no
+   caminho de volta sem erro. `parseInitialCharacter` (`tickets.ts`) idem, com `readTicketWorldState`.
+5. **Extrato → coluna** (`jobs/ledger.ts`, `applyProgression`). ABSOLUTOS e última-escrita-vence,
+   guardados por `absolute` (`durable_version`, #823): extrato atrasado nunca devolve a vida de ontem
+   nem o tile de antes. Vida e mana DESCEM e SOBEM, a posição muda a cada passo — nada de fusão por
+   máximo. Montados num objeto só (`world`), porque mais cinco `...(cond ? {} : {})` no `set` estouram
+   o que o compilador representa (TS2590).
+
+**`null` e `[]` no extrato são VALORES, a ausência é "não toque".** `worldPosition: null` zera as três
+colunas — "volta ao templo", o `0,0,0` do Canary, que é o de quem morreu e de quem nunca esteve no
+mundo —, e `conditions: []` grava nulo. Omitir deixa a coluna como estava.
+
+**`townId` é a MARCA de que o `api` leu o mundo deste personagem** (`receiptWorldStateOf`): o ticket a
+leva SEMPRE com a flag ligada, e sem ela o extrato NÃO leva NADA. Sem a marca, um `api` anterior ou
+com a flag desligada emitiu um ticket sem o mundo, e `worldPosition: null` apagaria a posição da linha
+enquanto a vida cheia desfaria a que ela guarda. Teste de host que fale do mundo põe `townId` no
+`CharacterRuntime`.
+
+**Quem morreu leva a vida e a mana CHEIAS, a posição `null` e `conditions: []`** — a morte do Tibia
+manda ao templo, de volta ao máximo (`player.cpp:4226-4252`). O morto tem vida zero, e zero nunca
+chega à linha.
+
+**As condições viajam como PRAZO RESTANTE, não como instante de relógio.** `expiresAtMs` e
+`nextTickAtMs` de uma `ConditionState` são instantes do relógio LÓGICO da sessão, e o repouso não
+conta tempo (o Canary guarda os `ticks` que faltavam, `condition.cpp:300`). `CharacterRuntime.
+conditionsAsRemaining()` (`sim`) subtrai o relógio a que o personagem está ligado — só ele sabe qual,
+porque numa transição o destino é construído ANTES de a origem encerrar e os instantes já estão no
+relógio dele. O caminho de volta é o inverso: o personagem do ticket nasce com o restante (relógio
+zero) e **`Session.enter` não traduz quem nunca esteve numa sessão**. Uma sessão que já andou — o
+recém-chegado de uma party em curso, a Cidade, o mundo — veria toda condição como vencida e o
+`armConditions` a apagaria. Por isso **`carryRestoredConditions(character, session)`**
+(`world-state.ts`) soma o relógio da sessão ANTES de `enter`: `#admitLateJoiner` e `CityShard.admit
+(character, true)` já o chamam, e o `WorldShard` (OW-18) o chama. Numa sessão que nasce agora
+(relógio zero) é nada. Chamá-lo para quem já andou por outra sessão desloca duas vezes.
+
+**O repouso é `'offline'` na lista de personagens** (`api/characters.ts`, `toDto`), só com a flag: a
+coluna `state` (default `'city'`) é o que sobrou de antes de a sessão existir, e o estado sem sessão
+do invariante 8 é o personagem deslogado. O `select` consulta o diretório antes de dizer `offline`.
+
+**`upgrade-existing-schema.sql` NÃO ganha estas colunas**, como não ganhou a `durable_version`: ele é o
+upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a `0029` falhar ao rodar
+depois dele (`ADD COLUMN` sem `IF NOT EXISTS`). O banco legado entra pela migração.
+
+**O que a OW-20 fechou.** A âncora é escrita pelo checkpoint e pela saída desde a OW-16 (ver "O checkpoint do
+mundo"); a volta da hunt para o mundo é a OW-20 (ver "O mundo e a hunt idle"). O mundo é hospedado desde a OW-18
+(ver "O mundo hospedado"): com a flag ligada o login cai nele, que NÃO cura na entrada, e a vida do ticket
+sobrevive — e o fim de uma hunt já não cai na Cidade, que curava: vai ao mundo (com visualizador) ou ao repouso,
+com a vida da volta. O contrato — coluna, ticket, sessão, extrato — tem teste de
+ponta a ponta (`jobs/world-vitals.postgres.test.ts`). A liquidação do checkpoint sem linha de ledger é a OW-17 (abaixo).
+
+## A liquidação do checkpoint: o checkpoint sem valor movido não cria linha de ledger (#838, OW-17, ADR 0060 d.10.d-e)
+
+O checkpoint do mundo (OW-16) grava um extrato por personagem sujo a cada 60 s, quase todos só de
+posição e vitais. O `jobs` (`writeReceipts`, `jobs/ledger.ts`) separa o que o extrato carrega:
+
+- **CHECKPOINT (`reason: 'checkpoint'`), versionado, SEM valor movido, com `OPEN_WORLD`** →
+  `applyProgression(tx, receipt, progression, false)`: só os campos absolutos, guardados por
+  `durable_version`, **sem inserir em `ledger`**, sem tocar em `xp`, `gold` nem `level` e sem inserir
+  `item_instance`. Conta em `LedgerSweepResult.stateOnly`.
+- **Com valor, fim de sessão ou saída (qualquer outro `reason`), sem versão, ou com a flag desligada** →
+  o caminho de sempre (linha de ledger e progressão na mesma transação, `UNIQUE (session_id, seq)`).
+
+**"Sem valor" é `movesValue`** (`jobs/ledger.ts`): `xpGained`, `goldGained`, `goldSpent`, `kills` e
+`deaths` iguais a zero, `removedInstances` vazio e nenhum item NOVO em `acquired`. Nove armadilhas:
+
+- **`acquired` é CUMULATIVO, e só o item novo é valor.** `acquiredBy` (`game/host.ts`) lista todo item
+  com o prefixo da sessão que ainda está na mochila, na satchel ou no corpo — o id de loot
+  (`${sessionId}:bag:N`) não muda —, então a espada de t0 está em TODO checkpoint seguinte. Tratar a lista
+  não vazia como valor deixa todo personagem que já lootou uma vez no ledger para sempre (os 288 mil por
+  dia viram o caso típico). `ownedAcquired` pergunta ao banco, dentro da transação e depois da trava da
+  linha, quais ids o DONO já tem em `item_instance`: se todos, é estado puro (e o `INSERT` nulo nem
+  roda); se algum é novo, é a linha de ledger que registra o nascimento. Se o emissor passar a mandar
+  `acquired` como DELTA, nada aqui quebra (a pergunta só encontra "nenhum tem" no primeiro). O teste com o
+  mesmo `acquired` em dois checkpoints seguidos (`checkpoint-settlement.postgres.test.ts`) é o que prende
+  a premissa: um `movesValue` sem o conjunto dos já tidos prenderia o personagem no ledger.
+- **SÓ o CHECKPOINT pula a linha — não todo extrato sem valor — por causa do snapshot.**
+  `settleSnapshotAsReceipt` (um snapshot irrestaurável, `#creditUnrestorable`) reemite o MESMO
+  `seq = ledgerSeq + 1` do extrato final com uma versão durável NOVA, e o que o reconhece é a linha de
+  ledger do final (`UNIQUE (session_id, seq)`): sem ela a versão maior o deixa passar e ele sobrescreve o
+  estado final com o de alguns segundos antes. A sessão do mundo, a única que faz checkpoint, não tem
+  snapshot (ADR 0060 d.10.a). **Se um dia outra sessão passar a fazer checkpoint E a ter snapshot, este
+  portão (`CHECKPOINT_REASON` em `appliesAsStateOnly`) deixa de bastar**, e é preciso um marcador do
+  `(session_id, seq)` aplicado sem linha.
+
+- **Campo novo que MOVE VALOR tem de entrar em `movesValue`.** Um extrato que mexe em gold ou item por um
+  campo que ela não conhece vira "só estado" e perde a linha de ledger — em silêncio, porque o estado
+  aplica normal. É o invariante 10 que ela guarda. `ledger-value.test.ts` tem um caso por coluna da
+  definição; o Market (E13) e a transação entre personagens vão precisar de caso próprio.
+- **A idempotência desse caminho é SÓ a versão.** Sem a linha de ledger não há `UNIQUE (session_id, seq)`:
+  reprocessar o mesmo extrato, ou um mais velho, encontra `durable_version` igual ou maior, e `absolute`
+  é `false`. Tirar a guarda — ou aplicar um sem versão por este caminho — reescreve a posição com a de
+  ontem. Por isso `appliesAsStateOnly` exige `durableVersion !== undefined`: o extrato de um nó anterior
+  (sem versão) segue com ledger, mesmo sem valor. A versão basta para o checkpoint repetido, atrasado ou
+  reprocessado, e **só para ele**: o extrato rederivado de um snapshot tem versão nova e a mesma chave (a
+  armadilha acima).
+- **O monotônico entra SEMPRE, também no extrato atrasado** (Bestiário, Bosstiary e magias pela fusão,
+  vocação por `coalesce`, promoção por `OR`): aplicar de novo é inofensivo, e descartar seria a única
+  diferença entre os dois caminhos. O que o extrato atrasado não escreve é absoluto; se ele também não
+  traz monotônico nenhum, `applyProgression` **retorna antes do `UPDATE`** — um `set({})` o drizzle
+  recusa. Campo monotônico novo no `parseReceipt` precisa entrar nessa condição de retorno.
+- **A flag chega por opção, nos DOIS caminhos** (`LedgerSweepOptions.openWorld`): o `jobs`
+  (`JobsDependencies.openWorld`, `main.ts`) e a liquidação do ticket (`settleProgress`, `main.ts`). Uma
+  divergência entre eles é inofensiva — o mesmo extrato dá o mesmo estado, com uma linha de ledger a mais
+  ou a menos —, mas o `api` e o `game` seguem tendo de concordar na flag (ver o fim de "O mundo e os
+  vitais em repouso").
+- **`stateOnly` só existe no resultado quando é maior que zero** (`character-state.ts` o repassa do mesmo
+  jeito): dezenas de testes comparam o resultado com `toEqual({ written, failed })`. `written` conta o
+  extrato sem ledger também — quem lê `written > 0` pergunta "a linha do personagem pode ter mudado?".
+- **A trava de linha CONTINUA** (`select ... for update`): é ela, e não a chave única, que serializa o
+  `jobs` e a liquidação do ticket neste caminho. `checkpoint-settlement.postgres.test.ts` cruza os dois.
+- **O extrato sem ledger de um personagem que NÃO existe é REMOVIDO do Redis** (`current === undefined` →
+  `applyProgression` retorna, e `writeReceipts` apaga e conta): o com ledger falhava na FK e ficava até o
+  TTL. Sem valor, não há o que perder, então o descarte é o certo — mas a varredura varre o keyspace
+  INTEIRO, e teste que a use num Redis compartilhado apaga o extrato do vizinho. O Redis local de
+  desenvolvimento tem 16 bancos (o CI, 32): todo índice de `testing/redis.ts` a partir de 16 cai no banco 0,
+  que vira de vários arquivos. Por isso `checkpoint-settlement.postgres.test.ts` não faz `flushdb` e passa
+  à varredura só os próprios personagens (`onlyMine`).
+
+O ticket liquida pelo mesmo `writeReceipts`, então encontra as linhas do lote em ordem de versão
+(`pendingFor`, os 50 mais antigos — a 1 extrato por minuto, ~50 min de `jobs` parado; passado isso o
+ticket entra com a posição do 50º e o resto sai no ciclo seguinte, em ordem). Os números do custo
+(200 personagens, 3,3 transações/s, até 288 mil linhas/dia, ≈ 497 B por linha de ledger) e o que
+ainda não foi medido estão em `docs/product/open-world.md`.
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 

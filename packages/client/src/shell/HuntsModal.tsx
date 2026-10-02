@@ -18,11 +18,14 @@
 // `VocationChoice.test.ts` já contorna. Em vez de inspecionar código-fonte por string, aqui a
 // decisão em si é uma função comum, testável direto (o padrão de `resolveChosenVocationId`).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { C2SMessage } from '@draconya/protocol';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import type { HazardRegister, HazardZoneDefinition, HuntListing } from '../state/hud.js';
+import type {
+  ExitRefusalView, HazardRegister, HazardZoneDefinition, HuntListing, SystemLine,
+} from '../state/hud.js';
+import { huntEntryRefusalText } from '../state/exit-refusal.js';
 import { party, partyActions } from '../party/store.js';
 import { startWithTeam } from './party-start.js';
 import { OutfitSprite } from './OutfitSprite.js';
@@ -76,6 +79,39 @@ export function attemptEnter(
   const entered = message !== null && send(message);
   if (entered) onClose();
   return entered;
+}
+
+/**
+ * Um pedido de entrar numa hunt a partir do MUNDO (#846, OW-23): quando foi feito, no relógio local de
+ * `applyMessage` (`performance.now()`), e de que tipo de sessão — o que decide se o modal pode fechar. Lá a
+ * entrada pode ser RECUSADA (`canLogout`, ADR 0060 d.6a), então o modal não fecha ao enviar: espera o servidor.
+ */
+export interface EntryAttempt {
+  readonly atMs: number;
+  readonly fromSessionType: string | null;
+}
+
+/**
+ * Por que o servidor recusou o pedido de entrar na caçada, em palavras, ou `null` quando ainda não disse nada
+ * (#846, OW-23). PURA.
+ *
+ * - O `logout-refused` mais recente DEPOIS do pedido é o veredicto de `canLogout` sobre a entrada ("em luta" ou
+ *   "tile que proíbe sair", ADR 0060 d.6a) — a frase é a de entrar, não a de sair.
+ * - Qualquer outra recusa do servidor chega como linha de aviso do sistema (`system-message`), e a mais
+ *   recente depois do pedido é a que se mostra: o modal fica aberto, e uma recusa que só fosse para o chat
+ *   fechado seria silêncio.
+ * Recusa ANTERIOR ao pedido não vale — é de outra tentativa.
+ */
+export function entryRefusalText(
+  attempt: EntryAttempt | null,
+  refusal: ExitRefusalView | null,
+  systemMessages: readonly SystemLine[],
+): string | null {
+  if (attempt === null) return null;
+  if (refusal !== null && refusal.atMs >= attempt.atMs) return huntEntryRefusalText(refusal.reason);
+  const warning = [...systemMessages].reverse()
+    .find((line) => line.level !== 'info' && line.atMs >= attempt.atMs);
+  return warning?.text ?? null;
 }
 
 /**
@@ -182,8 +218,14 @@ function HuntRow({ hunt, level, selected, onSelect }: {
   );
 }
 
-export function HuntsModal({ hunting, onClose, onFindParty }: {
+export function HuntsModal({ hunting, world = false, onClose, onFindParty }: {
   hunting: boolean;
+  /**
+   * O personagem está no mundo aberto (#846, OW-23): a entrada na caçada é sair do mundo, que o servidor só
+   * permite onde o Tibia deixaria deslogar. O modal não fecha ao enviar — fecha quando a sessão muda — e mostra
+   * a recusa no rodapé.
+   */
+  world?: boolean;
   onClose: () => void;
   /** Abre a instância ÚNICA do `PartyModal` em `search`, filtrada pela hunt selecionada. */
   onFindParty?: (huntId: string) => void;
@@ -195,8 +237,18 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
   const formation = useStoreSlice(party, (state) => state.party);
   const partyBusy = useStoreSlice(party, (state) => state.busy);
   const partyError = useStoreSlice(party, (state) => state.error);
+  const sessionType = useHudSlice((state) => state.analyzer.sessionType);
+  const exitRefusal = useHudSlice((state) => state.exitRefusal);
+  const systemMessages = useHudSlice((state) => state.systemMessages);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [attempt, setAttempt] = useState<EntryAttempt | null>(null);
+
+  // No mundo a entrada se confirma pela SESSÃO que mudou (o servidor trocou o personagem de sessão): é aí que o
+  // modal fecha. Recusada, a sessão continua a mesma e o modal fica com o motivo.
+  useEffect(() => {
+    if (attempt !== null && sessionType !== attempt.fromSessionType) onClose();
+  }, [attempt, sessionType, onClose]);
 
   const hunts = catalogue?.hunts ?? [];
   const visibleHunts = filterHunts(hunts, query);
@@ -205,8 +257,15 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
 
   const enter = (): void => {
     const message = enterHuntMessage(selected);
-    attemptEnter(message, sendIntent, onClose);
+    if (!world) {
+      attemptEnter(message, sendIntent, onClose);
+      return;
+    }
+    attemptEnter(message, sendIntent, () => {
+      setAttempt({ atMs: performance.now(), fromSessionType: sessionType });
+    });
   };
+  const refusalText = world ? entryRefusalText(attempt, exitRefusal, systemMessages) : null;
 
   const findParty = findPartyDecision(selected);
   // "Iniciar com o time" só existe com party EM FORMAÇÃO (RF-03) — depois do start a party é a
@@ -226,10 +285,13 @@ export function HuntsModal({ hunting, onClose, onFindParty }: {
       footer={
         <>
           {partyError !== null && <span className="system-error">{partyError}</span>}
+          {refusalText !== null && <span className="system-error" role="alert">{refusalText}</span>}
           <span className="hunts-modal-footer-note">
             {hunting
               ? 'Trocar de caçada é sair e entrar de novo · a instância atual é encerrada'
-              : 'Level recomendado é conselho, não trava'}
+              : world
+                ? 'Caçar (idle) tira você do mundo · só onde você poderia deslogar'
+                : 'Level recomendado é conselho, não trava'}
           </span>
           {formation !== null && formation.state === 'forming' && (
             <Button variant="secondary" size="sm" disabled={!teamStart.enabled || partyBusy}

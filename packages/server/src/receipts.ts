@@ -24,6 +24,11 @@
 // ticket na do `SMEMBERS`. Agora nenhum extrato apaga outro, e `pendingFor` devolve os mais
 // antigos primeiro.
 //
+// **O lote do mundo (#837, OW-16)** é `saveBatch`: o checkpoint do mundo grava, de uma vez, o extrato de
+// todo personagem sujo num `MULTI` só — o Redis fica com o último lote inteiro, e nunca com a metade
+// dele. Cada extrato do lote é um extrato como os outros (mesma chave, mesmo índice, mesma liquidação
+// em ordem de versão): o que muda é que entram juntos.
+//
 // **O formato antigo continua LIDO por um ciclo de deploy (ADR 0014)**: o extrato em voo de um nó
 // `game` anterior não pode se perder. São as chaves `receipt:{sessionId}:{characterId}` (#194) e
 // `receipt:{sessionId}` (FUN-29), achadas pela varredura, e o SET `receipts:char:{characterId}`,
@@ -37,12 +42,35 @@ import type {
   FightMode, HazardState, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, OfflineTrainingState, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
+import { readReceiptWorldState } from './world-state.js';
+import type { WorldState } from './world-state.js';
 
-export interface SessionReceipt {
+/**
+ * Por que o extrato foi emitido: o `EndReason` do `sim` — a sessão acabou, ou o personagem saiu — e,
+ * só para o hospedeiro, `'checkpoint'`: o extrato PARCIAL que o mundo grava a cada
+ * `WORLD_CHECKPOINT_MS` sem que ninguém tenha saído (#837, OW-16, ADR 0060 d.10d). O `sim` não o
+ * conhece de propósito — `Session.checkpoint` pede um `EndReason` porque devolve um `Receipt` do
+ * mesmo formato, mas o checkpoint não termina nada, e é o hospedeiro quem rotula a linha que grava.
+ * Vira o `type` (`session-checkpoint`) da linha de ledger, que é como se distingue um crédito
+ * periódico de uma saída ao ler o ledger.
+ */
+export type ReceiptReason = EndReason | 'checkpoint';
+
+/**
+ * **O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f) vêm de `WorldState`:** `worldPosition`,
+ * `townId`, `health`, `mana` e `conditions` — o estado de um personagem em REPOUSO, que faz deslogar a
+ * 10 HP voltar com 10 HP. São todos ABSOLUTOS e última-escrita-vence, como `ammo`/`blessings`: o `jobs`
+ * só os escreve quando `durableVersion > characters.durable_version`. O hospedeiro SÓ os leva com
+ * `OPEN_WORLD` ligado — com a flag desligada o extrato é o de antes, e o ledger não toca nas colunas.
+ * AUSENTE é "não toque"; `worldPosition: null` é "volta ao templo" e `conditions: []` é "nenhuma"
+ * (ver `WorldState`). Quem emite o extrato de quem morreu leva a vida e a mana CHEIAS, a posição nula
+ * e nenhuma condição: a morte do Tibia manda ao templo, de volta ao máximo (`player.cpp:4226-4252`).
+ */
+export interface SessionReceipt extends WorldState {
   readonly sessionId: string;
   readonly characterId: string;
   readonly accountId: string;
-  readonly reason: EndReason;
+  readonly reason: ReceiptReason;
   /** Sequência dentro da sessão. É metade da chave de idempotência do ledger. */
   readonly seq: number;
   /**
@@ -250,6 +278,18 @@ export interface SessionReceipt {
    * ledger. Ausente/vazio é "nada vendido nem descartado" — a maioria dos extratos.
    */
   readonly removedInstances?: readonly string[];
+  /**
+   * A quantidade de TODA instância que o personagem carrega agora — mochila, bolsa e corpo —,
+   * `instanceId → quantidade` (#837, OW-16). Só o checkpoint do mundo a leva. ABSOLUTO e INTEIRO,
+   * como `layout`: o `jobs` só o escreve quando o extrato é mais novo que o que a coluna já viu
+   * (`applyQuantities`, `jobs/ledger.ts`), e o velho descartado não perde nada.
+   *
+   * Existe porque o `acquired` é cumulativo e o ledger o insere sem tocar na linha que já existe: a
+   * pilha que cresceu ou diminuiu DEPOIS do primeiro checkpoint em que apareceu ficaria com a
+   * quantidade desse primeiro. Instância que o banco tem e o mapa não lista não é tocada — a que
+   * acabou sai por `removedInstances`.
+   */
+  readonly quantities?: Readonly<Record<string, number>>;
 }
 
 /** Um lugar de container, como o extrato e o banco o guardam (#160). */
@@ -342,21 +382,51 @@ export class ReceiptStore {
   }
 
   async save(receipt: Omit<SessionReceipt, 'endedAtMs'>): Promise<void> {
-    const stored: SessionReceipt = { ...receipt, endedAtMs: this.#now() };
+    await exec(this.#queueSave(this.#redis.multi(), { ...receipt, endedAtMs: this.#now() }));
+  }
+
+  /**
+   * Grava VÁRIOS extratos num `MULTI` só (#837, OW-16, ADR 0060 d.10d): o lote do checkpoint do
+   * mundo. É o que faz uma queda deixar o Redis com o último lote INTEIRO, e nunca com a metade
+   * dele — o `MULTI` é enviado e executado de uma vez (ou o cliente cai antes do `EXEC` e nada
+   * entra), então os duzentos personagens do mundo voltam ao mesmo instante.
+   *
+   * **Um `MULTI` só, sem fatiar, de propósito.** Fatiar em lotes de cinquenta devolveria a janela em
+   * que metade do mundo voltou ao instante novo e a outra metade ao antigo, e a atomicidade é o que
+   * a decisão 10d compra. O custo é o tamanho de um comando: o `bench:world` (OW-35) o mede, e é ele
+   * quem decide se um dia isto precisa de outra forma.
+   *
+   * Todos os extratos levam o MESMO `endedAtMs` (o lote é um instante). Lote vazio não fala com o
+   * Redis. Um comando que falhe DENTRO do `MULTI` não desfaz os outros — o Redis não tem rollback —,
+   * mas é lançado como em `save` (`exec`), e repetir o lote é seguro: as chaves são as mesmas, o `SET`
+   * e o `ZADD` regravam o mesmo valor, e o ledger recusa o `(session_id, seq)` que já entrou.
+   */
+  async saveBatch(receipts: readonly Omit<SessionReceipt, 'endedAtMs'>[]): Promise<void> {
+    if (receipts.length === 0) return;
+    const endedAtMs = this.#now();
+    const pipeline = this.#redis.multi();
+    for (const receipt of receipts) this.#queueSave(pipeline, { ...receipt, endedAtMs });
+    await exec(pipeline);
+  }
+
+  /**
+   * Enfileira no `MULTI` o que grava UM extrato.
+   *
+   * O extrato e a entrada de índice entram JUNTOS. O índice sozinho é um ponteiro para lugar
+   * nenhum, que `pendingFor` limpa; o extrato sozinho seria pior — invisível para quem emite o
+   * ticket, e o jogador voltaria a ver o personagem zerar (FUN-56).
+   *
+   * O membro é a CHAVE inteira, e o score é a versão durável (#823): é ele que ordena a
+   * liquidação. Sem versão (extrato de fora do `game`) o score é 0 — o mais antigo. Gravar de novo
+   * a mesma chave (retry de resposta perdida) troca o score e não duplica a entrada.
+   */
+  #queueSave(pipeline: ChainableCommander, receipt: SessionReceipt): ChainableCommander {
     const receiptKey = key(receipt.sessionId, receipt.characterId, receipt.seq);
     const index = versionIndex(receipt.characterId);
-    // O extrato e a entrada de índice entram JUNTOS. O índice sozinho é um ponteiro para
-    // lugar nenhum, que `pendingFor` limpa; o extrato sozinho seria pior — invisível para
-    // quem emite o ticket, e o jogador voltaria a ver o personagem zerar (FUN-56).
-    //
-    // O membro é a CHAVE inteira, e o score é a versão durável (#823): é ele que ordena a
-    // liquidação. Sem versão (extrato de fora do `game`) o score é 0 — o mais antigo. Gravar de
-    // novo a mesma chave (retry de resposta perdida) troca o score e não duplica a entrada.
-    await exec(this.#redis
-      .multi()
-      .set(receiptKey, JSON.stringify(stored), 'PX', this.#ttlMs)
+    return pipeline
+      .set(receiptKey, JSON.stringify(receipt), 'PX', this.#ttlMs)
       .zadd(index, receipt.durableVersion ?? 0, receiptKey)
-      .pexpire(index, this.#ttlMs));
+      .pexpire(index, this.#ttlMs);
   }
 
   /**
@@ -501,6 +571,20 @@ async function execResults(pipeline: ChainableCommander): Promise<unknown[]> {
   });
 }
 
+/** O maior que a coluna `item_instance.quantity` (`integer`) guarda. */
+const MAX_QUANTITY = 2_147_483_647;
+
+/** As entradas de `quantities` que o banco aceita: inteiro de 1 até o da coluna. O resto é dado torto e some. */
+function readQuantities(raw: Readonly<Record<string, unknown>>): Record<string, number> {
+  const quantities: Record<string, number> = {};
+  for (const [instanceId, quantity] of Object.entries(raw)) {
+    if (typeof quantity === 'number' && Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= MAX_QUANTITY) {
+      quantities[instanceId] = quantity;
+    }
+  }
+  return quantities;
+}
+
 function parseReceipt(raw: string): SessionReceipt | null {
   let parsed: unknown;
   try {
@@ -525,7 +609,7 @@ function parseReceipt(raw: string): SessionReceipt | null {
     sessionId: value['sessionId'],
     characterId: value['characterId'],
     accountId: value['accountId'],
-    reason: value['reason'] as EndReason,
+    reason: value['reason'] as ReceiptReason,
     seq: value['seq'],
     // A versão durável (#823): lista de PERMISSÃO, pela razão das skills — sem esta linha o campo
     // some no caminho de volta e o ledger trata todo extrato como sem versão, em silêncio.
@@ -630,5 +714,17 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(Array.isArray(value['removedInstances'])
       ? { removedInstances: value['removedInstances'] as string[] }
       : {}),
+    // A quantidade de cada instância carregada (#837): lista de PERMISSÃO, pela razão das skills —
+    // sem esta linha o campo some no caminho de volta e a pilha do mundo volta a ficar com a
+    // quantidade do primeiro checkpoint, sem erro nenhum. Só o que o banco aceita (inteiro de 1 até o
+    // da coluna) sobrevive: o ledger o grava direto na coluna, e o resto é dado torto.
+    ...(typeof value['quantities'] === 'object' && value['quantities'] !== null && !Array.isArray(value['quantities'])
+      ? { quantities: readQuantities(value['quantities'] as Record<string, unknown>) }
+      : {}),
+    // O mundo e os vitais (#836, OW-15): lista de PERMISSÃO, pela razão das skills — e conferidos
+    // campo a campo pela MESMA leitura que o ticket usa, porque o ledger os grava direto nas colunas
+    // e uma coordenada fora do mapa, uma vida negativa ou uma condição com prazo `NaN` não pode
+    // chegar lá. Torto vira ausente, e a coluna fica como estava.
+    ...readReceiptWorldState(value),
   };
 }

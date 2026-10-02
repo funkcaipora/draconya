@@ -15,6 +15,8 @@ import { createTicketHandler, type TicketRouteDependencies } from './tickets.js'
 import { registerPartyRoutes } from './party.js';
 import type { PartyRouteDependencies } from './party.js';
 import { registerFriendRoutes } from './friends.js';
+import { registerEntryOptionsRoute } from './entry-options.js';
+import type { EntryOptionsDependencies } from './entry-options.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
@@ -36,6 +38,11 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly party?: PartyRouteDependencies['party'];
   readonly partyLimits?: PartyRouteDependencies['limits'];
   readonly matchmakingLevelRange?: number;
+  /**
+   * As hunts que o menu de entrada oferece (#846, OW-23), do conteúdo fixado no boot. Ausente: a rota
+   * `GET /api/entry-options` não existe, e o cliente cai no botão único de entrada.
+   */
+  readonly entryHunts?: EntryOptionsDependencies['hunts'];
 }
 
 export function createApi(
@@ -135,6 +142,17 @@ export function buildApi(
         ? {}
         : { defaultBotConfig: dependencies.defaultBotConfig }),
       ...(dependencies.startingKit === undefined ? {} : { startingKit: dependencies.startingKit }),
+      // Com a flag ligada o repouso é `'offline'` na lista de personagens (#836, OW-15).
+      openWorld: configuration.OPEN_WORLD,
+    });
+  }
+
+  // O que o menu de entrada pergunta antes do primeiro ticket (#846, OW-23): a flag e as hunts idle diretas.
+  if (auth !== undefined && dependencies.entryHunts !== undefined) {
+    registerEntryOptionsRoute(app, {
+      authenticate: auth.authenticate.bind(auth),
+      openWorld: configuration.OPEN_WORLD,
+      hunts: dependencies.entryHunts,
     });
   }
 
@@ -143,6 +161,9 @@ export function buildApi(
     app.post('/api/tickets', createTicketHandler({
       ...dependencies,
       tickets,
+      // A flag do mundo aberto (#836, OW-15): lida UMA vez do ambiente, nunca da dependência — o
+      // `main` não a passa, e um teste que a queira muda a configuração.
+      openWorld: configuration.OPEN_WORLD,
       ...(auth === undefined ? {} : { authenticate: auth.authenticate.bind(auth) }),
       ...(repository === undefined ? {} : {
         withOwnedCharacter: repository.withOwnedCharacter.bind(repository),
@@ -185,6 +206,8 @@ export function buildApi(
       ...(dependencies.pendingDurableVersion === undefined
         ? {}
         : { pendingDurableVersion: dependencies.pendingDurableVersion }),
+      // A flag do mundo aberto (#836, OW-15): o ticket de cada membro da party leva os vitais.
+      openWorld: configuration.OPEN_WORLD,
       ...(dependencies.loyaltyBonusPercentOf === undefined
         ? {}
         : { loyaltyBonusPercentOf: dependencies.loyaltyBonusPercentOf }),

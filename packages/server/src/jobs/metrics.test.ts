@@ -57,6 +57,18 @@ describe('métricas do jobs (FUN-59)', () => {
     expect(text).toMatch(/draconya_jobs_receipts_failed_total\{[^}]*\} 2/);
   });
 
+  it('conta à parte o extrato aplicado SEM linha de ledger (#838, OW-17)', async () => {
+    // É o que mede o custo do checkpoint: `written - state_only` é o que de fato cresceu o ledger.
+    // Ausente é zero — o ciclo com a flag desligada não o informa.
+    const metrics = new JobsMetrics('j');
+    metrics.observeCycle(0.1, cycle({ receiptsWritten: 7, receiptsStateOnly: 5 }), 0);
+    metrics.observeCycle(0.1, cycle({ receiptsWritten: 2 }), 0);
+
+    const text = await scrape(metrics);
+    expect(text).toMatch(/draconya_jobs_receipts_written_total\{[^}]*\} 9/);
+    expect(text).toMatch(/draconya_jobs_receipts_state_only_total\{[^}]*\} 5/);
+  });
+
   it('falha e reentrância são contadores separados', async () => {
     const metrics = new JobsMetrics('j');
     metrics.observeCycleFailure();

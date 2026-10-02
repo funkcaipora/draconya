@@ -82,6 +82,26 @@ describe('FriendsModal (#404)', () => {
     expect(html).not.toContain('undefined');
   });
 
+  it('shows a friend in the open world as "No mundo", not as offline (#839)', async () => {
+    friends.set((state) => ({ ...state, friends: [friend({ where: 'world' })] }));
+    const html = await render();
+
+    // Mutação que mata: o `where: 'world'` do servidor caindo no ramo `offline` do `whereLabel`.
+    expect(html).toContain('No mundo');
+    expect(html).not.toContain('offline');
+  });
+
+  it('allows inviting from the open world: it is not a hunt (OW-23, #846)', async () => {
+    friends.set((state) => ({ ...state, friends: [friend({ where: 'world' })] }));
+    hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'world' } }));
+    const html = await render();
+    const invite = buttonFor(html, 'Convidar para Party');
+    // Mutação que mata: o `isHunting` de antes (`!== 'city'`) — o jogador no mundo seria tratado como caçador e
+    // não poderia convidar ninguém, justo no lugar onde os amigos se encontram.
+    expect(invite).not.toContain('disabled');
+    expect(html).not.toContain('Em caçada você não pode convidar');
+  });
+
   it('renders the add-by-name form (RF-04)', async () => {
     friends.set((state) => ({ ...state, friends: [friend()] }));
     const html = await render();

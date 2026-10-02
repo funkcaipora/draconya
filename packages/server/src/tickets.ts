@@ -24,12 +24,25 @@ import type {
   HazardState, LearnedSpellsState, OfflineTrainingState,
 } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
+import { readTicketWorldState } from './world-state.js';
+import type { TicketWorldState } from './world-state.js';
+
+/**
+ * Para onde o ticket leva quem sai do REPOUSO (OW-21, #842, ADR 0060 d.6b): ausente é o mundo — a Cidade com a
+ * flag `OPEN_WORLD` desligada —, e `{ hunt }` é uma hunt idle como PRIMEIRA sessão, sem passar pelo mundo. É
+ * intenção do cliente (invariante 4): o `api` confere que a hunt existe, e o `game` a cria.
+ */
+export interface TicketEntry {
+  readonly hunt: string;
+}
 
 export interface TicketClaim {
   readonly accountId: string;
   readonly characterId: string;
   readonly nodeId: string;
   readonly initialCharacter?: InitialCharacter;
+  /** Onde a primeira sessão nasce (OW-21). Ausente: o mundo. Só vale para quem está em repouso — ver `TicketEntry`. */
+  readonly entry?: TicketEntry;
   /**
    * A party (#195, ADR 0027): o MESMO bloco em cada ticket dos N membros, com o estado inicial
    * de todos — o primeiro a chegar ao `game` cria a sessão com os N, os seguintes se anexam
@@ -63,8 +76,16 @@ export interface PartyTicket {
   }>;
 }
 
-/** Estado persistido necessário para criar a primeira sessão sem confiar no cliente. */
-export interface InitialCharacter {
+/**
+ * Estado persistido necessário para criar a primeira sessão sem confiar no cliente.
+ *
+ * **O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f) vêm de `TicketWorldState`:** `worldPosition`,
+ * `townId`, `health`, `mana` e `conditions`, lidos de `characters` pelo `api` e SÓ com `OPEN_WORLD`
+ * ligado — com a flag desligada o ticket é o de antes, byte a byte. Ausente é "nasce como antes":
+ * cheio, no templo, sem condição. `characterFromTicket` limita a vida e a mana pelo máximo do level
+ * e devolve as condições à sessão como prazo restante.
+ */
+export interface InitialCharacter extends TicketWorldState {
   readonly level: number;
   readonly xp: number;
   /**
@@ -468,6 +489,7 @@ export class TicketService {
     initialCharacter?: InitialCharacter,
     resolved?: NodeStatus,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<IssueResult> {
     let node: NodeStatus | undefined = resolved;
     if (node === undefined) {
@@ -483,6 +505,7 @@ export class TicketService {
       nodeId: node.nodeId,
       ...(initialCharacter === undefined ? {} : { initialCharacter }),
       ...(party === undefined ? {} : { party }),
+      ...(entry === undefined ? {} : { entry }),
     };
     const issuedAtMs = this.#now();
     const reservationTtlMs = this.#ttlMs + this.#graceMs;
@@ -644,13 +667,24 @@ function parseClaim(raw: string): TicketClaim | null {
   const rawParty = value['party'];
   const party = parsePartyTicket(rawParty);
   if (rawParty !== undefined && party === undefined) return null;
+  const rawEntry = value['entry'];
+  const entry = parseTicketEntry(rawEntry);
+  if (rawEntry !== undefined && entry === undefined) return null;
   return {
     accountId: value['accountId'],
     characterId: value['characterId'],
     nodeId: value['nodeId'],
     ...(initialCharacter === undefined ? {} : { initialCharacter }),
     ...(party === undefined ? {} : { party }),
+    ...(entry === undefined ? {} : { entry }),
   };
+}
+
+/** A entrada do ticket (OW-21), pela mesma régua do resto: torta é ticket recusado, nunca "o mundo". */
+function parseTicketEntry(value: unknown): TicketEntry | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const hunt = (value as Record<string, unknown>)['hunt'];
+  return typeof hunt === 'string' && hunt !== '' ? { hunt } : undefined;
 }
 
 /** A party do ticket (#195), pela mesma régua do `initialCharacter`: torta é ticket recusado. */
@@ -811,6 +845,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
       && initial['durableVersion'] >= 0
       ? { durableVersion: initial['durableVersion'] }
       : {}),
+    // O mundo e os vitais (#836, OW-15): campo a campo, a mesma régua do resto — torto vira AUSENTE
+    // (cheio, no templo, sem condição), nunca ticket recusado. É `readTicketWorldState` que confere,
+    // o mesmo código que o `api` e o `sim` assumem: posição no mapa do Tibia, vida maior que zero,
+    // condições com prazo restante positivo.
+    ...readTicketWorldState(initial),
   };
 }
 

@@ -177,6 +177,18 @@ export function flushSave(): void {
   }
 }
 
+/**
+ * Esquece o rascunho e o `bot-config` agendado: o jogador saiu do jogo (#846) e o que a store guarda é do
+ * personagem que acabou de sair. Sem isto, um rascunho tocado e recusado sobrevive à volta à escolha de
+ * personagem, `loadConfig` o preserva ("uma reconexão não apaga o que o jogador escreveu") e o próximo
+ * personagem herda a barra do anterior — e o próximo clique manda esse rascunho como a configuração DELE.
+ * O temporizador vai junto: disparado depois de a casca desmontar, só marcaria o rascunho de recusado.
+ */
+export function resetBot(): void {
+  if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+  bot.set(() => INITIAL_BOT);
+}
+
 /** Troca o conjunto ATIVO (CONJUNTO da barra, ADR 0032 d.4) e salva com debounce. */
 export function setActiveSet(id: number): void {
   edit((draft) => ({ ...draft, activeSet: id }));

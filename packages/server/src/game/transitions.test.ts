@@ -26,14 +26,28 @@ describe('máquina de estados do personagem (§6)', () => {
     }
   });
 
-  it('o mundo (OW-13) é tipo de sessão, mas ainda não está no grafo: o hospedeiro o põe lá na OW-20', () => {
-    // Com `OPEN_WORLD` desligado — o default — nada hospeda um mundo, e este teste prende que a
-    // chegada do tipo não abriu nenhuma transição nova: de lá para cá, e daqui para lá, é recusa.
-    for (const other of ['city', ...ATIVIDADES] as const) {
-      expect(refuseTransition(other, 'world')?.refusal).toBe('not-allowed');
-      expect(refuseTransition('world', other)?.refusal).toBe('not-allowed');
-    }
+  it('o mundo (OW-18) é o outro centro: dele se vai a toda atividade, e de toda atividade se volta a ele', () => {
+    // O mesmo desenho da Cidade, com o mesmo ponto de parada (ADR 0060 d.6). A tabela diz só o que é
+    // POSSÍVEL: que `canLogout` deixa o personagem sair do mundo, e que a volta só vai a quem tem
+    // alguém olhando, é do hospedeiro (OW-20) — nenhum dos dois mora aqui.
+    for (const to of ATIVIDADES) expect(refuseTransition('world', to)).toBeNull();
+    for (const from of ATIVIDADES) expect(refuseTransition(from, 'world')).toBeNull();
+  });
+
+  it('o mundo e a Cidade não se tocam: quem está numa sai do jogo e entra de novo', () => {
+    // A Cidade continua enquanto a flag existir (ADR 0060 d.6), mas as duas são centros, não vizinhas.
+    // Uma aresta entre elas seria um caminho de transição a mais que ninguém pediu — e que, do mundo,
+    // contornaria o `canLogout`.
+    expect(refuseTransition('world', 'city')?.refusal).toBe('not-allowed');
+    expect(refuseTransition('city', 'world')?.refusal).toBe('not-allowed');
     expect(refuseTransition('world', 'world')?.refusal).toBe('same-state');
+  });
+
+  it('a Cidade segue como era: as arestas dela não mudaram com a chegada do mundo', () => {
+    // O que o jogo de hoje depende (a flag desligada é o default): da Cidade vai-se às cinco atividades
+    // e nada mais, e a hunt, o treino e o resto voltam a ela.
+    expect([...ATIVIDADES, 'world' as const].filter((to) => refuseTransition('city', to) === null))
+      .toEqual([...ATIVIDADES]);
   });
 
   it('recusa ir para onde já se está, com motivo próprio', () => {

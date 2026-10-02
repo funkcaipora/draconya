@@ -17,10 +17,13 @@
 // É só a metade "vira extrato" — quem chama decide se apaga o snapshot depois (`game/host.ts`
 // só apaga se isto NÃO lançar; o `--reset` faz o mesmo). Ver `docs/product/party.md`.
 
-import { DEFAULT_FIGHT_MODE } from '@draconya/sim';
-import type { CarriedItem, InventoryState, ItemInstanceOverlay, SessionSnapshot } from '@draconya/sim';
+import { Conditions, DEFAULT_FIGHT_MODE } from '@draconya/sim';
+import type {
+  CarriedItem, ConditionState, InventoryState, ItemInstanceOverlay, SessionSnapshot,
+} from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 import type { ReceiptStore } from './receipts.js';
+import { receiptWorldStateOf } from './world-state.js';
 
 export interface SettleSnapshotOptions {
   readonly characterId: string;
@@ -41,6 +44,23 @@ export interface SettleSnapshotOptions {
    * snapshot o tinha (o de qualquer outra sessão nunca depende disto).
    */
   readonly nowMs?: number;
+  /**
+   * A flag `OPEN_WORLD` (#836, OW-15, ADR 0060 d.10.f): com ela ligada o extrato do snapshot leva o
+   * mundo e os vitais do dono — a vida e a mana com que a sessão caiu, a âncora, a cidade e as
+   * condições que faltavam —, como o extrato de fim de sessão (`SessionHost#worldStateOf`). Ausente
+   * é o extrato de antes: o caso de quem liquida por fora do `game`, como `pnpm dev:dragon-party
+   * --reset`, que não conhece a flag e não escreve as colunas novas.
+   */
+  readonly openWorld?: boolean;
+}
+
+/** As condições de um snapshot como PRAZO RESTANTE: o `rebase` do relógio da sessão para o zero. */
+function remainingConditions(
+  conditions: readonly ConditionState[] | undefined, logicalNowMs: number,
+): readonly ConditionState[] {
+  const remaining = Conditions.fromState(conditions);
+  remaining.rebase(logicalNowMs, 0);
+  return remaining.getState();
 }
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
@@ -101,6 +121,12 @@ function acquiredByState(inventory: InventoryState, sessionId: string): BoxedIte
  * ledger (invariante 10) recusa o segundo, e ninguém recebe duas vezes. Um snapshot que
  * sobreviveu a uma liquidação parcial anterior não credita de novo por isto ser chamado outra
  * vez — é create ou não-cria, nunca soma.
+ *
+ * **Isso só vale porque o extrato final de uma sessão com snapshot deixa a linha de ledger, com ou sem
+ * valor** (#838, OW-17): é ela que reconhece o extrato rederivado aqui, que chega com a MESMA chave e uma
+ * versão durável NOVA — e a versão sozinha o deixaria passar e sobrescrever o estado final com o do
+ * snapshot. O `jobs` só aplica sem linha o CHECKPOINT do mundo (`reason: 'checkpoint'`), e a sessão do
+ * mundo não tem snapshot (ADR 0060 d.10.a): este extrato nunca é o gêmeo de um que passou sem linha.
  *
  * Lança se `receipts.save` falhar — quem chama decide o que fazer com o snapshot (o `game`
  * mantém o snapshot de pé para a próxima tentativa; o `--reset` também não apaga na falha).
@@ -186,5 +212,11 @@ export async function settleSnapshotAsReceipt(
       overlays: overlaysOfState(owner.inventory),
       acquired: acquiredByState(owner.inventory, snapshot.id),
     }),
+    // O mundo e os vitais do dono (#836, OW-15): as condições do snapshot estão no relógio LÓGICO
+    // da sessão que o gravou, então o restante é o `rebase` para o relógio zero a partir de
+    // `logicalNowMs` — o mesmo que `CharacterRuntime.conditionsAsRemaining` faz com o objeto vivo.
+    ...(options.openWorld !== true || owner === undefined
+      ? {}
+      : receiptWorldStateOf(owner, remainingConditions(owner.conditions, snapshot.logicalNowMs))),
   });
 }

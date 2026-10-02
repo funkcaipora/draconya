@@ -12,7 +12,9 @@ const CHARACTER: CharacterRecord = {
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, hazard: null, bosstiary: null, learnedSpells: null,
   familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  durableVersion: 0, createdAt: new Date(),
+  durableVersion: 0,
+  worldId: 'main', worldPosition: null, townId: 'thais', health: null, mana: null, conditions: null,
+  createdAt: new Date(),
 };
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
@@ -206,6 +208,65 @@ describe('POST /api/tickets', () => {
     // Sem Redis de extratos ligado, é a coluna — e `0` é versão, não ausência.
     expect(await issuedWith(4, undefined)).toBe(4);
     expect(await issuedWith(0, undefined)).toBe(0);
+  });
+
+  describe('o mundo e os vitais da linha no ticket (#836, OW-15, ADR 0060 d.10.f)', () => {
+    const POISON = { key: 'poison', expiresAtMs: 4_000, tick: { amount: 3, intervalMs: 1_000, kind: 'damage' } };
+    /** Um personagem que saiu do mundo a 10 HP, no templo, envenenado. */
+    const OUT_AT_TEN = {
+      ...CHARACTER,
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 3, conditions: [POISON],
+    };
+    const issuedWith = async (row: typeof CHARACTER, openWorld: boolean | undefined) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        ...(openWorld === undefined ? {} : { openWorld }),
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation(row)) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown>;
+    };
+
+    it('COM a flag, o ticket leva a posição, a cidade, a vida, a mana e as condições que a linha guarda', async () => {
+      const initial = await issuedWith(OUT_AT_TEN, true);
+      expect(initial).toMatchObject({
+        worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 3, conditions: [POISON],
+      });
+    });
+
+    it('SEM a flag — o default —, o ticket é o de antes: nenhum campo novo, nem a cidade', async () => {
+      // O portão do plano: com a flag desligada tudo funciona como hoje, byte a byte. Mutação que
+      // mata: ler as colunas novas sem olhar a flag.
+      for (const openWorld of [undefined, false]) {
+        const initial = await issuedWith(OUT_AT_TEN, openWorld);
+        for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+          expect(initial).not.toHaveProperty(field);
+        }
+      }
+    });
+
+    it('personagem que nunca saiu do mundo: leva só a cidade — cheio, no templo, sem condição', async () => {
+      const initial = await issuedWith(CHARACTER, true);
+      expect(initial).toMatchObject({ townId: 'thais' });
+      for (const field of ['worldPosition', 'health', 'mana', 'conditions']) {
+        expect(initial).not.toHaveProperty(field);
+      }
+    });
+
+    it('uma linha torta não tranca o login: o campo ruim some, e os bons seguem', async () => {
+      const initial = await issuedWith({
+        ...OUT_AT_TEN, health: 0, conditions: [{ key: 'haste' }],
+      }, true);
+      // Vida zero é um morto, e o morto entra cheio. A posição e a mana boas ficam.
+      expect(initial).toMatchObject({ worldPosition: { x: 32369, y: 32241, z: 7 }, mana: 3 });
+      expect(initial).not.toHaveProperty('health');
+      expect(initial).not.toHaveProperty('conditions');
+    });
   });
 
   it('a postura de luta da linha entra no ticket; um valor fora dos três modos fica de fora (#550)', async () => {
@@ -720,5 +781,100 @@ describe('POST /api/tickets: o gasto do banco de offline training (#631, ADR 005
     expect(response.statusCode).toBe(200);
     expect(s.ticketOf()).not.toHaveProperty('training');
     expect(s.writes).toEqual([]);
+  });
+});
+
+describe('a entrada pelo repouso no pedido de ticket (#842, OW-21, ADR 0060 d.6b)', () => {
+  const hasHunt = (huntId: string): boolean => huntId === 'rat-cellars';
+
+  /** O que a rota entregou a `TicketService.issue`, e a resposta HTTP. */
+  const requested = async (
+    body: Record<string, unknown>,
+    overrides: Partial<TicketRouteDependencies> = {},
+  ) => {
+    const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+    const response = await post(build({ tickets: { issue } as never, ...overrides }), body);
+    return { response, issue, entry: issue.mock.calls[0]?.[5] as unknown };
+  };
+
+  it('sem `entry` — o pedido de sempre — o ticket sai sem entrada: o mundo (ou a Cidade) é o default', async () => {
+    const { response, issue, entry } = await requested({ characterId: 'p1' }, { openWorld: true, hasHunt });
+    expect(response.statusCode).toBe(200);
+    expect(issue).toHaveBeenCalledTimes(1);
+    expect(entry).toBeUndefined();
+  });
+
+  it('`entry: "world"` é o mesmo que omitir', async () => {
+    const { response, entry } = await requested(
+      { characterId: 'p1', entry: 'world' }, { openWorld: true, hasHunt },
+    );
+    expect(response.statusCode).toBe(200);
+    expect(entry).toBeUndefined();
+  });
+
+  it('`entry: { hunt }` com a flag LIGADA leva a hunt no ticket, sem passar pelo mundo', async () => {
+    const { response, entry } = await requested(
+      { characterId: 'p1', entry: { hunt: 'rat-cellars' } }, { openWorld: true, hasHunt },
+    );
+    expect(response.statusCode).toBe(200);
+    expect(entry).toEqual({ hunt: 'rat-cellars' });
+  });
+
+  it('`entry: { hunt }` com a flag DESLIGADA é ignorado: o ticket sai sem entrada e o login cai na Cidade', async () => {
+    // O portão do plano: a flag desligada é o jogo de hoje. Mutação que mata: honrar `entry` sem olhar a
+    // flag. E é IGNORADO, e não recusado — um cliente do mundo aberto contra um servidor que desligou a flag
+    // entra do mesmo jeito, na Cidade, em vez de ficar sem login.
+    for (const openWorld of [undefined, false]) {
+      const { response, entry } = await requested(
+        { characterId: 'p1', entry: { hunt: 'rat-cellars' } },
+        { ...(openWorld === undefined ? {} : { openWorld }), hasHunt },
+      );
+      expect(response.statusCode).toBe(200);
+      expect(entry).toBeUndefined();
+    }
+  });
+
+  it('uma hunt que o conteúdo não tem é recusada com 400, ANTES de resolver nó ou liquidar nada', async () => {
+    const resolveNode = vi.fn(async () => ({ ok: true as const, node: NODE }));
+    const settleProgress = vi.fn(async () => ({ written: 0, failed: 0 }));
+    const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+    const response = await post(build({
+      openWorld: true, hasHunt, settleProgress, tickets: { issue, resolveNode } as never,
+    }), { characterId: 'p1', entry: { hunt: 'nao-existe' } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'unknown-hunt' });
+    expect(resolveNode).not.toHaveBeenCalled();
+    expect(settleProgress).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('um `api` montado sem conteúdo (sem `hasHunt`) recusa o pedido de hunt: nunca aceita às cegas', async () => {
+    const { response, issue } = await requested(
+      { characterId: 'p1', entry: { hunt: 'rat-cellars' } }, { openWorld: true },
+    );
+    expect(response.statusCode).toBe(400);
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('a posse vem antes: quem não é dono do personagem recebe 404, e a hunt nem é conferida', async () => {
+    const probe = vi.fn((_huntId: string) => true);
+    const response = await post(
+      build({ openWorld: true, hasHunt: probe, ownsCharacter: async () => false }),
+      { characterId: 'de-outra-conta', entry: { hunt: 'rat-cellars' } },
+    );
+    expect(response.statusCode).toBe(404);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('um `entry` torto é pedido inválido: formato desconhecido, campo a mais ou hunt vazia', async () => {
+    for (const entry of ['hunt', 7, null, {}, { hunt: '' }, { hunt: 'rat-cellars', extra: 1 }, { world: 'main' }]) {
+      const { response, issue } = await requested(
+        { characterId: 'p1', entry }, { openWorld: true, hasHunt },
+      );
+      expect(response.statusCode, JSON.stringify(entry)).toBe(400);
+      expect(response.json()).toEqual({ error: 'invalid-body' });
+      expect(issue).not.toHaveBeenCalled();
+    }
   });
 });

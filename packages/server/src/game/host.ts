@@ -15,8 +15,9 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, FindResult, FollowState, GridPoint, ManualActionResult, MemberLeft,
-  PartyEvent, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
+  Aggregates, CombatEvent, DepartureRequested, EndReason, FindResult, FollowState, GridPoint, LogoutRefused,
+  ManualActionResult, MemberLeft, PartyEvent, Point, PresenceEvent, Receipt, Session, SessionSnapshot,
+  SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type {
@@ -29,7 +30,7 @@ import type {
 } from '@draconya/content';
 import {
   blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, holdStamina, isEmptyFamiliarState,
-  PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
+  NO_WORLD_POSITION, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
   AmmoRefusal, BuyRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
@@ -42,25 +43,38 @@ import type {
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
 import { overlaysOfState, settleSnapshotAsReceipt } from '../snapshot-settlement.js';
+import { carryRestoredConditions, receiptWorldStateOf } from '../world-state.js';
+import type { WorldState } from '../world-state.js';
 import type { SnapshotStore } from '../snapshots.js';
-import type { ReceiptStore } from '../receipts.js';
+import type { ReceiptReason, ReceiptStore } from '../receipts.js';
 import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
-import type { InitialCharacter, PartyTicket } from '../tickets.js';
+import type { InitialCharacter, PartyTicket, TicketEntry } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
+import { HuntEntryUnavailableError, WorldFullError, WorldFullRefusal } from './rest-entry.js';
+import type { WorldEntryGate } from './rest-entry.js';
 import { EncodeCache, Viewer, type EncodeStats, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { ViewerSet } from './viewer-set.js';
 import { findPersonText } from './find-text.js';
 import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import {
-  creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
+  checkpointsProgress, creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
 } from './ruleset-traits.js';
+import {
+  CheckpointState, WORLD_CHECKPOINT_MS, carriedQuantities, hasActivity, inventoryDeltaOf, markOf, sameMark,
+  worldPositionOf,
+} from './world-checkpoint.js';
+import type { PendingLine } from './world-checkpoint.js';
+import { endReasonOf, logoutVerdictOf, worldPresenceOf } from './world-presence.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
-/** Cria a sessão de um personagem que ainda não tem uma. */
+/**
+ * Cria a sessão de um personagem que ainda não tem uma. `entry` (OW-21) diz onde a PRIMEIRA sessão nasce:
+ * ausente é o repouso do nó — o mundo, ou a Cidade sem a flag —, e `{ hunt }` é uma hunt idle direta.
+ */
 export type SessionFactory = (
-  characterId: string, initialCharacter?: InitialCharacter, party?: PartyTicket,
+  characterId: string, initialCharacter?: InitialCharacter, party?: PartyTicket, entry?: TicketEntry,
 ) => Session;
 
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
@@ -75,6 +89,14 @@ export interface TransitionRequest {
   readonly huntId?: string;
   readonly difficulty?: string;
   readonly itemInstanceId?: string;
+  /**
+   * Só com `to: 'world'`: de onde a instância que acaba VEIO, que decide se a volta conta para o teto do mundo
+   * (#841, OW-20, ADR 0060 d.2b). `'instance'` é de quem saiu do mundo para ela — o passe: o teto não o alcança —,
+   * e `'instance-from-rest'` é de quem a começou do repouso (a hunt idle direta, a party largada de quem não
+   * tinha sessão) e nunca ocupou vaga. Preenchida pelo host (`#buildWorldReturn`), nunca pelo cliente; ausente,
+   * vale o passe.
+   */
+  readonly worldEntry?: 'instance' | 'instance-from-rest';
   /**
    * A configuração do bot deste personagem, JÁ VALIDADA (FUN-81). Preenchida pelo host, nunca
    * pelo cliente — o cliente manda a configuração numa mensagem própria, e o que chega aqui é
@@ -276,6 +298,29 @@ export interface SessionHostOptions {
    * vez no boot — a versão de conteúdo é fixada e não muda enquanto o processo vive.
    */
   readonly catalogue?: () => S2CProps<'catalogue'>;
+  /**
+   * O mundo aberto (#836, OW-15, ADR 0060): a flag `OPEN_WORLD`. Com ela ligada todo extrato — o de
+   * fim de sessão, o de estado da Cidade e o de um snapshot irrestaurável — leva o mundo e os vitais
+   * do dono (`worldPosition`, `townId`, `health`, `mana`, `conditions`), e o `jobs` os escreve
+   * guardados por `durable_version`: deslogar a 10 HP volta com 10 HP. Ausente ou `false` — o
+   * default — é o extrato de antes, byte a byte: o `game` nunca escreve as colunas novas.
+   */
+  readonly openWorld?: boolean;
+  /**
+   * A porta do mundo para quem vem do repouso (#842, OW-21, ADR 0060 d.2b): a fila do mundo cheio. Com ela, o
+   * login que cairia no mundo pergunta primeiro se cabe — e, não cabendo, o handshake é recusado com a posição
+   * e a espera (`PrepareResult.worldFull`). Ausente — a flag desligada, o host de teste —, o mundo cheio recusa
+   * com `WorldFullError` como a OW-18 o deixou, e a Cidade nunca consulta nada.
+   */
+  readonly worldEntry?: WorldEntryGate;
+  /**
+   * A cadência do checkpoint do mundo, em milissegundos (#837, OW-16, ADR 0060 d.10d): de quanto em
+   * quanto tempo o hospedeiro grava o lote com o extrato de todo personagem sujo de uma sessão
+   * `checkpointed`. Ausente é `WORLD_CHECKPOINT_MS` (60 s). Só importa para a sessão que declara
+   * `progress: 'checkpointed'` — o mundo —; com a flag `OPEN_WORLD` desligada nenhuma existe, e o
+   * timer não encontra o que gravar.
+   */
+  readonly worldCheckpointMs?: number;
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -307,6 +352,13 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'level-too-low': 'Você ainda não chegou ao level da escolha de vocação.',
   'already-chosen': 'Você já escolheu a sua vocação.',
 };
+
+/**
+ * O serviço de Cidade pedido fora de uma zona de proteção do mundo (OW-18, ADR 0060 d.4): no Tibia a loja,
+ * o depósito e os santuários vivem em PZ, e o mundo aberto é onde a Cidade deixa de ser um lugar e passa a
+ * ser uma zona. Uma frase só para todo serviço — o jogador precisa saber ONDE ir, não qual NPC.
+ */
+const SERVICE_ZONE_REFUSAL = 'Isso só se faz numa zona de proteção.';
 
 /** A recusa de `promote-vocation` (#566, ADR 0042 decisão 1), em palavras. */
 const PROMOTE_REFUSAL: Readonly<Record<PromoteRefusal, string>> = {
@@ -480,6 +532,23 @@ const USE_ON_MAP_REFUSAL: Readonly<Record<UseOnMapRejection, string>> = {
   'no-capacity': 'Sua mochila está cheia demais para isso.',
   'unknown-item': 'O baú não tem nada para te dar.',
 };
+
+/**
+ * A identidade de hunt que o fio leva da sessão: `huntId` e `difficulty`. O MUNDO é um `HuntRuleset` e por
+ * isso os tem, mas são os sintéticos do motor (`world:main`, `world`) — o `Hunt` e a rota que ele exige e o
+ * mundo não usa —, e não descrevem hunt nenhuma do catálogo: mandá-los faria o cliente procurar a "hunt"
+ * `world:main` e não achar (`HuntDetailsModal`). A sessão do mundo não é uma hunt, e não leva a identidade de
+ * uma (OW-18). Para as outras sessões é o que sempre foi.
+ */
+function huntIdentityOf(
+  ruleset: Session['ruleset'],
+): { readonly huntId?: string; readonly difficulty?: string } {
+  if (ruleset.type === 'world') return {};
+  return {
+    ...(ruleset.huntId === undefined ? {} : { huntId: ruleset.huntId }),
+    ...(ruleset.difficulty === undefined ? {} : { difficulty: ruleset.difficulty }),
+  };
+}
 
 /** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */
 function slotStateSignature(states: readonly SlotState[]): string {
@@ -706,9 +775,24 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
  */
 interface SentAnalyzer {
   readonly aggregates: Aggregates;
+  /**
+   * Quantos eventos notáveis a sessão já tinha na entrega — a posição ABSOLUTA, contada desde a criação
+   * dela (`notableEventsTotal`), e não o tamanho da lista. O mundo apara a lista (`Session.
+   * notableEventsDropped`, OW-13), e com o tamanho como cursor o analisador de um personagem apontaria
+   * para o lugar errado depois do primeiro descarte — e, com a lista no teto, nunca veria um evento novo.
+   */
   readonly eventCount: number;
   /** A seção PARTY do analisador entregue por último (ADR 0035 d.11). `undefined` em solo. */
   readonly party: S2CProps<'analyzer'>['party'];
+}
+
+/**
+ * A posição ABSOLUTA do fim da lista de eventos notáveis: quantos a sessão já registrou desde que nasceu.
+ * É o cursor do analisador (`SentAnalyzer.eventCount`), e é o tamanho da lista para quem nunca a apara
+ * (a hunt, a Cidade): `notableEventsDropped` é sempre zero sem o teto de `maxNotableEventsPerCharacter`.
+ */
+function notableEventsTotal(session: Session): number {
+  return session.notableEventsDropped + session.notableEvents.length;
 }
 
 /** O extrato DESTE personagem entre os que a sessão emitiu (#187). `null` enquanto ela vive. */
@@ -716,10 +800,14 @@ function receiptOf(hosted: HostedSession, characterId: string): Receipt | null {
   return hosted.session.receipts().find((receipt) => receipt.characterId === characterId) ?? null;
 }
 
-function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: number): boolean {
+/**
+ * Os agregados entregues por último são os de agora? A lista de eventos notáveis NÃO entra: se há evento
+ * novo para o personagem é pergunta de quem chama (`#presentAnalyzer`), porque no mundo "a lista andou" não
+ * quer dizer "andou para ele" (OW-18).
+ */
+function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates): boolean {
   const a = sent.aggregates;
-  return sent.eventCount === eventCount
-    && a.xpGained === aggregates.xpGained
+  return a.xpGained === aggregates.xpGained
     && a.goldGained === aggregates.goldGained
     && a.goldSpent === aggregates.goldSpent
     && a.kills === aggregates.kills
@@ -1001,6 +1089,30 @@ export type BotConfigLoadResult =
   | { readonly ok: true; readonly config: BotConfigV2; readonly removed: readonly RemovedBotSlot[] }
   | { readonly ok: false; readonly reason: string };
 
+/**
+ * Como o personagem sai do MUNDO quando o `sim` decidiu a saída (#840, OW-19): o `EndReason` do extrato
+ * que o checkpoint grava, e a posição ABSOLUTA em que a decisão foi tomada — a âncora do próximo login.
+ * Ausente é a posição de agora (`#anchorWorldPosition`).
+ */
+export interface ReleaseDeparture {
+  readonly reason: EndReason;
+  readonly worldPosition?: Point;
+}
+
+/** O que se precisa para tentar de novo uma saída do mundo cujo `release` falhou (#840, OW-19). */
+interface FailedDeparture {
+  readonly sessionId: string;
+  readonly closeReason: string;
+  readonly departure?: ReleaseDeparture;
+}
+
+/** Quem acabou de sair de uma sessão `checkpointed`, com o extrato que o `sim` emitiu (#837, OW-16). */
+interface CheckpointDeparture {
+  readonly characterId: string;
+  readonly receipt: Receipt;
+  readonly departed: CharacterRuntime | undefined;
+}
+
 interface HostedSession {
   readonly session: Session;
   /**
@@ -1045,6 +1157,12 @@ interface HostedSession {
    * um extrato zerado por logout de praça seria uma linha de ledger por pessoa que fecha o jogo.
    */
   readonly dirty: Set<string>;
+  /**
+   * O checkpoint desta sessão (#837, OW-16): o que o último lote gravou de cada personagem, os
+   * extratos que não pousaram e a fila dos lotes. `null` em toda sessão que não é `checkpointed` — a
+   * hunt e a Cidade não pagam nada por ele.
+   */
+  readonly checkpoint: CheckpointState | null;
   /**
    * Quantos itens esta sessão já entregou, na última vez que o inventário foi mandado.
    *
@@ -1211,8 +1329,23 @@ export interface PrepareResult {
    * Presente só quando a admissão FOI recusada (#402) — `created` fica `false` junto, e o
    * handshake do WebSocket fecha com o status do motivo. Aditivo de propósito (DT-03): os
    * consumidores antigos continuam lendo `created` como booleano direto.
+   *
+   * `leaving` (#840, OW-19) é o personagem que está saindo do MUNDO — o x-log venceu, ou o
+   * `logout` passou — no instante em que o ticket chegou: a saída vence, o ticket é recusado com um
+   * 503 e a reconexão do cliente pede outro, que já encontra o personagem em repouso.
+   *
+   * `member-in-fight` (#841, OW-20) é a largada de uma party em que um membro NO MUNDO não poderia sair
+   * agora (`canLogout`, ADR 0060 d.6a): a largada inteira cai — ninguém é movido — e o `game` responde 409.
    */
-  readonly refused?: 'party-full' | 'content-version' | 'session-not-here';
+  readonly refused?:
+    | 'party-full' | 'content-version' | 'session-not-here' | 'leaving' | 'world-full' | 'hunt-unavailable'
+    | 'member-in-fight';
+  /**
+   * Só com `refused: 'world-full'` (OW-21): o lugar do personagem na fila do mundo (de 1 em diante) e quanto
+   * esperar antes de tentar de novo — uma duração, medida agora. O `game` os leva ao cliente na mensagem
+   * `world-full`, em vez de um handshake que falha mudo.
+   */
+  readonly worldFull?: { readonly position: number; readonly retryAfterMs: number };
 }
 
 /**
@@ -1220,6 +1353,11 @@ export interface PrepareResult {
  * presença de visualizador é do próprio ruleset (ADR 0003) e é lida a cada ciclo.
  */
 const CYCLE_MS = 100;
+/**
+ * Quantas vezes o login do repouso tenta o mundo antes de desistir (OW-21): a primeira, e mais duas se a
+ * fila admitiu e a vaga já tinha dono (`#createInWorld`).
+ */
+const WORLD_ENTRY_ATTEMPTS = 3;
 /** Um terço do lease do diretório, pela mesma razão do batimento. */
 const RENEW_INTERVAL_MS = 10_000;
 /**
@@ -1356,6 +1494,35 @@ export class SessionHost {
    * sessão escreve aqui, e o marcador sai no `finally`, com sucesso ou falha.
    */
   readonly #settling = new Set<string>();
+  /**
+   * Personagens que estão numa instância depois de SAIR do mundo para ela (#841, OW-20, ADR 0060 d.2b): a
+   * transição do mundo (`#replace`) e a largada de party (`#leaveForParty`) os marcam, e chegar de volta ao mundo
+   * (ou ser esquecido, `#unhost`) os desmarca. É o passe da volta: quem saiu do mundo não é barrado pelo teto ao
+   * voltar, e quem NUNCA esteve nele — a hunt idle direta, a party largada do repouso — é, e passa pela fila
+   * como o login (`#buildWorldReturn`). Ausente é o lado seguro: um nó que retomou a hunt de um snapshot não
+   * lembra de onde ela veio, e o personagem que volta com o mundo cheio vai ao repouso, com o extrato já
+   * gravado, em vez de passar do teto. Só o processo dono da sessão escreve aqui.
+   */
+  readonly #leftWorld = new Set<string>();
+  /**
+   * Personagens que estão SAINDO do mundo por um `departure-requested` (#840, OW-19): o checkpoint e o
+   * `release` já correm, e a promessa é a dessa saída — quem chega no meio (o `prepare` de uma reconexão)
+   * espera por ela em vez de reanexar a um personagem que está indo embora. O `logout` e a tentativa de
+   * x-log podem cair no mesmo ciclo, e a segunda saída de quem já está saindo não tem o que gravar. Só o
+   * processo dono da sessão escreve aqui, e o marcador sai no `finally`, com sucesso ou falha — e a
+   * promessa nunca rejeita (a falha vira `#failedDepartures`).
+   */
+  readonly #departing = new Map<string, Promise<void>>();
+  /**
+   * Saídas do mundo cujo `release` FALHOU (#840, OW-19): o `sim` já tirou o personagem — o único
+   * `departure-requested` dele já foi emitido — e o Redis recusou o extrato, então o personagem continua
+   * mapeado aqui (diretório e slot de pé, renovados) sem existir no `sim`. Sem ninguém para pedir de novo
+   * — o x-log não tem jogador —, o que fica registrado aqui é o que faz a saída ser TENTADA outra vez:
+   * pelo ciclo de checkpoint (`#retryDepartures`) e pelo `prepare` de quem reconecta. Sai quando o
+   * `release` termina, por qualquer caminho. `sessionId` é a sessão em que o personagem estava: uma
+   * entrada que não bate com o mapa de hoje é de uma saída que outro caminho já cumpriu.
+   */
+  readonly #failedDepartures = new Map<string, FailedDeparture>();
   #lastLagWarningMs = Number.NEGATIVE_INFINITY;
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
@@ -1384,6 +1551,7 @@ export class SessionHost {
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
   #snapshotTimer: NodeJS.Timeout | null = null;
+  #checkpointTimer: NodeJS.Timeout | null = null;
   #playerCountTimer: NodeJS.Timeout | null = null;
   #lastPlayerCount: number | undefined = undefined;
 
@@ -1464,10 +1632,24 @@ export class SessionHost {
     initialCharacter?: InitialCharacter,
     accountId?: string,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<PrepareResult> {
     const startedAt = performance.now();
     try {
-      return await this.#prepare(characterId, initialCharacter, accountId, party);
+      return await this.#prepare(characterId, initialCharacter, accountId, party, entry);
+    } catch (error) {
+      // As duas recusas ESPERADAS da entrada pelo repouso (OW-21): o mundo cheio — que acontece todo dia, e a
+      // resposta é a posição na fila — e a hunt direta que não existe mais. Nenhuma deixa rastro: a recusa
+      // sobe de dentro de `#createAndRegister`, que já desfez o contador de versão e tirou o personagem da
+      // sessão compartilhada.
+      if (error instanceof WorldFullRefusal) {
+        return {
+          created: false, refused: 'world-full',
+          worldFull: { position: error.position, retryAfterMs: error.retryAfterMs },
+        };
+      }
+      if (error instanceof HuntEntryUnavailableError) return { created: false, refused: 'hunt-unavailable' };
+      throw error;
     } finally {
       // O que o jogador espera ao reconectar: resolver o diretório, carregar o snapshot e
       // hospedar. É o número que o teste de carga cobra, e ele NÃO inclui o tempo de rede —
@@ -1481,8 +1663,32 @@ export class SessionHost {
     initialCharacter?: InitialCharacter,
     accountId?: string,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<PrepareResult> {
+    // Quem está SAINDO do mundo não é reanexado nem recriado por um ticket que chegou no meio (#840,
+    // OW-19): o x-log vence 60 s depois de o navegador fechar, justo quando o cliente reconecta sozinho.
+    // A saída vence — o `sim` já decidiu e o checkpoint corre —, e o ticket é recusado com um 503 que o
+    // cliente repete. Esperar a saída acabar não basta para seguir adiante: o `release` devolveu o slot
+    // que este ticket reservara, e a entrada é do `api`, que emite o ticket seguinte.
+    // Só espera quando há o que esperar: o caminho comum segue síncrono até o primeiro `await` do diretório.
+    if (this.#departing.has(characterId) || this.#failedDepartures.has(characterId)) {
+      if (await this.#awaitDeparture(characterId)) return { created: false, refused: 'leaving' };
+    }
+
+    // A largada de uma party tira cada membro que está NO MUNDO daqui, e isso passa por `canLogout` como qualquer
+    // entrada numa instância (OW-20, ADR 0060 d.6a). Antes de mover QUALQUER um: um membro em luta derruba a
+    // largada inteira, e ninguém fica com um pé em cada sessão.
+    if (party !== undefined && this.#partyMemberInFight(party)) {
+      return { created: false, refused: 'member-in-fight' };
+    }
+
+    // `entry` só vale para quem NÃO tem sessão aqui (OW-21): quem reconecta reencontra a sua — o mundo, a hunt
+    // em que estava —, e o pedido de outra coisa é ignorado, porque o personagem está em exatamente uma sessão
+    // (invariante 8) e trocar de sessão é transição, com `canLogout`, não handshake.
     const existing = this.sessionFor(characterId);
+    // O tile de onde um membro saiu do MUNDO para a party (OW-20): vai para o personagem da hunt, ver
+    // `#leaveForParty`.
+    let inherited: Point | null = null;
     if (existing !== undefined) {
       // O ticket é de PARTY e pede uma sessão diferente da que o personagem já ocupa aqui
       // (#527, invariante 8): o líder clica "Iniciar com o time" DA Cidade, e o socket antigo
@@ -1494,11 +1700,19 @@ export class SessionHost {
         // ticket) quando ela existe; senão é o que `createSession` vai produzir para um
         // `PartyTicket` — sempre `'hunt'` (`sessions.ts`, `partyHuntFor`), nunca outra coisa.
         const targetType = this.#sessions.get(party.sessionId)?.session.ruleset.type ?? 'hunt';
-        await this.#leaveForParty(characterId, existing, {
+        inherited = await this.#leaveForParty(characterId, existing, {
           sessionId: party.sessionId, nodeId: this.#options.nodeId, type: targetType,
         });
       } else {
         await this.#register(characterId, existing, accountId);
+        // A saída pode ter começado — ou até terminado — enquanto o diretório respondia: o personagem que
+        // o `existing` descreve já não está aqui, e responder `created: false` mandaria o upgrade para um
+        // `attach` sem sessão (que derrubaria o processo) ou para uma sessão que acabou de ser solta. Só
+        // `undefined` conta como saída: um mapa que passou a apontar para OUTRA sessão é a sucessão (a morte
+        // da hunt, a transição), e o `attach` a encontra — como sempre foi.
+        if (this.#departing.has(characterId) || this.sessionFor(characterId) === undefined) {
+          return { created: false, refused: 'leaving' };
+        }
         return { created: false };
       }
     }
@@ -1507,7 +1721,7 @@ export class SessionHost {
     // ou acabou de sair da Cidade pelo ramo acima. A sessão é achada pelo id dela neste nó;
     // sessão ausente é recusa tipada, não sessão nova.
     if (party?.join === true) {
-      return this.#admitLateJoiner(characterId, initialCharacter, accountId, party);
+      return this.#admitLateJoiner(characterId, initialCharacter, accountId, party, inherited);
     }
 
     const pending = this.#preparations.get(characterId);
@@ -1518,7 +1732,7 @@ export class SessionHost {
       return { created: false };
     }
 
-    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId, party);
+    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId, party, entry, inherited);
     this.#preparations.set(characterId, preparation);
     try {
       await preparation;
@@ -1528,6 +1742,63 @@ export class SessionHost {
       }
     }
     return { created: true };
+  }
+
+  /**
+   * Algum membro da party, hospedado AQUI no mundo, não poderia sair agora (#841, OW-20, ADR 0060 d.6a)?
+   *
+   * A largada é o primeiro ticket da party a chegar: ele cria a sessão com TODOS os membros e tira cada um
+   * do mundo (`#createAndRegisterSession`, `#leaveForParty`). É aqui, e não no `api`, que se sabe quem está
+   * em luta — o `api` só vê o TIPO da sessão, e o estado de luta é do `sim`, no nó dono do mundo. O ticket
+   * de ENTRADA numa hunt em curso (`join`) tem um membro só, e a conferência vale para ele do mesmo jeito.
+   * Uma party cuja sessão já está hospedada aqui JÁ foi largada: os membros dela saíram do mundo na
+   * largada, e o ticket de quem chega depois não tem o que conferir (a entrada dele é dele, e o dele é o
+   * único `canLogout` que importa — o `join` acima).
+   *
+   * Só o mundo responde (`logoutVerdictOf`); membro na Cidade, em repouso — sem sessão neste nó —, ou em
+   * outro nó nunca recusa. Devolve `true` quando recusa, depois de avisar o culpado: quem está em luta só
+   * saberia, senão, que a party dele não saiu — o `logout-refused` é o motivo do Canary, o mesmo que o
+   * `logout` dele receberia. Nada foi movido.
+   */
+  #partyMemberInFight(party: PartyTicket): boolean {
+    if (party.join !== true && this.#sessions.has(party.sessionId)) return false;
+    for (const member of party.members) {
+      const hosted = this.#hostedSession(member.characterId);
+      if (hosted === undefined) continue;
+      const verdict = logoutVerdictOf(hosted.session.ruleset, hosted.session, member.characterId);
+      if (verdict === undefined || verdict === null || verdict.ok) continue;
+      for (const viewer of hosted.viewers.of(member.characterId)) {
+        viewer.send({ type: 'logout-refused', reason: verdict.reason });
+      }
+      this.#logger.info(
+        { characterId: member.characterId, partySessionId: party.sessionId, reason: verdict.reason },
+        'A party launch was refused: a member in the world cannot leave it now',
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * O personagem está saindo do mundo (#840, OW-19)? Espera a saída que está em voo — e, se a última FALHOU
+   * (`#failedDepartures`), a tenta de novo agora, porque quem reconecta é a oportunidade que o x-log, sem
+   * jogador, não teve. Devolve `true` se havia saída, em qualquer desfecho: o chamador recusa o ticket, e a
+   * reconexão seguinte o encontra já em repouso — ou, se o Redis ainda recusa, outra vez aqui.
+   */
+  async #awaitDeparture(characterId: string): Promise<boolean> {
+    let leaving = this.#departing.get(characterId);
+    if (leaving === undefined) {
+      const failed = this.#failedDepartures.get(characterId);
+      if (failed === undefined) return false;
+      // A mesma régua de `#retryDepartures`: outro caminho já cumpriu aquela saída.
+      if (this.#sessionIdByCharacter.get(characterId) !== failed.sessionId) {
+        this.#failedDepartures.delete(characterId);
+        return false;
+      }
+      leaving = this.#releaseFromWorld(characterId, failed.closeReason, failed.departure);
+    }
+    await leaving;
+    return true;
   }
 
   /**
@@ -1551,15 +1822,29 @@ export class SessionHost {
    * para essa suposição falhar — credita como uma saída normal em vez de arriscar apagar
    * progresso em silêncio.
    */
-  async #leaveForParty(characterId: string, existing: Session, target: SessionLocation): Promise<void> {
+  async #leaveForParty(
+    characterId: string, existing: Session, target: SessionLocation,
+  ): Promise<Point | null> {
     const hosted = this.#sessions.get(existing.id);
+    // O tile de onde quem sai do MUNDO deixou o mundo (OW-20): a party constrói o personagem da hunt do
+    // TICKET — a linha do banco, de no máximo um checkpoint atrás (`partyHuntFor`) —, e o extrato que a
+    // hunt grava no fim leva a âncora DELE, com versão maior que a da saída. Sem herdar a de agora, quem
+    // larga a party do templo voltaria ao tile do último checkpoint, e a volta ao tile de saída — a promessa
+    // da hunt idle — valeria só para a hunt solo.
+    let anchor: Point | null = null;
     if (hosted === undefined) {
       this.#sessionIdByCharacter.delete(characterId);
     } else {
       this.#dropViewers(hosted, characterId);
+      // Saiu do MUNDO para a party: guarda o passe da volta, como quem sai pela transição (`#replace`).
+      if (existing.ruleset.type === 'world') this.#leftWorld.add(characterId);
       if (leavesOnExit(existing.ruleset)) {
+        const owner = existing.participants.find((participant) => participant.id === characterId);
         await this.#departFromSharedSession(characterId, hosted, 'manual-exit');
         this.#announceDeparture(hosted, characterId);
+        // Só o mundo mantém a âncora (`#anchorWorldPosition` a escreve na saída): o `worldPosition` da Cidade
+        // é o do ticket, o mesmo que a party já tem.
+        if (hosted.checkpoint !== null) anchor = owner?.worldPosition ?? null;
       } else {
         let receipt: Receipt | null;
         if (hosted.session.ended === null && hosted.session.participants.length > 1) {
@@ -1582,7 +1867,7 @@ export class SessionHost {
     // entrou lá); sem diretório (host de teste sem essa dependência), não há o que mover.
     const directory = this.#options.directory;
     const accountId = this.#accountIdByCharacter.get(characterId);
-    if (directory === undefined || accountId === undefined) return;
+    if (directory === undefined || accountId === undefined) return anchor;
     const moved = await directory.succeed(
       characterId, accountId,
       { sessionId: existing.id, nodeId: this.#options.nodeId, type: existing.ruleset.type satisfies SessionType },
@@ -1598,6 +1883,7 @@ export class SessionHost {
         `directory entry for ${characterId} changed hands while leaving a session for a party ticket`,
       );
     }
+    return anchor;
   }
 
   /**
@@ -1613,6 +1899,8 @@ export class SessionHost {
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
     party: PartyTicket,
+    /** O tile de onde ele saiu do mundo para entrar (`#leaveForParty`, OW-20), ou `null`. */
+    inherited: Point | null = null,
   ): Promise<PrepareResult> {
     const hosted = this.#sessions.get(party.sessionId);
     if (hosted === undefined) return { created: false, refused: 'session-not-here' };
@@ -1624,6 +1912,9 @@ export class SessionHost {
       ? undefined
       : this.#options.createParticipant(member.characterId, member.initialCharacter);
     if (newcomer === undefined) return { created: false, refused: 'session-not-here' };
+    // As condições do ticket vêm como prazo restante (relógio zero, #836): a hunt em curso já andou, e
+    // `enter` não traduz quem nunca esteve numa sessão. Antes do `enter`, que as rearma no `onEnter`.
+    carryRestoredConditions(newcomer, hosted.session);
     try {
       hosted.session.enter(newcomer);
     } catch (error) {
@@ -1631,6 +1922,7 @@ export class SessionHost {
       if (error instanceof PartyFullError) return { created: false, refused: 'party-full' };
       throw error;
     }
+    if (inherited !== null) newcomer.worldPosition = inherited;
     // O premium de quem entra DEPOIS do `start` é fato sobre o personagem, não configuração da
     // party (#400): sem ele, a penalidade de morte do recém-chegado usaria o default do líder.
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
@@ -1660,6 +1952,13 @@ export class SessionHost {
       hosted = this.#hostedSession(characterId);
     }
     if (hosted === undefined) throw new Error(`session for ${characterId} was not prepared`);
+    // O personagem que sai do mundo não ganha visualizador novo (#840, OW-19): o ticket que passou pelo
+    // `prepare` ANTES de o x-log vencer chega aqui depois — a saída já tirou o personagem do `sim`, e o
+    // visualizador ficaria olhando uma sessão que nunca mais o atualiza. Quem chama (`open` do servidor)
+    // fecha o socket e o cliente reconecta; o que não pode é a exceção escapar do handler.
+    if (this.#departing.has(characterId) || this.#failedDepartures.has(characterId)) {
+      throw new Error(`${characterId} is leaving the world`);
+    }
     const metrics = this.#options.metrics;
     const viewer = new Viewer(socket, characterId, {
       ...this.#options.viewer,
@@ -1670,6 +1969,10 @@ export class SessionHost {
     hosted.viewers.add(viewer);
     hosted.session.attach(viewer.id);
     this.#restingSince.set(characterId, null);
+    // O PRIMEIRO visualizador do personagem devolve o controle ao jogador (#840, OW-19): no mundo ele
+    // cancela o x-log e acorda a automação. A segunda aba não muda nada — ele já tinha ninguém e agora
+    // tem alguém, e só essa troca é presença.
+    if (this.#watchers(hosted, characterId) === 1) this.#restorePresence(hosted, characterId);
 
     viewer.sendNow({
       type: 'welcome',
@@ -1720,12 +2023,19 @@ export class SessionHost {
     const hosted = sessionId === undefined ? undefined : this.#sessions.get(sessionId);
     if (hosted === undefined) return;
 
-    hosted.viewers.delete(viewer);
+    // `false` = o visualizador já tinha saído: o `release` e a transição o tiram do conjunto de propósito
+    // e, ao fechar o socket, o `close` do servidor chama este método de volta. Quem foi SOLTO não é quem
+    // perdeu a conexão, e tratá-lo como tal submeteria `presence-lost` de um personagem que está saindo.
+    const wasWatching = hosted.viewers.delete(viewer);
     hosted.session.detach(viewer.id);
     // Repouso é do PERSONAGEM: a outra aba dele ainda pode estar olhando, e num shard os
     // outros jogadores da praça certamente estão.
     if (this.#watchers(hosted, viewer.characterId) === 0) {
       this.#restingSince.set(viewer.characterId, this.#now());
+      // No mundo o último visualizador que se solta é uma INTENÇÃO de servidor ao `sim` (#840, OW-19,
+      // ADR 0060 d.7), no instante lógico da sessão. O personagem NÃO sai daqui: fica parado e vulnerável,
+      // e é o `sim` quem decide se, e quando, ele sai (60 s depois, por `canLogout`).
+      if (wasWatching) this.#losePresence(hosted, viewer.characterId);
     }
     this.#logger.debug(
       { characterId: viewer.characterId, sessionId, viewers: hosted.viewers.size },
@@ -1748,14 +2058,177 @@ export class SessionHost {
   }
 
   /**
+   * O `logout` do jogador (#840, OW-19, ADR 0060 d.7).
+   *
+   * Na hunt e na Cidade é o de sempre: sair do jogo encerra a sessão e devolve o slot (`#logout`). No
+   * MUNDO o `logout` é uma intenção que o `sim` decide — passa por `canLogout`, a regra de
+   * `Player::canLogout` (`canary/src/creatures/players/player.cpp:6960-6979`) — e resulta em UM de dois
+   * eventos de domínio: `departure-requested`, que o hospedeiro cumpre (`#departFromWorld`), ou
+   * `logout-refused`, que vira a mensagem do protocolo para quem pediu. O hospedeiro não olha o tile
+   * nem a luta: se o personagem pode sair, é do `sim`.
+   *
+   * O evento é drenado AGORA, e não no próximo ciclo, para o jogador ter a resposta na hora — a mesma
+   * razão do `leave-hunt` (`#requestLeaveHunt`).
+   *
+   * **Sem veredicto** — `requestLogout` devolve `null` e não emite nada: o `sim` não conhece o personagem,
+   * ou ele morreu — o `logout` é o `release` de sempre, e não um pedido sem resposta. O caso que importa é
+   * a saída que FALHOU: o `release` já tirou o personagem do `sim` (`Session.leave`) e o Redis recusou o
+   * extrato, o personagem continua mapeado aqui e o `sim` não o conhece mais. Quem repete essa saída é o
+   * hospedeiro (`#failedDepartures`: o ciclo de checkpoint e o `prepare` de quem reconecta) — o extrato que
+   * não pousou vai na frente (`#leaveWithReceipt`) —, e este ramo cobre o `logout` que chega a um
+   * personagem que o `sim` não decide, que sem ele seria engolido em silêncio. Quem já está saindo (o duplo
+   * clique, o x-log em voo, a transição) não pede nada.
+   */
+  #requestLogout(viewer: Viewer): void {
+    const { characterId } = viewer;
+    const hosted = this.#hostedSession(characterId);
+    const presence = hosted === undefined ? undefined : worldPresenceOf(hosted.session.ruleset);
+    if (hosted === undefined || presence === undefined) {
+      void this.#logout(characterId);
+      return;
+    }
+    if (this.#departing.has(characterId) || this.#transitions.has(characterId)) return;
+    if (presence.requestLogout(hosted.session, characterId) === null) {
+      void this.#releaseFromWorld(characterId, 'logout');
+      return;
+    }
+    this.#presentMoves(hosted);
+  }
+
+  /**
+   * O `release` de quem sai do mundo, uma saída por vez (#840, OW-19): marca o personagem em `#departing`
+   * até terminar, e a promessa devolvida é a da saída — nunca rejeita. Falhar deixa o personagem onde
+   * estava — sem visualizador, e já fora do `sim` —, o extrato que não pousou vai na frente do lote
+   * seguinte (OW-16), e a saída fica em `#failedDepartures` para ser tentada de novo: pelo ciclo de
+   * checkpoint, pelo `prepare` de quem reconecta. Um log não basta — o x-log não tem jogador que peça outra
+   * vez, e o slot da conta ficaria preso, renovado a cada ciclo, até o processo reiniciar.
+   */
+  #releaseFromWorld(characterId: string, closeReason: string, departure?: ReleaseDeparture): Promise<void> {
+    const sessionId = this.#sessionIdByCharacter.get(characterId);
+    // O marcador nasce ANTES de o `release` rodar (que começa a correr já na chamada): qualquer coisa que
+    // o `release` provoque de forma síncrona — o `close` do socket, o `detach` — já o encontra.
+    let finish!: () => void;
+    const leaving = new Promise<void>((resolve) => { finish = resolve; });
+    this.#departing.set(characterId, leaving);
+    void this.release(characterId, 1000, closeReason, departure).then(() => {
+      this.#failedDepartures.delete(characterId);
+    }, (error: unknown) => {
+      this.#logger.error(
+        { err: error, characterId, reason: closeReason }, 'Failed to move the character to rest; will retry',
+      );
+      if (sessionId !== undefined) {
+        this.#failedDepartures.set(characterId, {
+          sessionId, closeReason, ...(departure === undefined ? {} : { departure }),
+        });
+      }
+    }).finally(() => {
+      this.#departing.delete(characterId);
+      finish();
+    });
+    return leaving;
+  }
+
+  /**
+   * Tenta de novo as saídas do mundo que falharam (#840, OW-19) — o que o ciclo de checkpoint faz antes
+   * dos lotes, para o extrato que não pousou ir na frente do deles e a saída acabar quando o Redis volta,
+   * sem ninguém pedir. O `release` repetido é seguro: o `sim` já não conhece o personagem (`leave` devolve
+   * `null`), e o que ficou em `unsaved` é gravado antes de o diretório e o slot serem soltos.
+   */
+  async #retryDepartures(): Promise<void> {
+    const retries: Promise<void>[] = [];
+    for (const [characterId, failed] of [...this.#failedDepartures]) {
+      if (this.#departing.has(characterId)) continue;
+      // Outro caminho já soltou este personagem (a drenagem, uma nova sessão): não há o que repetir, e
+      // repetir soltaria a sessão que ele tem hoje.
+      if (this.#sessionIdByCharacter.get(characterId) !== failed.sessionId) {
+        this.#failedDepartures.delete(characterId);
+        continue;
+      }
+      this.#logger.warn({ characterId, sessionId: failed.sessionId }, 'Retrying a departure that failed');
+      retries.push(this.#releaseFromWorld(characterId, failed.closeReason, failed.departure));
+    }
+    await Promise.all(retries);
+  }
+
+  /**
+   * Cumpre o `departure-requested` do mundo (#840, OW-19, ADR 0060 d.7): grava o checkpoint e solta o
+   * personagem para o REPOUSO, com a posição que veio no evento. É a metade de I/O de uma saída que o
+   * `sim` decidiu — o logout que `canLogout` deixou, o x-log aos 60 s, e, quando existirem, a morte e o
+   * idle kick (OW-32, OW-47) —, e vale haja ou não visualizador: o x-log é justamente o caso em que não
+   * há (invariante 3).
+   *
+   * **O checkpoint e o `release` são um passo só.** `release` sai pela sessão `checkpointed` e ANTECIPA o
+   * lote inteiro (`#saveReceipt` → `#saveCheckpointBatch`, OW-16): quem sai leva a linha dele — vida,
+   * mana, condições, o que carrega, a posição — junto do checkpoint de todo outro personagem sujo, num
+   * `MULTI` só. A posição é a DO EVENTO, a do instante em que o `sim` decidiu, e não a de quando este
+   * método roda: entre os dois o personagem sem dono pode ter andado (o medo, um empurrão), e a âncora do
+   * próximo login é onde ele estava quando saiu.
+   *
+   * Idempotente por personagem: o `logout` e a tentativa de x-log podem cair no mesmo ciclo, e a segunda
+   * saída de quem já está saindo não tem o que gravar. Quem está no meio de uma transição também já está
+   * deixando o mundo, e soltá-lo agora soltaria a sessão DE DESTINO, que o `release` resolve pelo
+   * personagem.
+   */
+  #departFromWorld(hosted: HostedSession, event: DepartureRequested): void {
+    const { characterId, reason } = event;
+    if (this.#departing.has(characterId) || this.#transitions.has(characterId)) return;
+    // Só quem ainda está NESTA sessão: o pedido pode ter saído de um mundo que o personagem já deixou
+    // (o x-log que venceu no mesmo ciclo de uma saída, uma transição que terminou).
+    if (this.#sessionIdByCharacter.get(characterId) !== hosted.session.id) return;
+    const noPosition = event.worldPosition.x === NO_WORLD_POSITION.x
+      && event.worldPosition.y === NO_WORLD_POSITION.y
+      && event.worldPosition.z === NO_WORLD_POSITION.z;
+    this.#logger.info(
+      { characterId, sessionId: hosted.session.id, reason }, 'Character leaving the world',
+    );
+    void this.#releaseFromWorld(characterId, reason, {
+      reason: endReasonOf(reason),
+      // `{0, 0, 0}` é o "sem posição" do Canary (um mapa sem `source.region`): quem lê a âncora o trata
+      // como ausente, e o checkpoint cai na posição de agora.
+      ...(noPosition ? {} : { worldPosition: event.worldPosition }),
+    });
+  }
+
+  /**
+   * O `logout` do jogador foi recusado pelo mundo (`logout-refused`, #840): vira a mensagem do protocolo
+   * para QUEM PEDIU — a recusa não é da sessão, e os outros duzentos do mundo não têm o que fazer com
+   * ela. Nada mudou no personagem.
+   */
+  #presentLogoutRefused(hosted: HostedSession, event: LogoutRefused): void {
+    const message = { type: 'logout-refused', reason: event.reason } as const;
+    for (const viewer of hosted.viewers.of(event.characterId)) viewer.send(message);
+  }
+
+  /**
+   * Ninguém mais olha o personagem — ou ele chegou sem ninguém (#840, OW-19, ADR 0060 d.7). No mundo
+   * isto é `presence-lost`, uma INTENÇÃO de servidor entregue ao `sim` no instante lógico da sessão: o
+   * alvo é solto, a automação para e o personagem tenta sair aos 60 s. Em qualquer outra sessão é
+   * nada — a hunt idle sobrevive ao navegador fechado, e a Cidade tem o recolhimento por repouso.
+   */
+  #losePresence(hosted: HostedSession, characterId: string): void {
+    worldPresenceOf(hosted.session.ruleset)?.presenceLost(hosted.session, characterId);
+  }
+
+  /** O inverso de `#losePresence`: há alguém olhando de novo, e o `sim` devolve o controle ao jogador. */
+  #restorePresence(hosted: HostedSession, characterId: string): void {
+    worldPresenceOf(hosted.session.ruleset)?.presenceRestored(hosted.session, characterId);
+  }
+
+  /**
    * Tira a sessão deste nó e devolve o slot da conta. Encerra antes de soltar, para o
    * ruleset ter a chance de creditar o que for dele.
    *
    * Fecha TODOS os visualizadores do personagem, não só quem pediu: sair do jogo é do
    * personagem, não da aba. Deixar a outra aba aberta olhando uma sessão que já não existe
    * seria uma tela que não atualiza mais e não diz por quê.
+   *
+   * `departure` é de quem sai do MUNDO por decisão do `sim` (#840, OW-19): o motivo do extrato e a
+   * posição em que a saída foi decidida, que vira a âncora do próximo login. Sem ele, a saída é
+   * `manual-exit` e a âncora é a posição de agora, como antes.
    */
-  async release(characterId: string, closeCode?: number, closeReason?: string): Promise<void> {
+  async release(
+    characterId: string, closeCode?: number, closeReason?: string, departure?: ReleaseDeparture,
+  ): Promise<void> {
     const hosted = this.#hostedSession(characterId);
     if (hosted === undefined) return;
     const accountId = this.#accountIdByCharacter.get(characterId);
@@ -1768,7 +2241,9 @@ export class SessionHost {
       // na praça não pode levar a praça junto, e nada há a creditar: a Cidade não gera
       // progresso (§37). O que ela gera é ESTADO (#154) — e ele sai antes de o participante
       // sair, porque `leave` o tira da lista. O mundo, que credita, sai por extrato de delta.
-      await this.#departFromSharedSession(characterId, hosted, 'manual-exit');
+      await this.#departFromSharedSession(
+        characterId, hosted, departure?.reason ?? 'manual-exit', departure?.worldPosition,
+      );
       this.#announceDeparture(hosted, characterId);
       // A cópia vazia deixa de ser hospedada. A próxima entrada cria outra, já na versão de
       // conteúdo do momento — ver `CityShard.admit`.
@@ -1786,7 +2261,17 @@ export class SessionHost {
       if (remaining.length === 0) this.#sessions.delete(hosted.session.id);
     }
 
+    await this.#unhost(characterId, hosted, accountId);
+  }
+
+  /**
+   * A metade de `release` que esquece o personagem: tira dele tudo o que este nó guardava e o solta do
+   * diretório e do slot da conta. Quem chama já decidiu o que fazer com a SESSÃO e com o extrato — `release`
+   * encerra e credita, `#releaseToRest` (OW-20) só solta quem já creditou.
+   */
+  async #unhost(characterId: string, hosted: HostedSession, accountId: string | undefined): Promise<void> {
     this.#sessionIdByCharacter.delete(characterId);
+    this.#failedDepartures.delete(characterId);
     this.#walkingUntil.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
@@ -1798,6 +2283,7 @@ export class SessionHost {
     }
     this.#botByCharacter.delete(characterId);
     this.#restingSince.delete(characterId);
+    this.#leftWorld.delete(characterId);
 
     // A sessão ACABOU: deixar o snapshot faria a próxima conexão ressuscitar uma sessão
     // encerrada, com os agregados de antes.
@@ -1868,7 +2354,10 @@ export class SessionHost {
         // encerrava nada, o slot de personagem ativo não tinha NENHUMA forma de voltar
         // (FUN-52): dois personagens que já tivessem conectado esgotavam o teto até o
         // processo reiniciar, e nem apagar o personagem funcionava.
-        void this.#logout(viewer.characterId);
+        //
+        // No MUNDO não é assim (#840, OW-19): o `logout` é uma INTENÇÃO que passa por `canLogout`, e quem
+        // sai, ou recusa, é o `sim` — ver `#requestLogout`.
+        this.#requestLogout(viewer);
         return;
       case 'walk':
         // INTENÇÃO: direção, nunca posição resolvida (invariante 4). Processada NA CHEGADA,
@@ -2165,6 +2654,12 @@ export class SessionHost {
     const character = this.#ownerOf(viewer.characterId);
     const hosted = this.#hostedSession(viewer.characterId);
     if (character === undefined || hosted === undefined) return;
+    // Vender é a loja do Tibia: no mundo, só em PZ (OW-18). Cidade e hunt vendem de onde estão, como sempre.
+    const refusal = this.#zoneServiceRefusal(hosted, character.id);
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
+      return;
+    }
     const result = character.inventory.sellItems(instanceIds, this.#options.itemCatalog ?? EMPTY_ITEMS);
     if (result.ok) {
       character.goldDelta += result.gold;
@@ -2247,6 +2742,11 @@ export class SessionHost {
     // Conjurar na Cidade muda estado durável (#792, ADR 0044 d.2) — estoque, mana e gold —, e
     // o shard só grava no logout quem está em `dirty` (#154, a mesma marca de `equip`/
     // `choose-vocation`). Sem isto, a carga conjurada na praça sumia ao sair.
+    //
+    // **O mundo não precisa dela** (OW-18): quem decide o que o lote grava é a marca (mana, vida, o que
+    // carrega) e os agregados (`#isDirty`), e conjurar mexe nos dois — a magia gasta mana, a runa e a
+    // poção gastam gold (`goldSpent`) e contam `suppliesUsed`. Marcar `dirty` aqui também seria um
+    // extrato a mais por conjuração, sem nada que o lote já não visse.
     if (hosted.session.ruleset.type === 'city') hosted.dirty.add(viewer.characterId);
     // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
     // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
@@ -2630,6 +3130,33 @@ export class SessionHost {
   }
 
   /**
+   * O serviço de Cidade pode ser usado AGORA por este personagem? Devolve o texto da recusa, ou `null`
+   * se pode. É a pergunta do ADR 0052 d.2 respondida em dois níveis (OW-18, ADR 0060 d.4):
+   *
+   * - a SESSÃO oferece serviço? (`offersCityServices`, OW-04) — a Cidade e o mundo sim, a hunt e o treino
+   *   nunca (a `blessing.lua` do Canary trava o santuário em protect zone, e a hunt nunca é uma);
+   * - o TILE aceita? Só o mundo decide por tile (`Ruleset.acceptsCityServices`, OW-13): em PZ sim, fora
+   *   dela não. A Cidade não declara a pergunta, e a sessão inteira dela é PZ.
+   *
+   * `cityText` é a frase da recusa de quem não está num lugar de serviço — a de cada serviço, que
+   * existia antes do mundo. Fora da PZ do mundo a frase é uma só (`SERVICE_ZONE_REFUSAL`).
+   */
+  #cityServiceRefusal(hosted: HostedSession, characterId: string, cityText: string): string | null {
+    if (!offersCityServices(hosted.session.ruleset)) return cityText;
+    return this.#zoneServiceRefusal(hosted, characterId);
+  }
+
+  /**
+   * Só a metade do TILE da pergunta acima: para o serviço que a hunt também aceita (vender da mochila, aprender
+   * magia), onde "a sessão oferece?" não se pergunta. Só o mundo recusa, e só fora da PZ — Cidade e hunt
+   * respondem `null` sempre, como antes de o mundo existir.
+   */
+  #zoneServiceRefusal(hosted: HostedSession, characterId: string): string | null {
+    const { session } = hosted;
+    return session.ruleset.acceptsCityServices?.(session, characterId) === false ? SERVICE_ZONE_REFUSAL : null;
+  }
+
+  /**
    * Promove a vocação escolhida (#566, ADR 0042 decisão 1). Serviço de Cidade: só a sessão de
    * Cidade aceita — o mesmo padrão do ADR 0042 (decisão 1, tela de serviço) e do "obtida na
    * Cidade" do plano de conteúdo. O preço sai por `goldDelta`, liquidado pelo MESMO
@@ -2639,10 +3166,9 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para se promover.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Você precisa estar na Cidade para se promover.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const vocation = character.vocationId === null
@@ -2754,6 +3280,13 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
+    // A tela de aprender magia fica em tile PZ do mundo (OW-18, emenda ao ADR 0058 d.2); na Cidade e na
+    // hunt segue valendo de qualquer lugar.
+    const refusal = this.#zoneServiceRefusal(hosted, character.id);
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
+      return;
+    }
     const spell = (this.#options.spellCatalog ?? EMPTY_SPELLS).get(spellId);
     const result = character.learnSpell(spell);
     if (!result.ok) {
@@ -2881,11 +3414,11 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.shared !== true) {
-      viewer.send({
-        type: 'system-message', level: 'warning',
-        text: 'O nível de hazard só muda na Cidade, antes de entrar na hunt.',
-      });
+    const refusal = this.#cityServiceRefusal(
+      hosted, character.id, 'O nível de hazard só muda na Cidade, antes de entrar na hunt.',
+    );
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     // A zona sai por PROPRIEDADE PRÓPRIA: `zones` é um objeto comum, e `zones['constructor']` ou
@@ -2989,10 +3522,9 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (!offersCityServices(hosted.session.ruleset)) {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'Bênçãos só se compram na Cidade.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Bênçãos só se compram na Cidade.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const blessing = this.#options.blessingCatalog?.get(blessingId);
@@ -3090,8 +3622,9 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({ type: 'system-message', level: 'warning', text: 'Só se compra na Cidade.' });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Só se compra na Cidade.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
@@ -3130,10 +3663,9 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
       return;
     }
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'O livro do offline training só se lê na Cidade.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'O livro do offline training só se lê na Cidade.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const result = character.training.choose(skillId, training);
@@ -3160,10 +3692,9 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
       return;
     }
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para treinar.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Você precisa estar na Cidade para treinar.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const carried = character.inventory.carried(itemInstanceId);
@@ -3448,16 +3979,26 @@ export class SessionHost {
    *
    * Sem `requestExit` no ruleset — a Cidade, ou um ruleset que não sabe pedir —, ou com uma
    * transição em andamento, é o caminho de antes: `transition({ to: 'city' })`, que também é
-   * quem devolve a recusa certa ("você já está aqui"). Morte, `party-member-lost` e a drenagem
-   * NÃO passam por aqui e continuam encerrando direto: nenhuma delas carrega a intenção do
-   * jogador de sair.
+   * quem devolve a recusa certa ("você já está aqui"). Com `OPEN_WORLD` o destino é o mundo
+   * (`#homeType`): o jogador que clicou está olhando, e é a volta assistida da OW-20. Morte,
+   * `party-member-lost` e a drenagem NÃO passam por aqui e continuam encerrando direto: nenhuma
+   * delas carrega a intenção do jogador de sair.
    */
   #requestLeaveHunt(viewer: Viewer): void {
     const { characterId } = viewer;
     const hosted = this.#hostedSession(characterId);
+    // No MUNDO não há o que sair da caçada (OW-18): o `WorldRuleset` é o `HuntRuleset`, e o `requestExit`
+    // herdado concluiria a saída pelo `onExitFinished` da topologia — um `member-left` que o `#settleOne`
+    // levaria à Cidade, por fora do `canLogout` e da tabela de transições. Quem sai do mundo é o logout
+    // (OW-19, que passa por `canLogout`) e a entrada numa instância (OW-20); aqui o pedido é recusado com
+    // a mesma frase de quem já está no lugar, como na Cidade.
+    if (hosted?.session.ruleset.type === 'world') {
+      viewer.send({ type: 'system-message', level: 'warning', text: REFUSAL_TEXT['same-state'] });
+      return;
+    }
     const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
     if (hosted === undefined || ruleset?.requestExit === undefined || this.#transitions.has(characterId)) {
-      void this.#requestTransition(viewer, { to: 'city' });
+      void this.#requestTransition(viewer, { to: this.#homeType() });
       return;
     }
     // A sessão JÁ acabou. Ou a sucessão dela (extrato, Cidade) está em andamento — o segundo
@@ -3469,7 +4010,7 @@ export class SessionHost {
     // do #802, pela transição de sempre — o extrato é idempotente (`credited`) e o `#replace`
     // conclui o que faltou.
     if (hosted.session.ended !== null) {
-      if (!this.#settling.has(characterId)) void this.#requestTransition(viewer, { to: 'city' });
+      if (!this.#settling.has(characterId)) void this.#requestTransition(viewer, { to: this.#homeType() });
       return;
     }
     ruleset.requestExit(hosted.session, characterId);
@@ -3492,6 +4033,16 @@ export class SessionHost {
     this.#presentExit(hosted);
   }
 
+  /**
+   * Para onde volta quem pediu para sair de uma instância: o mundo com `OPEN_WORLD` — o centro do grafo, e
+   * quem pede está olhando (#841, OW-20) —, a Cidade sem ela, como sempre foi. É o MESMO critério de
+   * `#settleOne`, escrito uma vez: dois lugares que decidissem "para onde se volta" divergiriam no dia em
+   * que um deles mudasse.
+   */
+  #homeType(): 'city' | 'world' {
+    return this.#options.openWorld === true ? 'world' : 'city';
+  }
+
   /** O `cancel-exit` (#802): o ruleset desfaz a saída manual pendente, se houver. */
   #requestCancelExit(viewer: Viewer): void {
     const hosted = this.#hostedSession(viewer.characterId);
@@ -3506,6 +4057,12 @@ export class SessionHost {
       await this.transition(viewer.characterId, request);
     } catch (error) {
       if (error instanceof TransitionError) {
+        // A recusa do mundo (OW-20) leva o MOTIVO do Canary, o mesmo do `logout` recusado
+        // (`protocolgame.cpp:1151-1162`): o cliente o escreve (OW-23), e a hunt idle e o logout dizem a mesma frase.
+        if (error.refusal === 'cannot-logout' && error.logoutRefusal !== undefined) {
+          viewer.send({ type: 'logout-refused', reason: error.logoutRefusal });
+          return;
+        }
         viewer.send({
           type: 'system-message', level: 'warning', text: REFUSAL_TEXT[error.refusal],
         });
@@ -3635,6 +4192,10 @@ export class SessionHost {
     if (hosted.viewers.size === 0) {
       for (const event of events) {
         if (event.kind === 'member-left') hosted.departures.push(event);
+        // A saída do MUNDO também não é apresentação (#840, OW-19): é o checkpoint e o repouso, e vale sem
+        // ninguém olhando — o x-log é justamente esse caso. Sem este ramo a saída de quem perdeu a conexão
+        // nunca sairia de um mundo vazio de visualizadores.
+        else if (event.kind === 'departure-requested') this.#departFromWorld(hosted, event);
         // A bolsa é ESTADO, não apresentação (#400): sem ninguém olhando, o último
         // `party-bag-changed` ainda é guardado para o `session-state` de quem reanexar levar
         // as reservas — `getState()` não as carrega.
@@ -3697,12 +4258,14 @@ export class SessionHost {
           hosted.departures.push(event);
           continue;
         case 'departure-requested':
+          // A saída do MUNDO (OW-14, #835, lida aqui desde a OW-19, #840): o `sim` decidiu, e o checkpoint
+          // e o repouso são I/O. É gameplay e vale SEM visualizador — o ramo sem ninguém acima o trata
+          // também —, e fica POR PERSONAGEM: sai quem o `sim` nomeou, e o resto do mundo continua.
+          this.#departFromWorld(hosted, event);
+          continue;
         case 'logout-refused':
-          // A saída do MUNDO (OW-14, #835): só a sessão `world` os emite, e o hospedeiro ainda não
-          // a hospeda (o `WorldShard` é a OW-18, atrás de `OPEN_WORLD`). Quem os lê é a presença
-          // no hospedeiro (OW-19): `departure-requested` é gameplay e vale SEM visualizador — o
-          // x-log é justamente o caso em que não há —, então o ramo sem visualizador acima também
-          // vai ganhar o caso dele; `logout-refused` vira a mensagem do protocolo para quem pediu.
+          // A recusa do `logout` (OW-14): só quem pediu a lê.
+          this.#presentLogoutRefused(hosted, event);
           continue;
         case 'equipment-changed':
           // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
@@ -4163,28 +4726,40 @@ export class SessionHost {
    */
   #presentAnalyzer(hosted: HostedSession): void {
     if (hosted.viewers.size === 0) return;
-    const { notableEvents } = hosted.session;
+    const { session } = hosted;
+    const total = notableEventsTotal(session);
     const party = partySummaryOf(hosted);
     for (const character of hosted.session.participants) {
       if (this.#watchers(hosted, character.id) === 0) continue;
       const aggregates = hosted.session.aggregatesOf(character.id);
       const sent = hosted.sentAnalyzer.get(character.id);
-      if (sent !== undefined
-        && sameAnalyzer(sent, aggregates, notableEvents.length)
-        && samePartySummary(sent.party, party)) continue;
       // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e
       // mandá-la inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo
-      // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo.
-      const since = sent?.eventCount ?? 0;
+      // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo. O cursor é ABSOLUTO
+      // (`notableEventsTotal`); o que o teto do mundo já descartou sai da conta antes de fatiar, e o
+      // que o cursor apontava e já foi descartado vira "do começo da lista" (`Math.max(0, …)`).
+      const since = Math.max(0, (sent?.eventCount ?? 0) - session.notableEventsDropped);
+      // Do que o PERSONAGEM pode ver (OW-13): no mundo cada evento de personagem tem dono, e o
+      // analisador de um estranho não leva o que aconteceu a outro. Na instância é a fatia toda.
+      // Só se lê a lista quando ela andou — o caso comum, de um personagem parado, é uma comparação.
+      const fresh = sent?.eventCount === total ? [] : session.notableEventsFor(character.id, since);
+      if (sent !== undefined && fresh.length === 0
+        && sameAnalyzer(sent, aggregates)
+        && samePartySummary(sent.party, party)) {
+        // Entrou evento na lista, mas de OUTRO personagem: nada novo para este (OW-18). O cursor avança, para
+        // o próximo ciclo não reler o que já foi descartado como alheio — e nenhum `analyzer` sai. Contar o
+        // tamanho da lista mandaria a todos os duzentos do mundo uma mensagem a cada evento de qualquer um.
+        // Na instância todo evento é de todos, `fresh` vazio é lista parada, e este ramo não escreve nada.
+        if (sent.eventCount !== total) hosted.sentAnalyzer.set(character.id, { ...sent, eventCount: total });
+        continue;
+      }
       hosted.sentAnalyzer.set(character.id, {
-        aggregates: { ...aggregates }, eventCount: notableEvents.length, party,
+        aggregates: { ...aggregates }, eventCount: total, party,
       });
       const message: S2CMessage = {
         type: 'analyzer',
         aggregates: { ...aggregates },
-        // Do que o PERSONAGEM pode ver (OW-13): no mundo cada evento de personagem tem dono, e o
-        // analisador de um estranho não leva o que aconteceu a outro. Na instância é a fatia toda.
-        notableEvents: hosted.session.notableEventsFor(character.id, since).map((event) => ({ ...event })),
+        notableEvents: fresh.map((event) => ({ ...event })),
         ...(party === undefined ? {} : { party }),
       };
       this.#sendToViewersOf(hosted, character.id, message);
@@ -4303,7 +4878,8 @@ export class SessionHost {
     // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
     // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
     // transição, porque os dois passam por aqui; a instância é a própria sessão.
-    const { mapId, ambience, huntId, difficulty } = hosted.session.ruleset;
+    const { mapId, ambience } = hosted.session.ruleset;
+    const { huntId, difficulty } = huntIdentityOf(hosted.session.ruleset);
     if (mapId !== undefined) {
       viewer.send({
         type: 'instance-enter', instanceId: hosted.session.id, map: mapId,
@@ -4377,7 +4953,7 @@ export class SessionHost {
     // O `session-state` acabou de levar os agregados DELE: o ciclo seguinte não precisa repetir.
     hosted.sentAnalyzer.set(characterId, {
       aggregates: { ...hosted.session.aggregatesOf(characterId) },
-      eventCount: hosted.session.notableEvents.length,
+      eventCount: notableEventsTotal(hosted.session),
       party: partySummaryOf(hosted),
     });
     // O Follow interrompido sobrevive à desconexão (#401): `#presentMoves` DESCARTA o evento
@@ -4881,12 +5457,37 @@ export class SessionHost {
         });
       }
 
-      // Toda sessão que acaba sozinha devolve o personagem à Cidade (§6): "a hunt acabou"
-      // nunca pode significar "ficou sem sessão" (invariante 8).
-      const next = this.#options.buildSession?.({ to: 'city' }, hosted.session, characterId, departed)
-        ?? null;
-      if (next === null) {
-        await this.release(characterId, 1000, receipt.reason);
+      // Sem `OPEN_WORLD`, toda sessão que acaba sozinha devolve o personagem à Cidade (§6): "a hunt acabou"
+      // nunca pode significar "ficou sem sessão" (invariante 8). É o caminho de antes, byte a byte.
+      if (this.#options.openWorld !== true) {
+        const next = this.#options.buildSession?.({ to: 'city' }, hosted.session, characterId, departed)
+          ?? null;
+        if (next === null) {
+          await this.release(characterId, 1000, receipt.reason);
+          return;
+        }
+        await this.#replace(characterId, hosted, next);
+        return;
+      }
+
+      // Com ele, a volta é assistida ou não (ADR 0060 d.6c). Ninguém é posto no mundo DESASSISTIDO: lá nada
+      // o tiraria de uma luta, e o personagem chegaria sem visualizador, sem nunca passar pela queda que
+      // dispara `presence-lost` — morreria sozinho na âncora. Decide-se DEPOIS de gravar o extrato e de
+      // avisar o fim: o visualizador que caiu durante o `await` já não conta.
+      //
+      // - com visualizador: o mundo — a âncora de saída, ou o templo se morreu. A cena que ele vê é a do
+      //   mundo, e `session-ended` acabou de contar o que a hunt rendeu;
+      // - sem: o repouso. O extrato que acabou de pousar É o checkpoint — a posição (a âncora, ou o templo se
+      //   morreu) e os vitais (os da volta, cheios se morreu) vão nele (`#worldStateOf`) — e o personagem é
+      //   solto. A cidade onde ele nasce é uma coluna, não uma sessão (invariante 8).
+      const watched = this.#watchers(hosted, characterId) > 0;
+      const next = watched ? await this.#buildWorldReturn(hosted, characterId, departed) : null;
+      if (next === null || next === 'rest') {
+        // Sem visualizador, sem mundo para construir (um nó sem o shard) ou com o mundo sem vaga para quem
+        // nunca esteve nele: o repouso, nunca uma sessão sem dono. NÃO é `release`: a sessão privada que
+        // `release` encerra pode ser a party que continua para os outros, e o membro que saiu por dentro do
+        // `sim` já não é dela.
+        await this.#releaseToRest(characterId, hosted, receipt.reason);
         return;
       }
       await this.#replace(characterId, hosted, next);
@@ -4901,6 +5502,85 @@ export class SessionHost {
     } finally {
       this.#settling.delete(characterId);
     }
+  }
+
+  /**
+   * A sessão do mundo para onde volta quem acabou a instância, `'rest'` quando o mundo não o recebe agora, ou
+   * `null` quando este nó não constrói mundo (#841, OW-20, ADR 0060 d.2b e d.6c). Só é chamada para quem VAI ser
+   * posto no mundo — com visualizador, ver `#settleOne`.
+   *
+   * **O passe é de quem saiu do mundo** (`#leftWorld`): ele já ocupou uma vaga, e barrá-lo na volta o deixaria
+   * numa sessão encerrada — o teto vale só na entrada. Quem NUNCA esteve nele (a hunt idle direta, a party
+   * largada do repouso) o encontra como o login: com gente esperando ou sem vaga a porta o põe na fila
+   * (`WorldEntryGate#login`), e a corrida entre a fila e a entrada cai no `WorldFullError` do shard. Nos dois
+   * casos o destino é o repouso, e nada se perde: o extrato que acabou de pousar É o checkpoint (a âncora, os
+   * vitais), e o personagem entra pelo ticket — e pela fila, que já guarda a posição dele — quando voltar.
+   * Sem esta distinção o mundo cheio engordava com quem escolheu a hunt justamente por ele estar cheio, e esse
+   * personagem furava a fila em que os outros ainda esperam.
+   */
+  async #buildWorldReturn(
+    hosted: HostedSession, characterId: string, departed?: CharacterRuntime,
+  ): Promise<Session | 'rest' | null> {
+    const builder = this.#options.buildSession;
+    if (builder === undefined) return null;
+    const keepsPass = this.#leftWorld.has(characterId);
+    const gate = this.#options.worldEntry;
+    if (!keepsPass && gate !== undefined) {
+      try {
+        const verdict = await gate.login(characterId, this.#premiumByCharacter.get(characterId) ?? false);
+        if (!verdict.admitted) return 'rest';
+      } catch (error) {
+        // A fila é do Redis, e o Redis pode piscar. Sem resposta dela quem nunca esteve no mundo NÃO entra: o
+        // lado seguro é o repouso — com o extrato já gravado, ele volta pelo ticket e pela fila —, e não uma
+        // sessão encerrada que ninguém hospeda.
+        this.#logger.warn({ err: error, characterId }, 'The world queue did not answer; sending the character to rest');
+        return 'rest';
+      }
+    }
+    try {
+      return builder(
+        { to: 'world', worldEntry: keepsPass ? 'instance' : 'instance-from-rest' },
+        hosted.session, characterId, departed,
+      );
+    } catch (error) {
+      if (error instanceof WorldFullError) return 'rest';
+      throw error;
+    }
+  }
+
+  /**
+   * O fim de uma sessão privada levou o personagem ao REPOUSO (#841, OW-20, ADR 0060 d.6c): sem visualizador
+   * para ver a volta, ou sem mundo para construir. O extrato dele JÁ está gravado — quem chama o gravou antes,
+   * e ele leva a posição e os vitais —, então aqui só se solta: fecha o que sobrou de visualizador, esquece o
+   * personagem e o libera no diretório e no slot da conta.
+   *
+   * Diferente de `release` num ponto que importa: NÃO encerra a sessão. `release` de uma sessão privada a
+   * acaba (`session.end('manual-exit')`), e quem chega aqui pode ser o membro de uma party que saiu por dentro
+   * do `sim` — a hunt continua para os outros, e o extrato dele já é o de quem saiu. A sessão só some do nó
+   * quando não sobra ninguém dela.
+   */
+  async #releaseToRest(characterId: string, hosted: HostedSession, reason: ReceiptReason): Promise<void> {
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    // Quem olhava recebe o `session-ended` que já está na fila ANTES de o socket fechar: `Viewer#close` não
+    // esvazia a fila, e o resumo da hunt é justamente o que o jogador espera ver quando o mundo está cheio.
+    for (const viewer of hosted.viewers.of(characterId)) viewer.flush();
+    this.#dropViewers(hosted, characterId, 1000, reason);
+    const remaining = this.#charactersOf(hosted.session.id).filter((id) => id !== characterId);
+    if (remaining.length === 0) this.#sessions.delete(hosted.session.id);
+    await this.#unhost(characterId, hosted, accountId);
+  }
+
+  /**
+   * O mundo deixaria o personagem sair agora (#841, OW-20, ADR 0060 d.6a)? Lança `TransitionError`
+   * `'cannot-logout'`, com o motivo do Canary, quando não. Sem resposta do ruleset — a Cidade, a hunt, um
+   * ruleset de teste que não conhece a regra —, ou sem o personagem para ele decidir, não há o que recusar.
+   */
+  #refuseIfCannotLogout(hosted: HostedSession, characterId: string): void {
+    const verdict = logoutVerdictOf(hosted.session.ruleset, hosted.session, characterId);
+    if (verdict === undefined || verdict === null || verdict.ok) return;
+    throw new TransitionError(
+      'cannot-logout', `o mundo não deixa ${characterId} sair agora: ${verdict.reason}`, verdict.reason,
+    );
   }
 
   /**
@@ -4932,6 +5612,13 @@ export class SessionHost {
       );
     }
 
+    // Quem entra numa instância sai do MUNDO, e no Tibia isso passa pela regra do logout (OW-20, ADR 0060
+    // d.6a): PZ sempre, no-logout nunca, e qualquer outro tile só sem luta. É o que impede fugir de uma luta
+    // para dentro de uma instância. Antes de qualquer efeito colateral — a âncora, o destino, o extrato —: a
+    // recusa não mexe em nada, e o personagem segue no mundo. Só o mundo responde; da Cidade e da hunt a
+    // pergunta é `undefined`, e a transição é a de sempre.
+    this.#refuseIfCannotLogout(hosted, characterId);
+
     const running = this.#runTransition(characterId, hosted, request);
     this.#transitions.set(characterId, running);
     try {
@@ -4946,15 +5633,32 @@ export class SessionHost {
     hosted: HostedSession,
     request: TransitionRequest,
   ): Promise<void> {
+    // No mundo a âncora de saída é a posição de AGORA, e ela é lida ANTES de construir o destino
+    // (#837, OW-16): o construtor leva o MESMO `CharacterRuntime` para a sessão nova, e depois disso o
+    // `position` dele já é o de lá — a âncora seria o lugar onde ele COMEÇA a hunt, não onde saiu.
+    this.#anchorWorldPosition(hosted, characterId);
+    // E o que SÓ a origem sabe vai para o personagem pelo mesmo motivo (#839): o destino lê, na entrada,
+    // o restante do prazo do anel que vestia (`overlay.durationRemainingMs`), e o `onLeave`/`onEnd` da
+    // origem — que o guarda — roda DEPOIS do destino pronto. Sem isto, mundo → hunt (e hunt → mundo)
+    // armaria o anel com o prazo velho: o tempo vestido aqui seria de graça lá. Só publica; se o destino
+    // for recusado o personagem segue aqui, intacto.
+    hosted.session.beforeLeave(characterId);
+
     // Construir ANTES de encerrar: se o destino não existe — hunt que saiu do conteúdo,
     // dificuldade que a hunt não define — o personagem fica exatamente onde estava, em vez de
     // ficar sem sessão porque a antiga já tinha sido fechada.
-    const next = this.#options.buildSession?.(request, hosted.session, characterId) ?? null;
-    if (next === null) {
+    //
+    // A volta ao mundo tem uma terceira resposta (OW-20): o mundo sem vaga para quem nunca esteve nele, e aí o
+    // destino é o repouso — que sempre existe, e que a transição cumpre depois de gravar o extrato.
+    const built = request.to === 'world'
+      ? await this.#buildWorldReturn(hosted, characterId)
+      : this.#options.buildSession?.(request, hosted.session, characterId) ?? null;
+    if (built === null) {
       throw new TransitionError(
         'unknown-destination', `este servidor não constrói uma sessão de "${request.to}"`,
       );
     }
+    const next = built === 'rest' ? null : built;
 
     // Sair de um SHARD não encerra nada (FUN-71, ADR 0023): a praça fica de pé com quem ficou.
     // Encerrar aqui mandaria um extrato de Cidade — zerado — para todo mundo que estivesse lá
@@ -4971,7 +5675,9 @@ export class SessionHost {
     // fica sem o que fazer: quem já saiu não é participante.
     if (leavesOnExit(hosted.session.ruleset)) {
       if (creditsAggregates(hosted.session.ruleset)) {
-        await this.#leaveWithReceipt(characterId, hosted, 'manual-exit');
+        // A transição ANTECIPA o lote inteiro, como a saída (`#saveReceipt`, #837): o extrato de quem
+        // vai para a hunt sai junto do checkpoint de todo outro personagem sujo do mundo.
+        await this.#leaveWithReceipt(characterId, hosted, 'manual-exit', true);
       } else if (hosted.dirty.has(characterId)) {
         await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
       }
@@ -5000,6 +5706,12 @@ export class SessionHost {
           });
         }
       }
+    }
+    if (next === null) {
+      // Só uma sessão privada chega aqui (o mundo e a Cidade não vão ao mundo, `ALLOWED`): o extrato dela acabou
+      // de pousar, e o personagem é solto sem encerrar o que não é dele — como no fim de uma hunt desassistida.
+      await this.#releaseToRest(characterId, hosted, 'manual-exit');
+      return;
     }
     await this.#replace(characterId, hosted, next);
   }
@@ -5062,6 +5774,7 @@ export class SessionHost {
       exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
+      checkpoint: checkpointsProgress(next.ruleset) ? new CheckpointState() : null,
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
       sentTarget: new Map(),
@@ -5083,12 +5796,17 @@ export class SessionHost {
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
+    // O passe da volta (OW-20): quem saiu do mundo para uma instância o leva consigo, e quem chegou ao mundo o
+    // entrega — a próxima saída o marca outra vez. Não mexe no resto: da hunt para a Cidade nada muda.
+    if (next.ruleset.type === 'world') this.#leftWorld.delete(characterId);
+    else if (hosted.session.ruleset.type === 'world') this.#leftWorld.add(characterId);
     // ANTES de os visualizadores dele entrarem em `successor.viewers`, de propósito: o que o
     // anúncio manda é o `creature-appear` de quem chega para quem JÁ estava na praça. O que
     // ele mandaria ao recém-chegado — os vizinhos que ele passa a ver — ninguém recebe, e
     // não faz falta: o `#sendState` logo abaixo leva a cena inteira (`instance-enter` e
     // `session-state`, que substitui tudo), e um `appear` antes dela seria apagado pela troca.
     this.#announceArrival(successor, characterId);
+    this.#markArrival(successor, characterId);
 
     for (const viewer of following) {
       successor.viewers.add(viewer);
@@ -5096,6 +5814,11 @@ export class SessionHost {
       this.#sendState(successor, viewer);
     }
     this.#restingSince.set(characterId, following.length > 0 ? null : this.#now());
+    // Chegou ao mundo sem ninguém olhando (#840, OW-19): o visualizador que seguia o personagem se soltou
+    // enquanto a transição esperava o extrato, e a queda dele já passou — nenhum `detach` a entregará.
+    // É a corrida que o ADR 0060 d.6c descreve (entre a desconexão e a chegada), e o personagem a
+    // resolve como quem caiu: `presence-lost` na hora da chegada.
+    if (following.length === 0) this.#losePresence(successor, characterId);
 
     // A morte é MARCO de snapshot (FUN-27). Perder a transição por estar entre dois
     // intervalos é o pior caso: o jogador volta vivo, na hunt, e a penalidade aparece do nada
@@ -5186,9 +5909,11 @@ export class SessionHost {
     closeReason?: string,
   ): void {
     for (const viewer of [...hosted.viewers.of(characterId)]) {
-      if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
+      // Sai do conjunto ANTES de o socket fechar: o `close` do servidor chama `detach`, e quem já foi
+      // solto não é um visualizador que perdeu a conexão (`detach`, #840).
       hosted.viewers.delete(viewer);
       hosted.session.detach(viewer.id);
+      if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
     }
   }
 
@@ -5234,6 +5959,12 @@ export class SessionHost {
     this.#cycleTimer = setInterval(() => this.cycle(), CYCLE_MS);
     this.#renewTimer = setInterval(() => void this.#renewLeases(), RENEW_INTERVAL_MS);
     this.#snapshotTimer = setInterval(() => void this.saveAll(), SNAPSHOT_INTERVAL_MS);
+    // O checkpoint do mundo (#837, OW-16) tem timer PRÓPRIO: é outra cadência (60 s, não 10) e outro
+    // mecanismo — o snapshot guarda a sessão inteira para ela ser retomada, o checkpoint grava o
+    // progresso de cada personagem para o ledger.
+    this.#checkpointTimer = setInterval(
+      () => void this.checkpointWorlds(), this.#options.worldCheckpointMs ?? WORLD_CHECKPOINT_MS,
+    );
     this.#playerCountTimer = setInterval(() => void this.#publishPlayerCount(), PLAYER_COUNT_INTERVAL_MS);
   }
 
@@ -5241,10 +5972,12 @@ export class SessionHost {
     if (this.#cycleTimer) clearInterval(this.#cycleTimer);
     if (this.#renewTimer) clearInterval(this.#renewTimer);
     if (this.#snapshotTimer) clearInterval(this.#snapshotTimer);
+    if (this.#checkpointTimer) clearInterval(this.#checkpointTimer);
     if (this.#playerCountTimer) clearInterval(this.#playerCountTimer);
     this.#cycleTimer = null;
     this.#renewTimer = null;
     this.#snapshotTimer = null;
+    this.#checkpointTimer = null;
     this.#playerCountTimer = null;
   }
 
@@ -5331,8 +6064,15 @@ export class SessionHost {
     // O voo fica registrado em `exitSaves`: quem sair do mesmo personagem enquanto este extrato
     // ainda não pousou acha o personagem fora e não tem extrato próprio a gravar, e tem de esperar
     // este antes de soltar o que é dele — a drenagem não pode contar uma saída que ainda não gravou.
+    //
+    // **No mundo a saída vai dentro do lote** (#837, OW-16, ADR 0060 d.10d): o extrato de quem sai é a
+    // linha dele, e ela leva junto o extrato de todo outro personagem sujo — a saída ANTECIPA o lote
+    // inteiro, não só a linha de quem sai. Num lote só, num `MULTI` só, para uma queda logo depois da
+    // saída não devolver este personagem a um instante e os outros a outro.
     if (leavesOnExit(hosted.session.ruleset)) {
-      const saving = this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+      const saving = hosted.checkpoint === null
+        ? this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed)
+        : this.#saveCheckpointBatch(hosted, [{ characterId, receipt, departed }], true);
       const inFlight = hosted.exitSaves.get(characterId) ?? new Set<Promise<void>>();
       inFlight.add(saving);
       hosted.exitSaves.set(characterId, inFlight);
@@ -5372,6 +6112,27 @@ export class SessionHost {
     accountId: string,
     departed?: CharacterRuntime,
   ): Promise<void> {
+    const line = this.#receiptLine(characterId, hosted, receipt, accountId, departed);
+    await receipts.save(line.receipt);
+    this.#settleLine(line);
+  }
+
+  /**
+   * Monta o extrato que vai ao Redis — o `Receipt` do `sim` mais o estado absoluto INTEIRO do dono —,
+   * tomando a versão durável dele. Extraído de `#persistReceipt` (#837, OW-16) para o lote do mundo
+   * montar vários antes de gravar um só: o conteúdo de um extrato é o mesmo, grave-se um ou cem.
+   *
+   * SÍNCRONO, e de propósito: a versão sai ANTES de qualquer `await`, e é a ordem das CHAMADAS que ela
+   * preserva. `reason` só é passado pelo checkpoint periódico (`'checkpoint'`); o resto leva o do `sim`.
+   */
+  #receiptLine(
+    characterId: string,
+    hosted: HostedSession,
+    receipt: Receipt,
+    accountId: string,
+    departed?: CharacterRuntime,
+    reason: ReceiptReason = receipt.reason,
+  ): PendingLine {
     // O `seq` vem do `sim` (#187): é alocado quando o extrato é emitido, um por participante —
     // metade da chave de idempotência do ledger (invariante 10), e o que impede uma drenagem
     // repetida por retry de creditar duas vezes.
@@ -5393,105 +6154,138 @@ export class SessionHost {
     // e "resposta perdida" precisa repetir exatamente o que já pode ter sido gravado (#823).
     const claim = `${characterId}|${receipt.sessionId}|${receipt.seq}`;
     const durableVersion = this.#claimDurableVersion(characterId, claim);
-    await receipts.save({
-      sessionId: receipt.sessionId,
-      characterId,
-      accountId,
-      reason: receipt.reason,
-      seq: receipt.seq,
-      ...(durableVersion === undefined ? {} : { durableVersion }),
-      aggregates: receipt.aggregates,
-      notableEvents: receipt.notableEvents,
-      // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
-      // na MESMA transação da linha de ledger. Drenado por `#receiptFor` (invariante 9/10).
-      ...(receipt.removedInstances.length === 0 ? {} : { removedInstances: receipt.removedInstances }),
-      ...(owner?.staminaMs === undefined || owner.staminaMs === null
-        ? {}
-        : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
-      // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
-      // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
-      ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
-      // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
-      // some no próximo logout, e o marco 10 000 nunca chegaria.
-      ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
-      // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
-      // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
-      ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
-      // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
-      // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
-      ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
-      // E as magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): ABSOLUTAS como `charms`, e a
-      // hunt também as leva porque `learn-spell` é aceito nela — sem o campo aqui, uma magia
-      // comprada no meio da hunt sumiria no fim dela, e o gold gasto não. SÓ quando o registro é
-      // a verdade do personagem (`recorded`): uma sessão retomada de um snapshot anterior à issue
-      // não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração 0024.
-      ...(owner === undefined || !owner.learnedSpells.recorded
-        ? {} : { learnedSpells: owner.learnedSpells.getState() }),
-      // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms`, e omitido quando vazio —
-      // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
-      // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
-      ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
-      // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
-      // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
-      ...(owner === undefined ? {} : { training: owner.training.getState() }),
-      // E o Hazard (M44-14, #632, ADR 0052 d.1): o nível escolhido e o teto, ABSOLUTOS como os
-      // Charms. Só quando há o que guardar — quem nunca tocou no hazard não escreve a coluna.
-      ...(owner === undefined || owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
-      // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
-      // login se ficasse só na sessão.
-      ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
-      // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
-      // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
-      // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
-      // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
-      // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
-      // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
-      // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
-      // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
-      ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
-      ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
-      // E os storages (#731, ADR 0050 d.6 T2): a semente do motor de quest. Pela MESMA razão do
-      // supplyStock — não é monotônico como Bestiário/skills (um script de quest pode voltar um
-      // storage a -1) —, NÃO se olha `.size === 0`: um storage apagado NESTA sessão é resultado
-      // real, e omitir a chave deixaria o valor antigo do Postgres ressuscitar no próximo login.
-      ...(owner === undefined ? {} : { storages: Object.fromEntries(owner.storages) }),
-      // Comida ativa (#726, ADR 0049 decisão 5): mesma regra do estoque acima — DRENA dentro da
-      // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
-      // o personagem participou.
-      ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
-      // As bênçãos (#570, ADR 0052): mesma regra do `fedMs` acima — sempre incluído quando o
-      // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
-      // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
-      ...(owner === undefined ? {} : { blessings: owner.blessings }),
-      // E a postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, sempre incluída quando
-      // o personagem participou — nunca gateada pelo default: voltar à ofensiva NESTA sessão é uma
-      // escolha real, e omitir a chave deixaria a postura antiga do Postgres ressuscitar no login.
-      ...(owner === undefined ? {} : { fightMode: owner.fightMode }),
-      // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
-      ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
-      // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
-      // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
-      // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
-      ...(owner === undefined ? {} : { soul: owner.soul }),
-      // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
-      // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
-      // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
-      ...(owner?.promoted ? { promoted: true } : {}),
-      // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
-      // onde ele está, e é só isso que precisa atravessar.
-      ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
-      // E onde cada item está dentro dos containers (#160).
-      ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
-      // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
-      ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
-      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
-      // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu, e com
-      // ela o campo `lootBox` do extrato: o grant de vocação/kit e a liquidação de bolsa
-      // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
-      // sempre entra na mochila — não sobra nada para carregar aqui.
-      ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
-    });
+    // O que o inventário do dono deve ao banco além do `acquired` (#837): só o mundo, que emite o mesmo
+    // `acquired` cumulativo a cada minuto. A hunt e a Cidade seguem como antes, byte a byte.
+    const inventory = owner === undefined || hosted.checkpoint === null
+      ? undefined
+      : inventoryDeltaOf(
+        // A marca é a do ÚLTIMO extrato: quem chama só a troca DEPOIS de montar a linha.
+        hosted.checkpoint.marks.get(characterId)?.items,
+        carriedQuantities(owner.inventory.getState()),
+        receipt.removedInstances,
+      );
+    const removedInstances = inventory?.removed ?? receipt.removedInstances;
+    return {
+      claim,
+      owner,
+      receipt: {
+        sessionId: receipt.sessionId,
+        characterId,
+        accountId,
+        reason,
+        seq: receipt.seq,
+        ...(durableVersion === undefined ? {} : { durableVersion }),
+        aggregates: receipt.aggregates,
+        notableEvents: receipt.notableEvents,
+        // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
+        // na MESMA transação da linha de ledger. Drenado por `#receiptFor` (invariante 9/10).
+        //
+        // No mundo leva também o que SAIU do inventário sem o `sim` o reportar — a comida que acabou, o
+        // anel que venceu — (`inventoryDeltaOf`): o `acquired` abaixo é cumulativo, e sem isto a linha
+        // dessa instância ficaria no banco e o item voltaria no próximo login.
+        ...(removedInstances.length === 0 ? {} : { removedInstances }),
+        ...(owner?.staminaMs === undefined || owner.staminaMs === null
+          ? {}
+          : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
+        // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
+        // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
+        ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
+        // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
+        // some no próximo logout, e o marco 10 000 nunca chegaria.
+        ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+        // E o Bosstiary (#629, ADR 0052 d.1), pela mesma razão: abate de boss que não chega ao
+        // banco é abate que some no próximo logout, e o nível 3 nunca fecharia.
+        ...(owner === undefined ? {} : { bosstiary: owner.bosstiary.getState() }),
+        // E a economia de Charms (M39-02, #602, ADR 0052 d.1): ABSOLUTA como `ammo` — sem ela
+        // aqui, um `charm-unlock`/`charm-assign` aceito na Cidade sumiria a cada logout.
+        ...(owner === undefined ? {} : { charms: owner.charms.getState() }),
+        // E as magias aprendidas (#624, ADR 0058 d.1, ADR 0052 d.1): ABSOLUTAS como `charms`, e a
+        // hunt também as leva porque `learn-spell` é aceito nela — sem o campo aqui, uma magia
+        // comprada no meio da hunt sumiria no fim dela, e o gold gasto não. SÓ quando o registro é
+        // a verdade do personagem (`recorded`): uma sessão retomada de um snapshot anterior à issue
+        // não sabe o que ele aprendeu, e gravar o vazio apagaria a concessão da migração 0024.
+        ...(owner === undefined || !owner.learnedSpells.recorded
+          ? {} : { learnedSpells: owner.learnedSpells.getState() }),
+        // O familiar (M38-02, #599, ADR 0057 d.3): ABSOLUTO como `charms`, e omitido quando vazio —
+        // o personagem que nunca invocou não escreve a coluna. Sem isto o cooldown de 30 min não
+        // sobreviveria à saída da hunt: o ticket seguinte o leria como nunca lançado.
+        ...(owner === undefined || isEmptyFamiliarState(owner.familiar) ? {} : { familiar: owner.familiar }),
+        // E o registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — o banco que a sessão
+        // acabou de encher (`onEnd` de hunt e de treino) e a skill do livro.
+        ...(owner === undefined ? {} : { training: owner.training.getState() }),
+        // E o Hazard (M44-14, #632, ADR 0052 d.1): o nível escolhido e o teto, ABSOLUTOS como os
+        // Charms. Só quando há o que guardar — quem nunca tocou no hazard não escreve a coluna.
+        ...(owner === undefined || owner.hazard.isEmpty ? {} : { hazard: owner.hazard.getState() }),
+        // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
+        // login se ficasse só na sessão.
+        ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+        // E o estoque de supply/munição do loot (#520): sem isto, uma Strong Health Potion caída
+        // do Dragon sumiria a cada logout, mesmo sem ser gasta. Ao contrário de `ammo`/`skills`/
+        // `bestiary` (só crescem), este estoque É consumido dentro da sessão — drenar as 3 últimas
+        // poções até zero é um resultado real, não "nunca teve estoque". Por isso NÃO se olha
+        // `.size === 0` aqui: gatear por tamanho omitiria a chave do extrato quando a sessão zera o
+        // Map, o `ledger` interpretaria a ausência como "não mexe na coluna", e as 3 poções do
+        // Postgres ressuscitariam no próximo login (achado [blocker] da revisão da #536) — inclui
+        // sempre que o personagem participou, e um `{}` vazio É o valor correto para "drenado".
+        ...(owner === undefined ? {} : { supplyStock: Object.fromEntries(owner.supplyStock) }),
+        ...(owner === undefined ? {} : { ammunitionStock: Object.fromEntries(owner.ammunitionStock) }),
+        // E os storages (#731, ADR 0050 d.6 T2): a semente do motor de quest. Pela MESMA razão do
+        // supplyStock — não é monotônico como Bestiário/skills (um script de quest pode voltar um
+        // storage a -1) —, NÃO se olha `.size === 0`: um storage apagado NESTA sessão é resultado
+        // real, e omitir a chave deixaria o valor antigo do Postgres ressuscitar no próximo login.
+        ...(owner === undefined ? {} : { storages: Object.fromEntries(owner.storages) }),
+        // Comida ativa (#726, ADR 0049 decisão 5): mesma regra do estoque acima — DRENA dentro da
+        // sessão, e `fedMs` zerado é um resultado real, não "nunca comeu"; sempre incluído quando
+        // o personagem participou.
+        ...(owner === undefined ? {} : { fedMs: owner.fedMs }),
+        // As bênçãos (#570, ADR 0052): mesma regra do `fedMs` acima — sempre incluído quando o
+        // personagem participou, nunca gatead por `=== 0` (a morte zera dentro da MESMA sessão,
+        // e omitir a chave faria a bênção antiga do Postgres ressuscitar no próximo login).
+        ...(owner === undefined ? {} : { blessings: owner.blessings }),
+        // E a postura de luta (#550, M30-03): ABSOLUTA e última-escrita-vence, sempre incluída quando
+        // o personagem participou — nunca gateada pelo default: voltar à ofensiva NESTA sessão é uma
+        // escolha real, e omitir a chave deixaria a postura antiga do Postgres ressuscitar no login.
+        ...(owner === undefined ? {} : { fightMode: owner.fightMode }),
+        // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
+        ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+        // E os pontos de alma (#593): ABSOLUTO, última-escrita-vence — nunca fundido por máximo,
+        // porque alma DESCE (gasta na conjuração). Sempre que a sessão teve dono, mesmo sem
+        // vocação: `0` é o valor de verdade de quem não escolheu, não "sem informação".
+        ...(owner === undefined ? {} : { soul: owner.soul }),
+        // E a promoção (#566, ADR 0042 decisão 1): só pode ter sido obtida na Cidade, antes desta
+        // hunt começar — repetir `true` aqui é redundante com o que já está no banco, mas mantém
+        // o mesmo caminho que qualquer outro campo absoluto do extrato usa.
+        ...(owner?.promoted ? { promoted: true } : {}),
+        // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
+        // onde ele está, e é só isso que precisa atravessar.
+        ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
+        // E onde cada item está dentro dos containers (#160).
+        ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
+        // E o estado por instância (#604, ADR 0046): o imbuement aplicado ou vencido na sessão.
+        ...(owner === undefined ? {} : { overlays: overlaysOfState(owner.inventory.getState()) }),
+        // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`. O que não
+        // coube por capacidade fica no cadáver do monstro (ADR 0048) — a Caixa de Loot saiu, e com
+        // ela o campo `lootBox` do extrato: o grant de vocação/kit e a liquidação de bolsa
+        // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
+        // sempre entra na mochila — não sobra nada para carregar aqui.
+        ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
+        // A quantidade de CADA instância carregada, só no mundo (#837): o `acquired` acima é cumulativo e o
+        // ledger não toca na linha que já existe, então a pilha que cresceu ou diminuiu depois do primeiro
+        // checkpoint em que apareceu só chega ao banco por aqui. ABSOLUTO e inteiro, como o `layout`.
+        ...(inventory === undefined ? {} : { quantities: inventory.quantities }),
+        // O mundo e os vitais do dono (#836, OW-15, ADR 0060 d.10.f), SÓ com `OPEN_WORLD`: a âncora, a
+        // cidade, a vida, a mana e as condições que faltavam. ABSOLUTOS, como o resto do estado acima.
+        ...(owner === undefined ? {} : this.#worldStateOf(owner)),
+      },
+    };
+  }
 
+  /**
+   * O extrato JÁ está durável no Redis: a versão dele não precisa mais ser lembrada para a próxima
+   * tentativa, e o delta de gold que ele levou entra na base do personagem — `settleGoldDelta`, o canal
+   * ÚNICO de gold (ADR 0060 d.10c).
+   */
+  #settleLine({ claim, owner }: PendingLine): void {
     // Gravado: a versão deste extrato não precisa mais ser lembrada para a próxima tentativa.
     this.#claimedVersions.delete(claim);
 
@@ -5500,9 +6294,199 @@ export class SessionHost {
     // deixar o delta nele faz o ticket que acabou de liquidar o ledger reencontrar uma base
     // antiga mais uma variação que já entrou no banco. Incorporar o delta à base aqui conserva o
     // saldo disponível e deixa a próxima sessão começar do mesmo número que a linha durável.
+    //
+    // No mundo o personagem CONTINUA ganhando durante o `await` do lote, e o que ele ganhou depois de
+    // o extrato ser montado entra na base também. Não perde nada: o saldo é `gold + goldDelta`, o
+    // mesmo dos dois lados da conta, e o agregado desse ganho vai no extrato seguinte — que é o que o
+    // ledger credita. O delta existe para o saldo, não para o crédito.
     if (owner !== undefined && owner.goldDelta !== 0) {
       owner.settleGoldDelta();
     }
+  }
+
+  // --- o checkpoint do mundo (#837, OW-16, ADR 0060 decisão 10d) --------------------------------
+
+  /**
+   * Grava, agora, o lote de checkpoint de toda sessão `checkpointed` deste nó: o que o timer faz a
+   * cada `worldCheckpointMs` (60 s), e o que um teste ou uma operação chamam sem esperar o relógio.
+   *
+   * Um lote por sessão: o extrato de todo personagem SUJO — moveu, mudou de vida, mana ou condição,
+   * rendeu algo, ou mexeu em estado durável —, gravado num `MULTI` só. Quem está parado na PZ, sem
+   * ter rendido nada, não gera linha: a linha dele seria o mesmo estado que o banco já tem. Sem
+   * nenhum sujo não há `MULTI`, nem Redis.
+   *
+   * Roda no mundo com ou sem visualizador (invariante 3): o que decide quem entra no lote é o
+   * personagem e a sessão, nunca quem está olhando. Falha de uma sessão não derruba o laço — os
+   * extratos dela ficam em `unsaved` e vão na frente do próximo lote.
+   */
+  async checkpointWorlds(): Promise<void> {
+    // As saídas que falharam vão ANTES dos lotes (#840, OW-19): o extrato de quem sai que não pousou é o
+    // mais velho, e a saída que acaba aqui já leva o lote da sessão junto. Sem nenhuma — o caso comum —
+    // nada é esperado: o lote é montado na mesma volta síncrona de sempre, e o que o personagem ganha
+    // depois dela entra no seguinte (`world-checkpoint.test.ts`).
+    if (this.#failedDepartures.size > 0) await this.#retryDepartures();
+    for (const hosted of [...this.#sessions.values()]) {
+      const state = hosted.checkpoint;
+      if (state === null || hosted.session.ended !== null) continue;
+      // Um lote ainda em voo (o Redis está lento): o próximo ciclo pega o que sobrar. Empilhar lotes
+      // sobre ele só os faria disputar o mesmo conjunto de extratos.
+      if (state.queued > 0) continue;
+      try {
+        await this.#saveCheckpointBatch(hosted, [], true);
+      } catch (error) {
+        // Os extratos NÃO se perderam: ficam em `unsaved`, com o mesmo `seq` e a mesma versão.
+        this.#logger.error(
+          { err: error, sessionId: hosted.session.id },
+          'Failed to save a world checkpoint; keeping it for the next one',
+        );
+      }
+    }
+  }
+
+  /**
+   * Enfileira UM lote de checkpoint da sessão e devolve a promessa de ele estar durável. Os lotes de
+   * uma sessão rodam um de cada vez (`CheckpointState.tail`): o seguinte só é MONTADO depois que o
+   * anterior terminou, então o que falhou já voltou para `unsaved` e vai nele, e a saída de um
+   * personagem espera, por construção, o lote em voo que pode levar o crédito dele.
+   *
+   * `departures` são os extratos de quem acabou de sair (`leave`, ou `member-left`), já emitidos pelo
+   * `sim`. `everyone` diz se o lote leva também o extrato de todo outro personagem sujo — o timer e a
+   * saída sim; o retry de um extrato que ficou para trás, não.
+   */
+  #saveCheckpointBatch(
+    hosted: HostedSession, departures: readonly CheckpointDeparture[], everyone: boolean,
+  ): Promise<void> {
+    const state = hosted.checkpoint;
+    if (state === null) {
+      return Promise.reject(new Error(`session ${hosted.session.id} does not save by checkpoint`));
+    }
+    state.queued += 1;
+    const run = state.tail.then(() => this.#writeCheckpointBatch(hosted, state, departures, everyone));
+    state.tail = run.then(() => undefined, () => undefined);
+    return run.finally(() => { state.queued -= 1; });
+  }
+
+  async #writeCheckpointBatch(
+    hosted: HostedSession, state: CheckpointState, departures: readonly CheckpointDeparture[], everyone: boolean,
+  ): Promise<void> {
+    const receipts = this.#options.receipts;
+    // Sem a loja não há para onde gravar, e nada é tirado da sessão: `Session.checkpoint` zera o que
+    // o extrato leva, e fazê-lo sem gravar perderia o crédito. É o que `#saveReceipt` já faz.
+    if (receipts === undefined) return;
+    const lines = this.#buildCheckpoint(hosted, state, departures, everyone);
+    if (lines.length === 0) return;
+    try {
+      await receipts.saveBatch(lines.map((line) => line.receipt));
+    } catch (error) {
+      // O que `leave` e `checkpoint` emitiram já foi zerado na sessão: se estes extratos só existissem
+      // na pilha desta função, o crédito sumiria com ela.
+      state.unsaved = lines;
+      throw error;
+    }
+    // O gold depois de gravar, extrato a extrato — o canal único (ADR 0060 d.10c).
+    for (const line of lines) this.#settleLine(line);
+    this.#logger.debug({ sessionId: hosted.session.id, lines: lines.length }, 'World checkpoint saved');
+  }
+
+  /**
+   * Monta, SINCRONAMENTE, os extratos do lote — a ordem das chamadas é o que as versões duráveis
+   * preservam —: primeiro o que um lote anterior não conseguiu gravar (é o mais velho), depois o de
+   * quem acabou de sair, depois o checkpoint de cada personagem ainda presente que está sujo.
+   *
+   * O de quem sai é SEMPRE gravado (toda saída grava o checkpoint, ADR 0060 d.7); o dos que ficam, só
+   * se sujos. Cada extrato novo toma o `seq` da sessão e a versão do personagem, e o que ele leva já
+   * saiu dos agregados dele.
+   */
+  #buildCheckpoint(
+    hosted: HostedSession, state: CheckpointState, departures: readonly CheckpointDeparture[], everyone: boolean,
+  ): PendingLine[] {
+    const lines = state.unsaved;
+    state.unsaved = [];
+    for (const { characterId, receipt, departed } of departures) {
+      const accountId = this.#accountIdByCharacter.get(characterId);
+      if (accountId !== undefined) {
+        // O extrato de saída leva o estado absoluto INTEIRO: não sobra marca de `dirty` para um extrato
+        // de estado que ninguém grava.
+        hosted.dirty.delete(characterId);
+        lines.push(this.#receiptLine(characterId, hosted, receipt, accountId, departed));
+      }
+      // A marca sai DEPOIS da linha: o que o personagem carregava no último extrato é o que a linha
+      // compara com o que ele carrega agora (`#receiptLine`).
+      state.marks.delete(characterId);
+    }
+    if (!everyone) return lines;
+    const ruleset = hosted.session.ruleset;
+    for (const owner of hosted.session.participants) {
+      const accountId = this.#accountIdByCharacter.get(owner.id);
+      if (accountId === undefined) continue;
+      const position = worldPositionOf(ruleset, owner);
+      if (!this.#isDirty(hosted, state, owner, position)) continue;
+      // A âncora é a posição de AGORA, lida antes de o extrato ser montado — é ela que o login seguinte
+      // usa, e o dono da sessão é quem a escreve (invariante 9, `CharacterRuntime.worldPosition`).
+      if (position !== undefined) owner.worldPosition = position;
+      // O `sim` pede um motivo de `EndReason` porque devolve um `Receipt`; o checkpoint não termina
+      // nada, e o que vai para a linha é `'checkpoint'`.
+      const receipt = hosted.session.checkpoint(owner.id, 'manual-exit');
+      if (receipt === null) continue;
+      hosted.dirty.delete(owner.id);
+      lines.push(this.#receiptLine(owner.id, hosted, receipt, accountId, owner, 'checkpoint'));
+      // A marca nova DEPOIS da linha, que lê a antiga como o inventário do último extrato.
+      state.marks.set(owner.id, markOf(owner, position));
+    }
+    return lines;
+  }
+
+  /**
+   * O personagem mudou algo que o banco ainda não tem (#837, OW-16)? Moveu, mudou de vida, mana ou
+   * condição, rendeu algo (os agregados, uma instância vendida) ou mexeu em estado
+   * durável por uma intenção (`dirty`: equipar, comprar, escolher). Parado na PZ, sem render nada, não.
+   *
+   * Sem marca é sujo: o personagem que o lote nunca viu é gravado, e a marca nasce.
+   */
+  #isDirty(
+    hosted: HostedSession, state: CheckpointState, owner: CharacterRuntime, position: Point | undefined,
+  ): boolean {
+    if (hosted.dirty.has(owner.id)) return true;
+    const mark = state.marks.get(owner.id);
+    if (mark === undefined) return true;
+    // O gold NÃO entra aqui: no mundo todo gold anda pelo agregado E pelo `goldDelta` juntos
+    // (`#mirrorGold`), e o `goldDelta` só é liquidado depois de gravar — um lote que falhou o deixaria
+    // "sujo" para sempre, gravando um extrato vazio a cada minuto. O agregado é o sinal certo: zera
+    // quando o extrato é emitido, não quando pousa.
+    if (owner.removedInstances.length > 0) return true;
+    if (hasActivity(hosted.session.aggregatesOf(owner.id))) return true;
+    return !sameMark(mark, markOf(owner, position));
+  }
+
+  /**
+   * Grava em `CharacterRuntime.worldPosition` a coordenada absoluta onde o personagem está AGORA — a
+   * âncora que o extrato leva e o login seguinte usa (ADR 0060 d.3.b). É a leitura que tem de vir
+   * ANTES de o personagem ser movido: numa transição o destino é construído antes de a origem
+   * encerrar, e depois disso o `position` já é o de lá. Sessão que não é do mundo, ou ruleset que não
+   * sabe a posição absoluta, não faz nada. `decidedAt` — a posição em que o `sim` decidiu a saída
+   * (`departure-requested`, #840) — vale no lugar da de agora.
+   */
+  #anchorWorldPosition(hosted: HostedSession, characterId: string, decidedAt?: Point): void {
+    if (hosted.checkpoint === null) return;
+    const owner = hosted.session.participants.find((participant) => participant.id === characterId);
+    if (owner === undefined) return;
+    // `decidedAt` é a posição em que o `sim` decidiu a saída (#840): o personagem sem dono pode ter andado
+    // desde então, e a âncora do próximo login é onde ele estava quando saiu.
+    const position = decidedAt ?? worldPositionOf(hosted.session.ruleset, owner);
+    if (position !== undefined) owner.worldPosition = position;
+  }
+
+  /**
+   * O personagem chegou à sessão `checkpointed`: o estado com que chegou É o que a linha dele guarda
+   * (veio do ticket, ou de uma sessão que acabou de gravar o extrato dele), e é a base contra a qual o
+   * lote decide se ele mexeu em algo. Sem isto o primeiro lote gravaria todo mundo.
+   */
+  #markArrival(hosted: HostedSession, characterId: string): void {
+    const state = hosted.checkpoint;
+    if (state === null) return;
+    const owner = hosted.session.participants.find((participant) => participant.id === characterId);
+    if (owner === undefined) return;
+    state.marks.set(characterId, markOf(owner, worldPositionOf(hosted.session.ruleset, owner)));
   }
 
   /**
@@ -5515,9 +6499,11 @@ export class SessionHost {
    * - **com ele** (o mundo): `leave` emite o extrato de DELTA — só o que o personagem rendeu
    *   desde o último checkpoint —, e o hospedeiro o grava (`#leaveWithReceipt`).
    */
-  async #departFromSharedSession(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+  async #departFromSharedSession(
+    characterId: string, hosted: HostedSession, reason: EndReason, decidedAt?: Point,
+  ): Promise<void> {
     if (creditsAggregates(hosted.session.ruleset)) {
-      await this.#leaveWithReceipt(characterId, hosted, reason);
+      await this.#leaveWithReceipt(characterId, hosted, reason, false, decidedAt);
       return;
     }
     await this.#saveDurableReceipt(characterId, hosted, reason);
@@ -5535,11 +6521,25 @@ export class SessionHost {
    * Grava o dono que `leave` devolveu (`departed`): ele já não está em `participants`, como o
    * membro de uma party que sai por dentro do `sim` (#194). O `goldDelta` dele é liquidado por
    * `#persistReceipt` depois de gravar — o canal único de gold.
+   *
+   * **No mundo** (#837, OW-16) a saída grava a posição de agora como âncora ANTES de o personagem sair
+   * (`#anchorWorldPosition`) — o login seguinte volta ao tile de onde se saiu — e o extrato vai dentro
+   * do lote de checkpoint inteiro (`#saveReceipt`). `anchored` é de quem já a gravou: a transição o faz
+   * antes de construir o destino, e depois dele o `position` já é o de lá. `decidedAt` é a posição em
+   * que o `sim` decidiu a saída (#840, o `departure-requested`): vale no lugar da de agora.
    */
-  async #leaveWithReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+  async #leaveWithReceipt(
+    characterId: string, hosted: HostedSession, reason: EndReason, anchored = false, decidedAt?: Point,
+  ): Promise<void> {
+    if (!anchored) this.#anchorWorldPosition(hosted, characterId, decidedAt);
     const departure = hosted.session.leave(characterId, reason);
     if (departure === null) {
       await this.#awaitExitSaves(hosted, characterId);
+      // Um lote anterior pode ter falhado DEPOIS de `leave` tirar o personagem — e o extrato dele só
+      // existe em `unsaved`. Soltar o personagem (o `release` que vem logo depois) sem gravá-lo perderia
+      // o que ele rendeu, e a sessão do mundo pode nem sobrar para o timer tentar de novo. Só o que
+      // ficou para trás: o lote inteiro é do timer e da saída de quem de fato sai.
+      if (hosted.checkpoint !== null) await this.#saveCheckpointBatch(hosted, [], false);
       return;
     }
     // O que estava pendente de estado vai INTEIRO neste extrato (`#persistReceipt` leva todos os
@@ -5691,11 +6691,31 @@ export class SessionHost {
       // extrato de hunt, drenado aqui em vez de `#receiptFor` porque o shard nunca passa pelo
       // `Receipt` do `sim` (ADR 0023: a Cidade não gera extrato de progresso).
       ...(owner.removedInstances.length === 0 ? {} : { removedInstances: owner.drainRemovedInstances() }),
+      // O mundo e os vitais do dono (#836, OW-15), como `#persistReceipt`: o extrato de estado é o
+      // estado absoluto INTEIRO, e um que não os levasse apagaria, ao chegar na frente, o que só o
+      // de hunt anterior carregava.
+      ...this.#worldStateOf(owner),
     });
     hosted.dirty.delete(characterId);
     // Como `#persistReceipt`: incorpora o delta à base ANTES do próximo extrato reencontrar uma
     // base antiga mais uma variação já liquidada no ledger.
     if (owner.goldDelta !== 0) owner.settleGoldDelta();
+  }
+
+  /**
+   * O mundo e os vitais que o extrato leva do dono (#836, OW-15, ADR 0060 d.10.f): `{}` com a flag
+   * `OPEN_WORLD` desligada — o extrato de antes —, e o que `receiptWorldStateOf` decide com ela
+   * ligada. As condições saem como PRAZO RESTANTE pelo próprio personagem (`conditionsAsRemaining`):
+   * numa transição o destino é construído antes de a origem encerrar, e só ele sabe de qual relógio
+   * os instantes dele são.
+   *
+   * **A âncora (`owner.worldPosition`) é lida como está.** Quem a mantém é o dono da sessão — a saída
+   * do mundo e o checkpoint escrevem a coordenada de agora (`WorldRuleset#worldPositionOf`) ANTES de
+   * emitir o extrato (OW-16, OW-20) —, e a hunt idle a carrega sem mexer. Daqui o extrato só a leva.
+   */
+  #worldStateOf(owner: CharacterRuntime): WorldState {
+    if (this.#options.openWorld !== true) return {};
+    return receiptWorldStateOf(owner, owner.conditionsAsRemaining());
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
@@ -5765,6 +6785,7 @@ export class SessionHost {
    */
   #sessionState(hosted: HostedSession, characterId: string): S2CMessage {
     const { session } = hosted;
+    const identity = huntIdentityOf(session.ruleset);
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
     const self = this.#statsOf(this.#participantOf(hosted, characterId));
@@ -5830,8 +6851,8 @@ export class SessionHost {
       type: 'session-state',
       sessionType: session.ruleset.type,
       elapsedMs: session.aggregates.durationMs,
-      ...(session.ruleset.huntId === undefined ? {} : { huntId: session.ruleset.huntId }),
-      ...(session.ruleset.difficulty === undefined ? {} : { difficulty: session.ruleset.difficulty }),
+      ...(identity.huntId === undefined ? {} : { huntId: identity.huntId }),
+      ...(identity.difficulty === undefined ? {} : { difficulty: identity.difficulty }),
       self: {
         creatureId: this.#creatureId(hosted, characterId),
         characterId,
@@ -5974,6 +6995,8 @@ export class SessionHost {
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
     party?: PartyTicket,
+    entry?: TicketEntry,
+    inherited: Point | null = null,
   ): Promise<void> {
     const born: string[] = [];
     if (this.#adoptDurableVersion(characterId, initialCharacter)) born.push(characterId);
@@ -5984,7 +7007,7 @@ export class SessionHost {
       if (this.#adoptDurableVersion(member.characterId, member.initialCharacter)) born.push(member.characterId);
     }
     try {
-      await this.#createAndRegisterSession(characterId, initialCharacter, accountId, party);
+      await this.#createAndRegisterSession(characterId, initialCharacter, accountId, party, entry, inherited);
     } catch (error) {
       for (const id of born) this.#durableVersionByCharacter.delete(id);
       throw error;
@@ -5996,6 +7019,9 @@ export class SessionHost {
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
     party?: PartyTicket,
+    entry?: TicketEntry,
+    /** O tile de onde ele saiu do mundo para a party (`#leaveForParty`, OW-20), ou `null`. */
+    inherited: Point | null = null,
   ): Promise<void> {
     // A party (#195): a sessão pode JÁ estar hospedada — outro membro chegou primeiro — e aí
     // este só entra nela. Senão, o primeiro ticket cria a hunt com todos.
@@ -6011,10 +7037,49 @@ export class SessionHost {
     const resumed = (party === undefined && hostedParty === undefined)
       ? await this.#resume(characterId, accountId)
       : null;
+    // O login do repouso que cairia no MUNDO (OW-21): nem party, nem retomada de snapshot — o snapshot é a sessão
+    // em que o personagem estava, e tem precedência —, nem hunt direta. É o único que o teto alcança, e a fila é
+    // consultada ANTES da fábrica: quem chega com gente esperando entra no fim dela, mesmo que haja vaga.
+    const gate = this.#options.worldEntry;
+    const toWorld = gate !== undefined
+      && party === undefined && hostedParty === undefined && resumed === null && entry === undefined;
     const session = hostedParty?.session
       ?? resumed?.session
-      ?? this.#options.createSession(characterId, initialCharacter, party);
-    await this.#register(characterId, session, accountId);
+      ?? (toWorld
+        ? await this.#createInWorld(gate, characterId, initialCharacter)
+        : this.#options.createSession(characterId, initialCharacter, party, entry));
+    // Quem saiu do mundo para a party leva o tile de saída: o personagem da hunt nasceu do ticket (ou, numa party
+    // já largada, nasceu com o primeiro ticket), e a âncora é o único dado do mundo que a saída de agora tem de
+    // mais novo — o extrato do fim da hunt a grava (`#worldStateOf`). Vitais e condições NÃO: o personagem da
+    // party pode já estar caçando, e a vida dele é a da hunt.
+    //
+    // As âncoras são ANOTADAS aqui e escritas só depois do `#createLocal` (`#adoptAnchors`): a `Session` que esta
+    // chamada construiu pode ser descartada — dois tickets da mesma party que chegam juntos constroem uma cada,
+    // e o `#createLocal` guarda a primeira que hospeda —, e escrever na descartada perderia a âncora em silêncio.
+    const anchors = new Map<string, Point>();
+    if (inherited !== null) anchors.set(characterId, inherited);
+    try {
+      await this.#register(characterId, session, accountId);
+    } catch (error) {
+      // A fábrica JÁ pôs o personagem dentro da sessão compartilhada (o shard o admite ao criar), e o
+      // registro foi recusado — a reserva expirou, o diretório mudou de mãos. Sem tirá-lo, ele ficaria
+      // em `participants` de uma sessão que ninguém hospeda por ele: um tile bloqueado que nada explica e,
+      // no mundo, uma vaga do teto que nunca volta, numa sessão que não esvazia (OW-18). Registro
+      // recusado não pode deixar rastro, como o nome, as cores e o contador de versão.
+      if (resumed === null && hostedParty === undefined && leavesOnExit(session.ruleset)) {
+        session.leave(characterId, 'manual-exit');
+      }
+      throw error;
+    }
+    // Quem entrou numa hunt direta largou a fila do mundo (OW-21): a vaga que ele guardava não é mais dele, e
+    // sem isto ela ficaria ocupada até o prazo, com gente atrás esperando uma vaga que ninguém vai usar. Depois
+    // do registro, e sem poder falhar o handshake: o prazo da fila é a rede de segurança.
+    if (entry !== undefined && party === undefined) this.#leftWorld.delete(characterId);
+    if (gate !== undefined && entry !== undefined && party === undefined) {
+      await gate.leave(characterId).catch((error: unknown) => {
+        this.#logger.warn({ err: error, characterId }, 'Could not take the character off the world queue');
+      });
+    }
     // Uma sessão retomada com MAIS de um dono (#194, ADR 0027) traz os outros membros da party
     // dentro: eles precisam do lease e do mapa deste nó antes de qualquer coisa local existir,
     // senão o lease deles expira, o login seguinte resolve para outro nó, e a cópia do
@@ -6037,9 +7102,10 @@ export class SessionHost {
       // (o nó está vivo — ver `#leaveForParty`).
       const existingOther = this.sessionFor(other.id);
       if (existingOther !== undefined && existingOther.id !== session.id) {
-        await this.#leaveForParty(other.id, existingOther, {
+        const anchor = await this.#leaveForParty(other.id, existingOther, {
           sessionId: session.id, nodeId: this.#options.nodeId, type: session.ruleset.type,
         });
+        if (anchor !== null) anchors.set(other.id, anchor);
       }
       await this.#register(other.id, session, otherAccount);
       this.#accountIdByCharacter.set(other.id, otherAccount);
@@ -6055,6 +7121,7 @@ export class SessionHost {
     }
     this.#premiumByCharacter.set(characterId, initialCharacter?.premium ?? false);
     this.#createLocal(characterId, session, accountId);
+    this.#adoptAnchors(session.id, anchors);
     for (const other of others) {
       // A Cidade dele já foi deixada no loop acima, ANTES do `#register` — aqui só falta o
       // mapa local, que aquele loop não mexeu de propósito (a ordem de `#createLocal` importa
@@ -6077,6 +7144,58 @@ export class SessionHost {
         'Session resumed from snapshot',
       );
     }
+  }
+
+  /**
+   * Escreve a âncora de quem saiu do mundo para a party no personagem da sessão que de fato ficou hospedada
+   * (#841, OW-20). Resolve pelo id da sessão, DEPOIS do `#createLocal`: se outro ticket da mesma party chegou
+   * junto e hospedou a sua `Session` primeiro, a que este ticket construiu foi descartada, e o personagem que
+   * vale — o que o fim da hunt vai gravar — é o da sobrevivente. Só escreve o que há: um `leaveForParty` que
+   * não achou o dono (o outro ticket já o tirara do mundo) devolve `null`, e esse nunca sobrescreve a âncora
+   * que o outro ticket deixou.
+   */
+  #adoptAnchors(sessionId: string, anchors: ReadonlyMap<string, Point>): void {
+    if (anchors.size === 0) return;
+    const hosted = this.#sessions.get(sessionId);
+    if (hosted === undefined) return;
+    for (const participant of hosted.session.participants) {
+      const anchor = anchors.get(participant.id);
+      if (anchor !== undefined) participant.worldPosition = anchor;
+    }
+  }
+
+  /**
+   * O login do repouso no mundo, com a fila na frente (OW-21, ADR 0060 d.2b): pergunta à porta se cabe e, só
+   * então, cria a sessão. A fábrica ainda pode recusar — `WorldFullError` — numa corrida: dois logins veem a
+   * mesma vaga, a fila admite os dois e o segundo a encontra ocupada. Aí o personagem volta para a fila, que
+   * agora o recusa na posição de verdade; e, se uma vaga abriu nesse meio tempo, tenta de novo. Poucas vezes,
+   * porque a corrida é entre dois logins simultâneos e cada volta perde uma vaga para outro.
+   *
+   * `WorldFullRefusal` é o que sai quando não cabe: `prepare` a converte em `refused: 'world-full'`.
+   */
+  async #createInWorld(
+    gate: WorldEntryGate, characterId: string, initialCharacter: InitialCharacter | undefined,
+  ): Promise<Session> {
+    const premium = initialCharacter?.premium ?? false;
+    for (let attempt = 1; ; attempt += 1) {
+      const verdict = await gate.login(characterId, premium);
+      if (!verdict.admitted) throw new WorldFullRefusal(verdict.position, verdict.retryAfterMs);
+      try {
+        return this.#options.createSession(characterId, initialCharacter);
+      } catch (error) {
+        if (!(error instanceof WorldFullError) || attempt >= WORLD_ENTRY_ATTEMPTS) throw error;
+      }
+    }
+  }
+
+  /**
+   * A hunt idle está ao alcance de quem não coube no mundo? (`huntAvailable` do `world-full`, ADR 0060 d.6b.)
+   * Sim enquanto o catálogo tiver hunt: a hunt idle não é o mundo, não tem teto e não passa pela fila. Um nó
+   * montado sem catálogo (o host de teste) não tem o que dizer, e diz que sim.
+   */
+  get offersHunts(): boolean {
+    const catalogue = this.#options.catalogue;
+    return catalogue === undefined || catalogue().hunts.length > 0;
   }
 
   /**
@@ -6157,6 +7276,8 @@ export class SessionHost {
       await settleSnapshotAsReceipt(snapshot, {
         characterId, accountId, receipts, nowMs: this.#wallNow(),
         ...(durableVersion === undefined ? {} : { durableVersion }),
+        // O mundo e os vitais do dono também (#836, OW-15), com a mesma flag do extrato normal.
+        ...(this.#options.openWorld === true ? { openWorld: true } : {}),
       });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
@@ -6191,6 +7312,7 @@ export class SessionHost {
       exitSaves: new Map(),
       departures: [],
       dirty: new Set(),
+      checkpoint: checkpointsProgress(session.ruleset) ? new CheckpointState() : null,
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
       sentTarget: new Map(),
@@ -6224,6 +7346,13 @@ export class SessionHost {
     // Vale também para o PRIMEIRO a chegar, que não avisa ninguém: é ele entrando no índice de
     // células, e sem isso quem chegasse depois não teria como encontrá-lo.
     this.#announceArrival(hosted, characterId);
+    this.#markArrival(hosted, characterId);
+    // Chegou ao mundo SEM ninguém olhando (#840, OW-19): o ticket foi consumido e o websocket ainda não
+    // conectou — ou nunca vai. É a chegada que o ADR 0060 d.7 manda tratar como a queda de quem já
+    // estava: `presence-lost` na hora. O primeiro visualizador a devolve (`attach`); sem ele, o
+    // personagem tenta sair aos 60 s. Sem isto, o login cujo socket nunca abre ficaria parado e vulnerável
+    // no mundo para sempre, porque a Cidade tem o recolhimento por repouso e o mundo não.
+    if (this.#watchers(hosted, characterId) === 0) this.#losePresence(hosted, characterId);
 
     this.#logger.info(
       { characterId, sessionId: session.id, type: session.ruleset.type },

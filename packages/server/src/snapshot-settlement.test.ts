@@ -262,6 +262,67 @@ describe('settleSnapshotAsReceipt (#527)', () => {
     }]);
   });
 
+  describe('o mundo e os vitais do dono (#836, OW-15, ADR 0060 d.10.f)', () => {
+    // A sessão caiu a 10 HP, envenenada, com a âncora do mundo: o extrato do snapshot leva o que o de
+    // fim de sessão levaria. As condições do snapshot estão no relógio LÓGICO da sessão (12 345 ms,
+    // `baseSnapshot.logicalNowMs`) e saem como PRAZO RESTANTE.
+    const poison = { key: 'poison', expiresAtMs: 16_345, nextTickAtMs: 13_345, tick: { amount: 3, intervalMs: 1_000, kind: 'damage' as const } };
+    const haste = { key: 'haste', expiresAtMs: 12_000, speedPercent: 30 };
+    const withWorld = (over: Record<string, unknown> = {}): SessionSnapshot => ({
+      ...baseSnapshot,
+      participants: [{
+        ...baseSnapshot.participants[0]!, health: 10, mana: 3, townId: 'thais',
+        worldPosition: { x: 32369, y: 32241, z: 7 }, conditions: [poison, haste], ...over,
+      }],
+    });
+
+    it('COM a flag leva a âncora, a cidade, a vida, a mana e as condições como prazo restante', async () => {
+      const { receipts, saved } = fakeReceipts();
+      await settleSnapshotAsReceipt(withWorld(), { characterId: 'a', accountId: 'acc-a', receipts, openWorld: true });
+      expect(saved[0]).toMatchObject({
+        worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 3,
+        // A haste já tinha vencido (12 000 < 12 345): sai. O veneno faltava 4 000 ms, com o próximo
+        // tique em 1 000 ms.
+        conditions: [{ ...poison, expiresAtMs: 4_000, nextTickAtMs: 1_000 }],
+      });
+    });
+
+    it('SEM a flag — o default — o extrato é o de antes: nenhum campo novo', async () => {
+      const { receipts, saved } = fakeReceipts();
+      await settleSnapshotAsReceipt(withWorld(), { characterId: 'a', accountId: 'acc-a', receipts });
+      await settleSnapshotAsReceipt(withWorld(), { characterId: 'a', accountId: 'acc-a', receipts, openWorld: false });
+      for (const receipt of saved) {
+        for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+          expect(receipt).not.toHaveProperty(field);
+        }
+      }
+    });
+
+    it('sem cidade no dono — o ticket não trouxe o mundo — o extrato não leva NADA, mesmo com a flag', async () => {
+      // Gravar `worldPosition: null` apagaria a posição da linha, e a vida cheia desfaria a dela.
+      const { receipts, saved } = fakeReceipts();
+      const snapshot = withWorld({ townId: undefined });
+      await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts, openWorld: true });
+      for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+        expect(saved[0]).not.toHaveProperty(field);
+      }
+    });
+
+    it('quem morreu leva a vida e a mana cheias, a posição `null` e nenhuma condição', async () => {
+      const { receipts, saved } = fakeReceipts();
+      const snapshot = withWorld({ alive: false, health: 0, mana: 0 });
+      await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts, openWorld: true });
+      expect(saved[0]).toMatchObject({ worldPosition: null, health: 100, mana: 20, conditions: [] });
+    });
+
+    it('um dono sem âncora nem condição leva a posição `null` e `conditions: []` — o templo, sem nada', async () => {
+      const { receipts, saved } = fakeReceipts();
+      const snapshot = withWorld({ worldPosition: undefined, conditions: undefined });
+      await settleSnapshotAsReceipt(snapshot, { characterId: 'a', accountId: 'acc-a', receipts, openWorld: true });
+      expect(saved[0]).toMatchObject({ worldPosition: null, health: 10, conditions: [] });
+    });
+  });
+
   it('propagates a failed save instead of swallowing it, so the caller keeps the snapshot for retry', async () => {
     const receipts = {
       save: async () => { throw new Error('redis down'); },
