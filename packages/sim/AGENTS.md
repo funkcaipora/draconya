@@ -443,6 +443,27 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   atrás dele a hunt inteira, e foi o primeiro defeito da party. O snapshot leva `runners` por
   id E os campos soltos do primeiro (um nó anterior continua lendo o solo); `restore` guarda o
   que leu e `onResume` casa com os participantes, que só existem depois.
+- **O que supõe "sessão = party" mora na `SessionTopology`, e a `instanceTopology` é o código de
+  antes da costura** (`rulesets/topology.ts`, OW-12, ADR 0060 d.4). Crédito do abate, elegibilidade,
+  destinatário do loot, líder, fim quando vazia, morte, saída concluída, spawn e regras de saída
+  com o primeiro corredor, colocação na entrada, rota e stamina por tempo são perguntas dela; o
+  `HuntRuleset` a recebe em `HuntRulesetOptions.topology` (ausente é a de instância) e **não
+  decide nenhuma das onze por conta própria**. Cinco armadilhas. (1) **A instância é byte a byte a
+  de antes**: mexer numa condição de `instanceTopology` é mexer na hunt de todo mundo, e o portão são
+  as sequências do FUN-63, 1 Hz = 10 Hz e o `pnpm bench:hunts` — `lootRecipient` consome
+  `session.rng` e o número e a ordem dos sorteios são contrato. (2) **Um `session.participants`
+  novo no `HuntRuleset` precisa de classe**: "criaturas presentes" (busca por id, ocupação, alvo de
+  monstro, área de magia: fica) ou "roster da party" (vai para a topologia, ou fica guardado por
+  `#party`/`#bag` e dito). `docs/session-topology-audit.md` tem os 135 usos e as quatro classes, e
+  o que ficou aberto com dono — a XP pelo roster e o Bosstiary (OW-28), as magias e a cura de party,
+  o medo e o nível de hazard da party (OW-43). (3) **A topologia é um valor**: sem estado, congelada, compartilhada por toda
+  sessão que a usa; o que muda mora no ruleset ou na `Session`. (4) **Ela NÃO vai no snapshot**:
+  `huntRulesetFromSnapshot` e `changeDifficulty` montam o default, o que é certo para a instância
+  (a sessão de mundo é `checkpointed` e não tem snapshot, ADR 0060 d.10a). (5) **`TopologyHost`
+  existe porque a decisão é da topologia e o mecanismo é do ruleset**: `depart` emite o extrato de
+  quem sai e roda a cascata pendente, e isso mexe em estado privado dele. A topologia nunca chama
+  `session.leave` por conta própria numa saída decidida pelo ruleset — o `member-left` e a ordem
+  dos extratos (#193) se perderiam.
 - **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
   acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile

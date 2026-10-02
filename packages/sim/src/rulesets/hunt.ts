@@ -143,7 +143,7 @@ import {
   containerRulesFor, equipmentAbsorb, equipmentCleavePercent, equipmentReflect, immunitiesOnly,
 } from '../inventory.js';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, relocate, swapPlaces,
+  TileOccupancy, canOccupy, move, movementDuration, place, relocate, swapPlaces,
   tilesAround,
 } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
@@ -151,7 +151,7 @@ import type { RouteState } from '../route/walker.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
-import { drainStamina, isExhausted } from '../stamina.js';
+import { drainStamina } from '../stamina.js';
 import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
 import { findRelation, levitateDestination, ropeDestination } from '../utility-spells.js';
 import { blessingCount } from '../blessings.js';
@@ -161,6 +161,8 @@ import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
 import type { Aggregates, EndReason, Receipt, Ruleset, SessionSnapshot } from '../session.js';
+import { instanceTopology } from './topology.js';
+import type { KillContext, SessionTopology, TopologyHost } from './topology.js';
 
 /**
  * Os eventos da hunt. Uma cadência, um tipo — e cada um reagenda a si mesmo.
@@ -958,9 +960,6 @@ const MANUAL_WALK_HOLD_MS = 10_000;
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
-/** Até onde o segundo participante procura tile livre ao entrar (#203): o anel de `placeNear`. */
-const ENTRY_RADIUS = 3;
-
 function targetingOf(runner: Runner | undefined): Targeting {
   return runner?.bot?.targeting ?? DEFAULT_TARGETING;
 }
@@ -1268,6 +1267,14 @@ export interface HuntRulesetOptions {
    * efeito aplica.
    */
   readonly boostedMonsterId?: string;
+  /**
+   * O que hoje supõe "sessão = party" (OW-12, ADR 0060 d.4): crédito do abate, elegibilidade,
+   * destinatário do loot, líder, fim da sessão, morte, saída, spawn inicial, colocação na
+   * entrada, rota, regras de saída e queima de stamina por tempo. Ausente é `instanceTopology`,
+   * o código de sempre — a hunt, solo e party. Não entra no snapshot: é identidade de QUEM
+   * monta o ruleset, como o `huntId`, e a sessão retomada pelo mesmo caminho volta com a mesma.
+   */
+  readonly topology?: SessionTopology;
 }
 
 /**
@@ -1934,6 +1941,18 @@ export class HuntRuleset implements Ruleset {
   readonly type = 'hunt' as const;
 
   readonly #options: HuntRulesetOptions;
+  /**
+   * O que supõe "sessão = party" (OW-12): ver `SessionTopology`. Sempre presente — o default é a
+   * `instanceTopology`, o código de antes da costura —, e fixo pela vida do ruleset.
+   */
+  readonly #topology: SessionTopology;
+  /**
+   * O que a topologia pode pedir ao ruleset: sair com extrato. Montado UMA vez — as duas portas
+   * de saída (morte e saída concluída) passam por ele, e um objeto por morte seria alocação à toa.
+   */
+  readonly #topologyHost: TopologyHost = {
+    depart: (session, characterId, reason) => { this.#depart(session, characterId, reason); },
+  };
   /** Um `Runner` por participante presente (#203). Ver `Runner`. */
   readonly #runners = new Map<string, Runner>();
   /** A party (#191): modo e líder. `undefined` é solo. Vem das opções ou do snapshot. */
@@ -2029,7 +2048,7 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #tileOverrides: TileOverrides;
 
-  /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
+  /** Até que instante lógico o tempo de sessão já foi cobrado (stamina e comida). Ver `#chargeElapsedTime`. */
   #staminaAnchorMs = 0;
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
@@ -2125,6 +2144,7 @@ export class HuntRuleset implements Ruleset {
     // (#583, ADR 0039 — fim do pull por dificuldade): o campo é aceito e IGNORADO, guardado só
     // para o snapshot/`changeDifficulty` continuarem redondos enquanto o protocolo o mandar.
     this.#options = options;
+    this.#topology = options.topology ?? instanceTopology;
     this.#party = normalizePartyOptions(options.partyOptions);
     if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
     this.#injectedExitRules = options.exitRules ?? [];
@@ -3133,18 +3153,13 @@ export class HuntRuleset implements Ruleset {
     // As condições que o personagem TRAZ de outra sessão (#812): `Session.enter` já as traduziu
     // para o relógio desta, mas o vencimento e o próximo tique moravam na fila da anterior.
     this.#armConditions(session, character);
-    // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
-    // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
-    const at = runner.walker.current;
-    const refused = this.#runners.size === 1
-      ? place(this.#world, character, at)
-      : placeNear(this.#world, character, at, ENTRY_RADIUS);
-    if (refused !== null) {
-      throw new Error(
-        `não dá para entrar na hunt "${this.#options.hunt.id}": o primeiro tile da rota ` +
-          `(${at.x},${at.y}) foi recusado — ${refused}`,
-      );
-    }
+    // A topologia decide ONDE (OW-12): na instância, o primeiro entra NO tile inicial da rota e o
+    // segundo em diante no livre mais próximo — tile é exclusivo, e o `rejoinNearest` do primeiro
+    // passo o põe na rota (#203).
+    this.#topology.placeOnEnter({
+      world: this.#world, character, routeStart: runner.walker.current,
+      runnerCount: this.#runners.size, huntId: this.#options.hunt.id,
+    });
     this.#occupancyStale = false;
     session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
 
@@ -3179,13 +3194,15 @@ export class HuntRuleset implements Ruleset {
     // uma morte (`#onMonsterDied` agenda `SPAWN`, o evento gated). Sem essa distinção, um
     // monstro `blockable` nunca nasceria numa hunt pequena onde o personagem já entra à vista
     // do ponto, e um não bloqueável levaria 4200 ms mesmo na primeira vez.
-    if (this.#runners.size === 1) {
+    if (this.#topology.startsInstanceSchedules(this.#runners.size)) {
       for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
         session.scheduleIn(SPAWN_INITIAL, 0, { priority: EventPriority.Spawn, subject: String(slot) });
       }
-      session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
-        priority: EventPriority.Housekeeping,
-      });
+      if (this.#topology.runsExitRules) {
+        session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
+          priority: EventPriority.Housekeeping,
+        });
+      }
     }
     // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
     // nada, e os eventos por grupo só existem para quem de fato configurou.
@@ -3270,20 +3287,15 @@ export class HuntRuleset implements Ruleset {
   #flushLoss(session: Session, reason: 'death' | 'exit-rule' | 'manual-exit'): void {
     if (!this.#lossPending) return;
     this.#lossPending = false;
-    const cascaded = this.#onMemberLost(session);
+    // A cascata é uma regra de saída do bot (`party-member-lost`): vale onde as regras valem.
+    const cascaded = this.#topology.runsExitRules ? this.#onMemberLost(session) : 0;
     if (session.participants.length === 0) {
-      // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele.
-      if (session.ended === null) session.end(cascaded > 0 ? 'exit-rule' : reason);
+      // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele. O que se faz
+      // com uma sessão vazia é da topologia: a instância acaba, o mundo nunca.
+      this.#topology.onEmpty(session, cascaded > 0 ? 'exit-rule' : reason);
       return;
     }
-    const party = this.#party;
-    if (party !== undefined && !session.participants.some((p) => p.id === party.leaderId)) {
-      const next = session.participants[0];
-      if (next !== undefined) {
-        party.leaderId = next.id;
-        session.record('leader-changed', next.id);
-      }
-    }
+    this.#topology.onLeaderGone(session, this.#party);
     this.#emitPartyState(session);
     // A saída pode ter completado o "sim de todos" (#432): quem ficou e já tinha aprovado
     // encerra agora, depois do extrato de quem saiu.
@@ -3433,7 +3445,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
     // Saída pelo socket (#193): a cascata roda no primeiro evento depois dela.
     this.#flushLoss(session, 'manual-exit');
-    this.#burnStamina(session);
+    this.#chargeElapsedTime(session);
 
     switch (event.kind) {
       case PLAYER_STEP: return this.#onPlayerStep(session, event.subject);
@@ -3480,21 +3492,31 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Stamina cai 1:1 com o tempo de hunt, e zerar NÃO encerra nada (§10.2). É a regra que mais
-   * parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
+   * Cobra o TEMPO de sessão decorrido: a stamina cai 1:1 com o tempo de hunt, e a comida
+   * (`fedMs`, #726) drena pelo mesmo `dtMs`. Zerar a stamina NÃO encerra nada (§10.2) — é a regra
+   * que mais parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
    * continua caçando, matando e apanhando — só para de ganhar XP.
    *
    * Cobrada pelo tempo LÓGICO decorrido desde a última cobrança, e não por um evento próprio:
    * é uma grandeza contínua, e um evento periódico daria a ela uma granularidade que ela não
    * tem. Assim a conta é exata em qualquer cadência, e o custo é uma subtração.
+   *
+   * **São duas grandezas com regras diferentes, numa âncora só.** A stamina queima por tempo só
+   * onde `topology.burnsStaminaByTime` diz (a instância; o mundo a queima ao ganhar XP, OW-46), e
+   * também só então vale o aviso `stamina-exhausted`. A comida é a `CONDITION_REGENERATION` do
+   * Canary, que conta o tempo com o jogador no jogo em qualquer modo — por isso drena SEMPRE,
+   * inclusive onde a chave é `false`: uma refeição que nunca acaba seria bug do mundo, e o
+   * `fedMs` é persistido. A âncora avança nos dois casos; um segundo acumulador para a mesma
+   * grandeza contínua é o que `food.ts` explica que não vale a pena.
    */
-  #burnStamina(session: Session): void {
+  #chargeElapsedTime(session: Session): void {
     const dtMs = session.nowMs - this.#staminaAnchorMs;
     if (dtMs <= 0) return;
     this.#staminaAnchorMs = session.nowMs;
+    const burnsStamina = this.#topology.burnsStaminaByTime;
     for (const character of session.participants) {
       if (!character.alive) continue;
-      const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      const exhausted = burnsStamina && drainStamina(character, dtMs, this.#options.stamina);
       // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
       // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
       // calculado aqui evita um segundo acumulador para a mesma grandeza contínua.
@@ -3648,14 +3670,11 @@ export class HuntRuleset implements Ruleset {
     });
     if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId);
 
-    // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
-    // (#193, ADR 0027 decisão 7) o morto SAI com o próprio extrato — penalidade dentro, e a
-    // cota do settlement (`onLeave`) — e a sessão continua para os outros.
-    if (session.participants.length <= 1) {
-      session.end('death');
-      return;
-    }
-    this.#depart(session, character.id, 'death');
+    // O que a morte faz com a SESSÃO é da topologia (OW-12). Na instância: solo — ou party que
+    // virou solo — encerra (§26.1), como sempre; em party (#193, ADR 0027 decisão 7) o morto SAI
+    // com o próprio extrato — penalidade dentro, e a cota do settlement (`onLeave`) — e a sessão
+    // continua para os outros.
+    this.#topology.onCharacterDied(session, character, this.#topologyHost);
   }
 
   /**
@@ -4992,6 +5011,13 @@ export class HuntRuleset implements Ruleset {
     if (posture !== false) {
       this.#armPlayerAttack(session, character);
       return posture;
+    }
+
+    // Sem rota (a topologia decide: o mundo não a tem, ADR 0060 d.4), o personagem fez tudo o que
+    // podia — combate, andar-até, follow e postura — e, sem alvo, fica onde está.
+    if (!this.#topology.runsRouteWalker) {
+      this.#armPlayerAttack(session, character);
+      return null;
     }
 
     // Ninguém ao alcance: anda. Com postura `stand` o personagem NÃO persegue — ele percorre a
@@ -10965,11 +10991,9 @@ const slots = bot.groups.get(group);
       return;
     }
     runner.pendingExit = null;
-    if (session.participants.length <= 1) {
-      if (session.ended === null) session.end(reason);
-      return;
-    }
-    this.#depart(session, characterId, reason);
+    // Solo encerra a sessão com o motivo dele; em party ele sai com o extrato e ela continua — e
+    // no mundo nenhum dos dois: a decisão é da topologia (OW-12).
+    this.#topology.onExitFinished(session, characterId, reason, this.#topologyHost);
   }
 
   // --- combate ------------------------------------------------------------------------------
@@ -11394,12 +11418,13 @@ const slots = bot.groups.get(group);
     if (!Number.isFinite(points)) points = zone.minLevel;
 
     if (zone.levelUpMonsterId !== undefined && dead.monsterId === zone.levelUpMonsterId) {
-      const solo = session.participants.length === 1;
+      // Quem decide se o detalhe nomeia o dono é a topologia (`namesOwnerInEvents`, OW-12).
+      const namesOwner = this.#topology.namesOwnerInEvents(session);
       for (const damager of damagers) {
         if (damager.hazard.maxLevelOf(zoneId, zone) !== points) continue;
         if (!damager.hazard.levelUp(zoneId, zone)) continue;
         const detail = `${zoneId}/${String(damager.hazard.maxLevelOf(zoneId, zone))}`;
-        session.record('hazard-level-up', solo ? detail : `${damager.id}/${detail}`);
+        session.record('hazard-level-up', namesOwner ? `${damager.id}/${detail}` : detail);
       }
     }
 
@@ -12232,21 +12257,18 @@ const slots = bot.groups.get(group);
     const monsterDamage = this.#hasMonsterDamage(credit);
     const killer = monsterDamage ? this.#corpseOwnerOf(session, credit) : lastHitter;
     const payLoot = !isSummon && rewarded && (!monsterDamage || killer !== null);
-    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
-    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
-    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
-    if (rewarded) for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
+    // Quem leva a CONTAGEM do abate, quem pode RECEBER a recompensa e quem leva o loot são da
+    // topologia (OW-12). Na instância o abate conta SEMPRE, para todo presente: "matei N" é a
+    // pergunta do analisador de cada um (#190, DT-01), e a party matou junto. Em solo é o de
+    // sempre — conta mesmo com a fonte sumida ou o dono morto; o extrato mentiria se dissesse que
+    // não.
+    const kill: KillContext = { lastHitter, diedToMonster, credit };
+    if (rewarded) this.#topology.creditKill(session, kill);
 
-    // Em solo, a XP é de quem está presente — o matador, ou (morte por monstro com dano dele
-    // antes) o único participante, que bateu; em party, dos vivos com stamina, e `#xpShares` decide
-    // a cota de cada um.
-    const solo = session.participants.length === 1;
-    const payee = diedToMonster ? session.participants[0] ?? null : lastHitter;
-    const eligible = !rewarded
-      ? NO_MEMBERS
-      : solo
-        ? (payee !== null && payee.alive && !isExhausted(payee) ? [payee] : NO_MEMBERS)
-        : session.participants.filter((p) => p.alive && !isExhausted(p));
+    // Na instância, a XP é, em solo, de quem está presente — o matador, ou (morte por monstro com
+    // dano dele antes) o único participante, que bateu; em party, dos vivos com stamina, e
+    // `#xpShares` decide a cota de cada um.
+    const eligible = !rewarded ? NO_MEMBERS : this.#topology.rewardEligible(session, kill);
     // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
@@ -12647,12 +12669,12 @@ const slots = bot.groups.get(group);
   ): void {
     const boss = definition.bosstiary;
     if (!definition.boss || boss === undefined) return;
-    const solo = session.participants.length === 1;
+    const namesOwner = this.#topology.namesOwnerInEvents(session);
     for (const member of killers) {
       const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
       if (recorded.levelReached !== null) {
         const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
-        session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
+        session.record('bosstiary-level', namesOwner ? `${member.id}/${detail}` : detail);
       }
     }
   }
@@ -12684,7 +12706,7 @@ const slots = bot.groups.get(group);
       ? definition.experience * 2
       : definition.experience;
     const shares = this.#xpShares(session, eligible, baseExperience, credit);
-    const solo = session.participants.length === 1;
+    const namesOwner = this.#topology.namesOwnerInEvents(session);
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
       // Aditivo por decisão (#563): Bestiário + faixa de level + os que vierem (VIP, evento —
@@ -12712,9 +12734,10 @@ const slots = bot.groups.get(group);
       this.#gainSoulFromExperience(session, member, experience, levelBeforeGain);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
       // hunt de oito horas que o jogador quer ver ao voltar (§16.2). Em party o detalhe diz
-      // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo.
+      // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo. Quem
+      // decide se nomeia o dono é a topologia (`namesOwnerInEvents`, OW-12).
       if (change !== null) {
-        session.record('level-up', solo ? String(change.to) : `${member.id}/${String(change.to)}`);
+        session.record('level-up', namesOwner ? `${member.id}/${String(change.to)}` : String(change.to));
         // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
         // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
         // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
@@ -12736,7 +12759,7 @@ const slots = bot.groups.get(group);
         const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
         if (reached.milestoneReached !== null) {
           const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
-          session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+          session.record('bestiary-milestone', namesOwner ? `${member.id}/${detail}` : detail);
         }
       }
     }
@@ -12782,10 +12805,13 @@ const slots = bot.groups.get(group);
     };
   }
 
-  /** O líder presente, ou o mais antigo (#192): é dele a caixa do excedente e o invendável. */
+  /**
+   * O líder presente (#192): é dele a caixa do excedente e o invendável. Quem decide é a
+   * topologia (`leaderOf`, OW-12) — na instância, o líder da party ou o mais antigo; o mundo não
+   * tem líder.
+   */
   #leader(session: Session): CharacterRuntime | undefined {
-    const wanted = this.#party?.leaderId;
-    return session.participants.find((p) => p.id === wanted) ?? session.participants[0];
+    return this.#topology.leaderOf(session, this.#party?.leaderId);
   }
 
   /**
@@ -12986,7 +13012,8 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Quem recebe o loot de um abate (#191, ADR 0027 decisão 5).
+   * Quem recebe o loot de um abate (#191, ADR 0027 decisão 5). A regra é da topologia
+   * (`SessionTopology.lootRecipient`, OW-12), e a da instância é a de sempre:
    *
    * Solo — ou party que virou solo —: o matador, e NENHUM sorteio. Um `rng` a mais aqui
    * mudaria a sequência de loot de toda hunt existente (FUN-63), e o teste que grava a
@@ -12997,12 +13024,7 @@ const slots = bot.groups.get(group);
   #lootRecipient(
     session: Session, killer: CharacterRuntime | null, eligible: readonly CharacterRuntime[],
   ): CharacterRuntime | null {
-    if (this.#party === undefined || session.participants.length < 2) {
-      return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
-    }
-    if (this.#party.splitLoot) return null;
-    if (eligible.length === 0) return null;
-    return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
+    return this.#topology.lootRecipient(session, killer, eligible, this.#party);
   }
 
   /**
@@ -14401,6 +14423,8 @@ export interface HuntSessionOptions {
   readonly actuator?: BotActuator;
   /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
   readonly boostedMonsterId?: string;
+  /** O que supõe "sessão = party" (OW-12). Ver `HuntRulesetOptions.topology`. */
+  readonly topology?: SessionTopology;
 }
 
 export class HuntUnavailableError extends Error {
@@ -14445,6 +14469,8 @@ export interface HuntRulesetExtras {
   readonly actuator?: BotActuator;
   /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
   readonly boostedMonsterId?: string;
+  /** O que supõe "sessão = party" (OW-12). Ver `HuntRulesetOptions.topology`. */
+  readonly topology?: SessionTopology;
 }
 
 /**
@@ -14466,7 +14492,9 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator, boostedMonsterId } = extras;
+  const {
+    premium, botConfig, botConfigs, partyOptions, exitRules, actuator, boostedMonsterId, topology,
+  } = extras;
   // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
   // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
   // de quem entrasse pela outra. Já aconteceu.
@@ -14515,6 +14543,7 @@ export function createHuntRuleset(
     ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
+    ...(topology === undefined ? {} : { topology }),
     // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
     // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
     botCooldownMs: content.bot.categoryCooldownMs,
@@ -14540,6 +14569,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.partyOptions === undefined ? {} : { partyOptions: options.partyOptions }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
       ...(options.boostedMonsterId === undefined ? {} : { boostedMonsterId: options.boostedMonsterId }),
+      ...(options.topology === undefined ? {} : { topology: options.topology }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
     // que torna "por que eu morri" uma pergunta investigável.
