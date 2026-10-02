@@ -45,7 +45,9 @@ services:
       THINGS_VERSION: ${THINGS_VERSION:-1533}
       # O mundo aberto do Tibia sem PvP (ADR 0060, docs/open-world-plan.md): DESLIGADO por padrão —
       # com `0` o jogo é o de hoje. Ligar (`OPEN_WORLD=1`) vale para os três papéis de uma vez, e
-      # este compose os roda juntos; ver docs/runtime-configuration.md.
+      # este compose os roda juntos; ver docs/runtime-configuration.md. Ligado, o `game` se recusa a subir
+      # se há outro `game` vivo (OW-18): um deploy que sobe o contêiner novo com o antigo ainda batendo
+      # (NODE_ID é o hostname, que muda a cada contêiner) recusa até o batimento antigo expirar, em até 30 s.
       OPEN_WORLD: ${OPEN_WORLD:-0}
       # De quanto em quanto tempo (ms) o `game` grava o checkpoint do mundo — o lote com o extrato de todo
       # personagem sujo, num `MULTI` só (ADR 0060 d.10d). Só vale com `OPEN_WORLD=1`; ver

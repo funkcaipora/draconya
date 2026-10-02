@@ -55,7 +55,8 @@ hunt (ADR 0035 d.1).
   saiu do contrato junto com a aprovação (ADR 0036). As vagas por vocação (`openSlots`) são
   calculadas pelo servidor a partir de `party:{id}:vocations`, não repetidas no membro.
 - **Iniciar é do líder, sem aprovação** (ADR 0036): `POST /api/party/:id/start` exige ≥ 2
-  membros, hunt e dificuldade existentes, todos na Cidade ou em repouso (invariante 8), e o
+  membros, hunt e dificuldade existentes, todos na Cidade, no mundo (com `OPEN_WORLD`, OW-18) ou em
+  repouso (invariante 8), e o
   progresso pendente de cada um liquidado. Aí o `api` escolhe **um nó** (o do líder) e emite um
   ticket por membro com o mesmo `sessionId`; se o k-ésimo ticket falhar, os k−1 anteriores são
   revogados. O primeiro ticket a chegar ao `game` cria a sessão com os N; o líder e quem mais
@@ -435,7 +436,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 ## Regras
 
 - Party é uma sessão de hunt com N participantes; um personagem está em uma sessão só.
-- Tamanho máximo: `maxMembers` (8). Início com ≥ 2, todos na Cidade — o LÍDER inicia, sem
+- Tamanho máximo: `maxMembers` (8). Início com ≥ 2, todos na Cidade (ou no mundo, OW-18) — o LÍDER inicia, sem
   aprovação de membros (ADR 0036); entrada em sessão em curso aceita convite ou sala pública,
   com lotação viva ≤ `maxMembers` e vaga por vocação.
 - Formação por HTTP no `api`, em Redis com TTL; matchmaking forma, não inicia. Sala pública com

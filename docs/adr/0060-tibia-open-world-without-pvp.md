@@ -712,3 +712,61 @@ linha do lote, leva a de ledger de delta zero, pelo snapshot acima. O invariante
 de movimentação de valor e o checkpoint sem valor não move nenhum. Os números do custo (3,3 transações/s e até 288
 mil linhas de ledger por dia por mundo com 200 personagens a 60 s) seguem os da decisão 10.d, agora com o teto
 explicado: o teto é o de todo checkpoint ter valor, e o `acquired` cumulativo não o faz o caso típico.
+
+## Emenda — 2026-10-02 (#839, OW-18): o mundo hospedado — o teto só na entrada, o grafo sem aresta entre mundo e Cidade, o serviço em PZ e a recusa de subir
+
+A decisão 2 manda uma sessão por mundo num processo `game`, a 6 põe `'world'` no centro do grafo, e a 2c diz que
+`OPEN_WORLD` só liga com um `game`. A OW-18 as implementou (`docs/product/open-world.md`, "O mundo hospedado") e
+fechou nove detalhes que as decisões deixavam em aberto:
+
+- **O teto é uma função da ORIGEM da entrada, e mora no `WorldShard`.** `admit(worldId, personagem, 'rest' |
+  'instance')`: o login (`'rest'`) conta para o `capacity` do mundo e o mundo cheio o recusa (`WorldFullError`);
+  quem volta de uma instância (`'instance'`) nunca é recusado. A decisão 2b já dizia isto; faltava dizer ONDE: no
+  shard, e não no hospedeiro nem no `api`, porque só ele conhece a população da sessão. A fila e a hunt idle
+  direta que respondem ao `WorldFullError` são da OW-21.
+- **O mundo padrão é `main` até a OW-50.** `characters.world_id` existe desde a OW-15, mas o ticket não o leva, e
+  todo login e toda volta caem em `DEFAULT_WORLD_ID`. Conteúdo sem `worlds/main.json` com a flag ligada **não
+  sobe**: a recusa é na construção do `WorldShard`, e não no primeiro ticket de cada jogador.
+- **O mundo e a Cidade não se tocam no grafo.** `ALLOWED` ganha `world: [hunt, training, quest, boss, guild-war]`
+  e cada instância ganha `world` ao lado de `city`; mas `world → city` e `city → world` não existem. A decisão 6
+  diz que `'city'` continua enquanto a flag existir, e não diz que as duas se ligam: uma aresta entre elas
+  contornaria, a partir do mundo, o `canLogout` da 6a. Quem está numa Cidade sob a flag ligada — o fim de uma hunt
+  ainda volta a ela até a OW-20 — sai do jogo e entra de novo.
+- **A tabela diz o que é possível, não quando.** A entrada na instância por `canLogout` (6a) e a volta só com
+  alguém olhando (6c) são do hospedeiro (OW-20). Até lá, `enter-hunt` e `enter-training` no mundo passam sem
+  `canLogout`.
+- **O serviço de Cidade tem DOIS níveis de pergunta no hospedeiro.** A sessão oferece serviço? (`offersCityServices`,
+  OW-04: a Cidade e o mundo sim, a hunt e o treino nunca) e, só no mundo, o tile aceita? (`Ruleset.acceptsCityServices`,
+  OW-13: PZ). Entram nele a bênção, a promoção, a compra, o livro do offline training, a entrada no treino e o
+  nível de hazard — os que já eram serviço da Cidade — e, **só no mundo**, a venda da mochila e o aprender magia,
+  que a Cidade e a hunt aceitam de onde estão (a emenda do ADR 0058 d.2 que a tabela da decisão 16 anunciava).
+  A recusa fora de PZ é uma frase só e não debita nada. Os Charms seguem valendo de qualquer sessão (ADR 0052 d.4).
+- **O `leave-hunt` no mundo é recusado.** O `WorldRuleset` é um `HuntRuleset` e herda `requestExit`; concluído, ele
+  vira `member-left` e a sucessão de sempre leva o personagem à Cidade — por fora do `canLogout` e de `ALLOWED`. O
+  mundo sai por logout (OW-19) e por transição (OW-20).
+- **O mundo não leva identidade de hunt no fio.** O `huntId` (`world:main`) e a `difficulty` (`world`) do
+  `HuntRuleset` são sintéticos — o `Hunt` e a rota que o motor exige —, e o `instance-enter` e o `session-state`
+  não os mandam.
+- **O cursor do analisador é absoluto e por personagem.** Os dois restos que a OW-13 deixou para o hospedeiro: o
+  teto de eventos notáveis (`maxNotableEventsPerCharacter`) desloca a lista, e o evento de outro personagem
+  provocava um `analyzer` sem evento novo para quem não o vê — uma mensagem para os duzentos do mundo por evento
+  de qualquer um.
+- **A recusa de subir é proteção de boot, e é simples.** Com a flag ligada o `game` lê `aliveNodes` e cai com
+  `MultipleGameNodesError` antes de abrir a porta e de bater o coração, se há outro `NODE_ID` vivo; o próprio não
+  conta (a encarnação anterior bate até o fim do lease), e o Redis que falha também derruba o boot. Duas subidas
+  simultâneas passam: a trava de verdade, que deixa mais de um nó, é a `world:{id}:owner` da decisão 13 (OW-59).
+  O default de `NODE_ID` é o `hostname()`, e o contêiner reiniciado vê o anterior por até um lease.
+
+Corrige, de passagem, um defeito que a Cidade já tinha e o mundo tornaria pior: o personagem que a fábrica põe na
+sessão compartilhada e cujo registro no diretório é recusado ficava em `participants` sem quem o hospedasse — um
+tile bloqueado e, no mundo, uma vaga do teto que nunca volta, numa sessão que não esvazia. `#createAndRegisterSession`
+o tira dela.
+
+**O que a OW-18 deixa, com dono:** a stamina do mundo conta como recuperação na próxima transição e no próximo login
+(o `materializeStamina` da fronteira e o marco do extrato tratam o mundo como "offline", contra a decisão 14b —
+OW-46); `player-stats.zone` e `inFight` existem no protocolo e nenhum servidor os emite (a OW-23 os lê, e nenhuma
+issue do M48 os produz); e largar a party a partir do mundo não passa por `canLogout` (o `api` só vê o tipo da
+sessão — OW-20, `member-in-fight`).
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 2, 6 e 13 continuam valendo; esta emenda só registra
+onde mora o teto, o que o grafo não liga, os dois níveis do serviço de Cidade e o que a recusa de subir é e não é.
