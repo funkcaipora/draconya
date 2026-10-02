@@ -113,7 +113,13 @@ export interface SessionSnapshot {
   readonly ruleset?: unknown;
 }
 
-export type SessionType = 'city' | 'hunt' | 'training' | 'quest' | 'boss' | 'guild-war';
+/**
+ * O tipo da sessão. **`'world'` é o mundo aberto** (OW-13, ADR 0060 d.2): uma sessão compartilhada,
+ * com relógio e sem fim, em que o personagem anda e caça com outros. É o `HuntRuleset` com a
+ * topologia de mundo (`worldTopology`, `rulesets/world.ts`), e nada a cria atrás da flag
+ * `OPEN_WORLD` ainda — o hospedeiro a hospeda na OW-18.
+ */
+export type SessionType = 'city' | 'hunt' | 'world' | 'training' | 'quest' | 'boss' | 'guild-war';
 
 export type EndReason =
   | 'manual-exit'
@@ -322,6 +328,18 @@ export interface Ruleset {
   hz(attached: boolean): number;
 
   onEnter(session: Session, character: CharacterRuntime): void;
+
+  /**
+   * Esta sessão aceita, AGORA, as intenções de serviço de Cidade (ADR 0052 d.2) deste personagem —
+   * loja, depósito, promoção, aprender magia, livro do treino? Ausente é "o ruleset não decide":
+   * o hospedeiro cai no que sempre fez, que é aceitar só na sessão `city`.
+   *
+   * O mundo responde pelo TILE em que o personagem pisa: só em protect zone (OW-13, ADR 0060 d.4;
+   * no Tibia as lojas e os santuários vivem em PZ). É a pergunta, e não a ação: quem recusa a
+   * intenção, e diz ao jogador por quê, é o hospedeiro (OW-18). Só lê — não toca o personagem nem
+   * sorteia.
+   */
+  acceptsCityServices?(session: Session, characterId: string): boolean;
 
   /**
    * O personagem saiu de uma sessão que CONTINUA viva (FUN-71). Só acontece em shard.

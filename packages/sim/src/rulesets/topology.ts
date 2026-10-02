@@ -9,8 +9,10 @@
 //
 // **`instanceTopology` é o código de hoje, movido sem tocar numa condição.** É o default, e é por
 // isso que a hunt (solo e party) é byte a byte a de antes: as sequências do FUN-63, 1 Hz = 10 Hz,
-// a retomada de snapshot e o `pnpm bench:hunts` são os portões. A topologia de mundo (OW-13) é
-// outra peça e outro arquivo; esta issue só abre a porta.
+// a retomada de snapshot e o `pnpm bench:hunts` são os portões. **`worldTopology` (OW-13) é a
+// outra resposta às mesmas perguntas**: a sessão compartilhada, sem fim, em que ninguém lidera,
+// ninguém é de uma rota e o abate é de quem o deu. As duas moram aqui, lado a lado, porque o
+// contraste é o que se lê — cada membro da interface diz, para cada uma, o que ela decide.
 //
 // Quatro famílias de pergunta moram aqui, e o que NÃO mora aqui é tão importante quanto o que
 // mora — a classificação de cada uso de `session.participants` do `HuntRuleset` está em
@@ -35,9 +37,11 @@
 // de QUEM monta o ruleset, como o `huntId`, e a sessão retomada pelo mesmo caminho volta com a
 // mesma (o default é a de instância, que é o que toda sessão salva já é).
 
+import { absoluteToLocal } from '@draconya/content';
+import type { Point, Tilemap } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import type { KillCredit } from '../death.js';
-import { place, placeNear } from '../movement.js';
+import { place, placeNear, placeReachable } from '../movement.js';
 import type { MovementWorld, WorldPoint } from '../movement.js';
 import type { EndReason, Session } from '../session.js';
 import { isExhausted } from '../stamina.js';
@@ -369,3 +373,159 @@ export const instanceTopology: SessionTopology = Object.freeze({
     return session.participants.length !== 1;
   },
 } satisfies SessionTopology);
+
+// --- a topologia do mundo (OW-13, ADR 0060 decisão 4) ----------------------------------------
+
+/**
+ * Quantos tiles a busca por tile livre visita ao colocar quem entra no mundo, antes de desistir:
+ * o quadrado de 33 (1.089), o mesmo da Cidade (`ENTRY_TILES`, FUN-120), cujo número vem do teto de
+ * população por cópia — 200 pessoas ocupam 200 tiles, e a busca tem de alcançar o primeiro livre
+ * a pé de um templo lotado. É largura a pé (`placeReachable`), nunca o anel geométrico
+ * (`placeNear`): o anel atravessa a parede do templo e põe quem chega do lado de fora.
+ */
+export const WORLD_ENTRY_TILES = 1_089;
+
+/** O ponto é o `0,0,0` do Canary — "sem posição salva" (`iologindata_load_player.cpp:207-210`)? */
+const isUnsetPosition = (point: Point): boolean => point.x === 0 && point.y === 0 && point.z === 0;
+
+/** O que a topologia de mundo precisa saber do mundo: o mapa que traduz a coordenada e o templo. */
+export interface WorldTopologyOptions {
+  /**
+   * O mapa do mundo — um recorte IMPORTADO do OTBM: é o `source.region` dele que traduz a
+   * coordenada absoluta do personagem em tile (`absoluteToLocal`). Sem `source`, nada traduz.
+   */
+  readonly map: Tilemap;
+  /**
+   * O templo para onde cai quem não tem onde ser colocado, em coordenada ABSOLUTA do Tibia
+   * (`World.towns[].temple`). Até a cidade do personagem existir como dado dele (OW-15), é o da
+   * primeira cidade do mundo: o ponto único por onde `templeFor` passa a escolher.
+   */
+  readonly temple: Point;
+}
+
+/**
+ * A topologia de MUNDO (OW-13, ADR 0060 decisão 4): a sessão compartilhada, com relógio e sem
+ * fim. Cada membro responde à pergunta que a instância responde, ao contrário:
+ *
+ * - **nunca termina.** Esvaziar, morrer e sair concluem a participação de QUEM saiu, nunca a
+ *   sessão: a morte e a saída concluída mandam o personagem embora com o extrato dele
+ *   (`host.depart`, o mesmo caminho do membro de uma party), e o mundo segue para os outros. A
+ *   morte DO CANARY — vida e mana cheias, o templo, a tela de relogin, a proteção de login — é a
+ *   OW-32, e a saída pelo `canLogout` é a OW-14; aqui ela só não derruba o mundo;
+ * - **ninguém lidera**: o mundo não tem líder, e entregar o "mais antigo" faria a primeira pessoa
+ *   online ser seguida por estranhos (`leaderOf` devolve `undefined`);
+ * - **não há rota nem regra de saída**: o personagem anda quando o jogador pede e fica onde está
+ *   quando ninguém pede (ADR 0009); a regra de saída do bot é da hunt idle (ADR 0060 decisão 7);
+ * - **não há agenda de instância**: o spawn do mundo nasce com o mundo, sem ninguém — nunca com o
+ *   primeiro a entrar, que é só um personagem entre os outros (a OW-31 o semeia);
+ * - **a stamina não queima por tempo**: queima ao ganhar XP, como o Canary, e isso é a OW-46 (a
+ *   comida continua drenando — ver `burnsStaminaByTime`);
+ * - **o abate é de quem o deu.** PROVISÓRIO: o mínimo seguro até o crédito do Canary (OW-28, XP
+ *   pela fatia de dano, cadáver de quem mais bateu). A instância paga todo presente, e num mundo
+ *   isso é entregar o loot de um a estranhos; aqui só o dono do golpe final, vivo e com stamina,
+ *   leva a XP e o loot, sem sorteio nenhum (o `session.rng` não é tocado);
+ * - **o extrato sempre nomeia o dono** (`namesOwnerInEvents`): o que vai para o ledger não pode
+ *   depender de quantos estão online;
+ * - **entra onde saiu.** `placeOnEnter` coloca na âncora (`CharacterRuntime.worldPosition`),
+ *   senão no templo — e não cura: a vida e a mana são as do ticket.
+ *
+ * Um VALOR, como `instanceTopology`: sem estado, congelado, e a mesma instância serve a toda
+ * sessão do mesmo mundo. Lança se o templo não cabe no recorte — o boot (`buildContent`) já o
+ * recusa, e falhar aqui é falhar na montagem do mundo, não no primeiro personagem que cai nele.
+ */
+export function worldTopology(options: WorldTopologyOptions): SessionTopology {
+  const { map } = options;
+  const temple = absoluteToLocal(map, options.temple);
+  if (temple === undefined) {
+    throw new Error(
+      `the temple (${options.temple.x},${options.temple.y},${options.temple.z}) is outside the ` +
+        `region of map "${map.id}" (or the map has no source.region)`,
+    );
+  }
+
+  /**
+   * O templo de ESTE personagem, em coordenada local. Hoje é o do mundo; quando a cidade for dado
+   * do personagem (OW-15), é aqui que ela escolhe — `placeOnEnter` e a morte (OW-32) passam por
+   * este ponto único.
+   */
+  const templeFor = (_character: CharacterRuntime): Point => temple;
+
+  return Object.freeze({
+    // O abate conta para quem o deu: o último golpe, presente na sessão. Sem dono (monstro, campo
+    // ou quem bateu já saiu) ninguém leva — o contrário da instância, que conta para todo presente.
+    creditKill(session: Session, kill: KillContext): void {
+      if (kill.lastHitter !== null) session.credit(kill.lastHitter.id, 'kills', 1);
+    },
+
+    rewardEligible(_session: Session, kill: KillContext): readonly CharacterRuntime[] {
+      // Monstro que morreu para monstro (#619) não paga ninguém: no mundo "o único presente" não
+      // existe, e a instância o inventava para o solo.
+      const payee = kill.diedToMonster ? null : kill.lastHitter;
+      return payee !== null && payee.alive && !isExhausted(payee) ? [payee] : NO_MEMBERS;
+    },
+
+    lootRecipient(
+      _session: Session, killer: CharacterRuntime | null, _eligible: readonly CharacterRuntime[],
+      _party: LootParty | undefined,
+    ): CharacterRuntime | null {
+      // Sem sorteio — o mundo não tem party de hunt, e um `rng` a mais mudaria o loot de todo
+      // abate seguinte: o dono do cadáver, se pode receber.
+      return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
+    },
+
+    leaderOf(): CharacterRuntime | undefined {
+      return undefined;
+    },
+
+    // O mundo nunca termina por esvaziar: é a sessão que existe antes de haver alguém nela.
+    onEmpty(): void {},
+
+    onLeaderGone(): void {},
+
+    onCharacterDied(session: Session, character: CharacterRuntime, host: TopologyHost): void {
+      // A penalidade já foi aplicada. Quem morre sai com o extrato dele e o mundo continua — NUNCA
+      // `session.end('death')`, que é a instância solo. O resto da morte do Canary é da OW-32.
+      host.depart(session, character.id, 'death');
+    },
+
+    onExitFinished(
+      session: Session, characterId: string, reason: ExitFinishedReason, host: TopologyHost,
+    ): void {
+      host.depart(session, characterId, reason);
+    },
+
+    startsInstanceSchedules(): boolean {
+      return false;
+    },
+
+    placeOnEnter(entry: EntryPlacement): void {
+      const { world, character } = entry;
+      // A âncora primeiro: o tile onde se saiu (`player.cpp:12332-12336`). `placeReachable` tenta o
+      // tile e, ocupado, o livre mais próximo a pé; parede, andar sem chão e fora do recorte são
+      // recusa, e a recusa é "cai no templo" (`protocolgame.cpp:1056`), nunca um erro — o jogador
+      // não tem culpa de o tile onde saiu ter deixado de existir.
+      const anchor = character.worldPosition;
+      if (anchor !== null && !isUnsetPosition(anchor)) {
+        const local = absoluteToLocal(map, anchor);
+        if (local !== undefined && placeReachable(world, character, local, WORLD_ENTRY_TILES) === null) {
+          return;
+        }
+      }
+      const refused = placeReachable(world, character, templeFor(character), WORLD_ENTRY_TILES);
+      if (refused !== null) {
+        throw new Error(
+          `cannot place character "${character.id}" in the world: the temple was refused — ${refused}`,
+        );
+      }
+    },
+
+    runsRouteWalker: false,
+    runsExitRules: false,
+    burnsStaminaByTime: false,
+
+    // No mundo o número de presentes não decide o que vai para o ledger: sempre nomeia o dono.
+    namesOwnerInEvents(): boolean {
+      return true;
+    },
+  } satisfies SessionTopology);
+}

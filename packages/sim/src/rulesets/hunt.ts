@@ -1938,7 +1938,12 @@ export interface RunnerState {
 }
 
 export class HuntRuleset implements Ruleset {
-  readonly type = 'hunt' as const;
+  /**
+   * `'hunt'` é a instância, e `'world'` o mundo aberto (OW-13): o mundo é este mesmo ruleset com a
+   * topologia de mundo, e é `WorldRuleset` (`rulesets/world.ts`) quem o declara. Nenhum outro
+   * código escolhe o valor — a hunt, solo e party, é sempre `'hunt'`.
+   */
+  readonly type: 'hunt' | 'world' = 'hunt';
 
   readonly #options: HuntRulesetOptions;
   /**
@@ -3161,7 +3166,9 @@ export class HuntRuleset implements Ruleset {
       runnerCount: this.#runners.size, huntId: this.#options.hunt.id,
     });
     this.#occupancyStale = false;
-    session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
+    // O mundo não "entra numa hunt": a linha do extrato diz de QUEM foi a entrada, como a Cidade.
+    if (this.type === 'world') session.record('entered-world', character.id);
+    else session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
 
     // A fila inicial. Tudo começa PRONTO — vencendo agora —, que é o comportamento que os
     // cooldowns tinham (FUN-25) e a razão continua a mesma: entrar numa hunt e ficar meio
@@ -14486,6 +14493,45 @@ function hazardOptionOf(content: Content, hunt: Hunt): Pick<HuntRulesetOptions, 
   return { hazard: { zoneId: hunt.hazardZoneId, zone, config: content.hazard } };
 }
 
+/**
+ * O que um ruleset de hunt lê do CONTEÚDO, igual para a instância e para o mundo (OW-13): os
+ * catálogos e as tabelas de balanceamento. Fica fora o que é da hunt (`hunt`, `route`, o Hazard
+ * da zona dela) e o que é de quem monta (bot, party, topologia). Extraído de `createHuntRuleset`
+ * sem mudar o que ele monta — o mundo o reutiliza, e um catálogo novo que a hunt passe a ler
+ * entra nos dois por este lugar só, em vez de um dos dois o esquecer.
+ */
+export function contentOptionsOf(
+  content: Content,
+): Omit<HuntRulesetOptions, 'hunt' | 'difficulty' | 'map' | 'route' | 'hazard'> {
+  return {
+    monsters: content.monsters,
+    combat: content.combat,
+    progression: content.progression,
+    stamina: content.stamina,
+    ...(content.training === undefined ? {} : { training: content.training }),
+    vocations: content.vocations,
+    skills: content.skills,
+    items: content.items,
+    weaponFamilies: content.weaponFamilies,
+    unarmed: content.unarmed,
+    // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
+    // `exactOptionalPropertyTypes`.
+    party: content.party,
+    ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
+    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
+    charms: content.charms,
+    skinning: content.skinning,
+    targetSearchRadius: content.bot.targetSearchRadius,
+    spells: content.spells,
+    supplies: content.supplies,
+    ammunition: content.ammunition,
+    player: { ...content.combat.player },
+    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
+    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
+    botCooldownMs: content.bot.categoryCooldownMs,
+  };
+}
+
 export function createHuntRuleset(
   content: Content,
   huntId: string,
@@ -14513,29 +14559,8 @@ export function createHuntRuleset(
     difficulty,
     map,
     route,
-    monsters: content.monsters,
-    combat: content.combat,
-    progression: content.progression,
-    stamina: content.stamina,
-    ...(content.training === undefined ? {} : { training: content.training }),
-    vocations: content.vocations,
-    skills: content.skills,
-    items: content.items,
-    weaponFamilies: content.weaponFamilies,
-    unarmed: content.unarmed,
-    // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
-    // `exactOptionalPropertyTypes`.
-    party: content.party,
-    ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
-    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
-    charms: content.charms,
-    skinning: content.skinning,
+    ...contentOptionsOf(content),
     ...hazardOptionOf(content, hunt),
-    targetSearchRadius: content.bot.targetSearchRadius,
-    spells: content.spells,
-    supplies: content.supplies,
-    ammunition: content.ammunition,
-    player: { ...content.combat.player },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),
@@ -14544,9 +14569,6 @@ export function createHuntRuleset(
     ...(actuator === undefined ? {} : { actuator }),
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     ...(topology === undefined ? {} : { topology }),
-    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
-    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
-    botCooldownMs: content.bot.categoryCooldownMs,
   });
 }
 
