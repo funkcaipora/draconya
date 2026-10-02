@@ -32,9 +32,35 @@ precisa fornecer um endereço `wss`. O runtime permite hosts e caminhos por nó;
 de staging continua validando `wss://<APP_ORIGIN>/ws`. WSS descreve o endereço **público**:
 o TLS pode terminar no proxy, enquanto o `game` escuta HTTP/WebSocket na rede interna.
 
-`CONTENT_DIR`, `THINGS_VERSION`, `NODE_ID`, `LOG_LEVEL` e `NODE_ENV` continuam comuns ao boot.
+`CONTENT_DIR`, `THINGS_VERSION`, `NODE_ID`, `LOG_LEVEL`, `NODE_ENV` e `OPEN_WORLD` (adiante) continuam
+comuns ao boot.
 `THINGS_DIR` pertence a importação, inventário e testes de assets; não aparece no objeto
 `Configuration` do servidor. Sua remoção não muda os scripts nem a localização dos assets.
+
+## O mundo aberto: `OPEN_WORLD` (#836, OW-15)
+
+`OPEN_WORLD` liga o mundo aberto do Tibia sem PvP ([ADR 0060](adr/0060-tibia-open-world-without-pvp.md),
+[plano](open-world-plan.md)). Aceita `1`/`true` e `0`/`false`; qualquer outro valor — inclusive vazio
+— recusa o boot, em vez de desligar o mundo em silêncio. **O default é desligado**, e com ele o jogo
+é o de hoje, byte a byte: a Cidade é o espaço compartilhado, o ticket nasce cheio, o repouso é
+`'city'` e as colunas de mundo de `characters` não são lidas nem escritas. O `compose.coolify.yml`
+a repassa como `OPEN_WORLD` (default `0`).
+
+| Papel | O que a flag muda |
+|---|---|
+| `api` | o ticket (solo e de cada membro da party) leva o mundo e os vitais da linha (`worldPosition`, `townId`, `health`, `mana`, `conditions`); a lista e a seleção de personagens reportam o repouso como `'offline'` |
+| `game` | todo extrato — fim de hunt, estado da Cidade, snapshot irrestaurável — leva o mundo e os vitais do dono |
+| `jobs` | nada: escreve as colunas que o extrato trouxer, guardadas por `durable_version` |
+
+**Tem de ser a MESMA no `api` e no `game`.** Um `game` ligado com o `api` desligado recebe tickets sem o
+mundo, e por isso o extrato só leva o mundo de quem o ticket trouxe (a `townId` é a marca) — ligar
+metade do par não apaga a posição de ninguém, mas também não persiste nada. Ligar em produção é
+operação à parte: as peças seguintes do plano (checkpoint, `WorldShard`, presença) ainda não
+existem, e o ADR 0060 só a quer ligada com UM processo `game` até a trava de mundo (OW-59) — a recusa
+de subir com outro `game` vivo é da OW-18.
+
+Desligar depois de ligada é seguro: nenhuma coluna é apagada, e quem voltar a ligar encontra o último
+estado salvo — a vida e a posição de antes, não as de agora.
 
 ## Exemplos de produção
 

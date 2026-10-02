@@ -28,7 +28,9 @@ Persistência, diretório de sessão e roteamento.
   **Todo campo ABSOLUTO do extrato é guardado por `characters.durable_version`** (#823, OW-02):
   o `jobs` só o escreve quando a versão do extrato é maior que a da coluna, e extrato atrasado
   entra só com os deltas — a guarda de instante de stamina e skills deixou de ser a única ordem
-  (ver "Ordem e versão durável" mais abaixo).
+  (ver "Ordem e versão durável" mais abaixo). O mundo e os vitais em repouso (`world_x/y/z`,
+  `town_id`, `health`, `mana`, `conditions`, #836 OW-15) são campos absolutos como os outros, e só
+  viajam com `OPEN_WORLD` ligado (ver "O mundo e os vitais em repouso").
   **`characters.gold` é PROJEÇÃO, não fonte** (FUN-57). A verdade é a soma do ledger; a coluna
   existe para não somar linhas a cada leitura, e é escrita na mesma transação da linha. O que
   a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
@@ -358,8 +360,8 @@ pendente)`, lido pelo `api` DEPOIS de liquidar) e sobe a cada extrato gravado, d
 do personagem neste nó — a `seq` é por sessão e recomeça. O `jobs` (`writeReceipts`) agrupa os
 extratos por personagem e liquida em ordem de versão; todo campo ABSOLUTO (ammo, alma, estoques,
 comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, storages,
-stamina, skills) só é escrito quando `receipt.durableVersion > characters.durable_version`, e a
-coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
+stamina, skills, e o mundo e os vitais da OW-15) só é escrito quando `receipt.durableVersion >
+characters.durable_version`, e a coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
 monotônico por natureza (Bestiário e Bosstiary pelo máximo, magias aprendidas pela união, vocação
 por `coalesce`, promoção por `OR`) entram SEMPRE: seguem sob `UNIQUE (session_id, seq)`.
 
@@ -923,6 +925,88 @@ personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
 evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
 Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
 na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
+
+## O mundo e os vitais em repouso: coluna → ticket → sessão → extrato → coluna (#836, OW-15, ADR 0060 d.10f)
+
+O personagem em REPOUSO existe na linha de `characters` com o que o Tibia guarda dele: o mundo
+(`world_id`), a posição absoluta (`world_x/y/z`), a cidade (`town_id`), a vida e a mana (`health`,
+`mana`) e as condições (`conditions`, `jsonb`). É o que faz deslogar a 10 HP voltar com 10 HP. A
+migração é a `0029_836-world-vitals.sql`, aditiva (ADR 0014): nada é reescrito, as duas colunas
+`NOT NULL` nascem em `'main'` e `'thais'`, e as demais nulas — NULO é "cheio, no templo, sem
+condição". Dois CHECKs (`character_world_position_complete`, `character_vitals_not_negative`) fixam
+as duas formas que o código garante.
+
+**Tudo atrás de `OPEN_WORLD`** (`config.ts`; `1`/`true`, default desligado). Com a flag desligada o
+`api` não lê as colunas, o ticket é o de antes byte a byte, o extrato não leva os campos e o repouso
+é `'city'`. O `api` (ticket, lista de personagens) e o `game` (extrato) precisam da MESMA flag; o
+`jobs` não a lê — escreve o que o extrato trouxer. As colunas existem sempre, com ou sem a flag.
+
+O dado atravessa cinco fronteiras e a forma é conferida num arquivo só, `world-state.ts`. A regra é a
+de todo campo do ticket: **torto vira ausente, nunca recusa** (cheio, no templo, sem condição).
+
+1. **Coluna → ticket** (`api/tickets.ts`, `initialCharacterOf(..., openWorld)`; o `api/party.ts` o
+   repete para cada membro). `worldStateOfRow` leva só o que EXISTE: a posição inteira (os três
+   juntos), a vida maior que zero, a mana, as condições não vazias e SEMPRE a `townId`. Vida zero é um
+   morto, e o morto entra cheio.
+2. **Ticket → sessão** (`game/sessions.ts`, `characterFromTicket`). A vida e a mana entram LIMITADAS
+   pelo máximo do level — um level novo, a promoção ou conteúdo que mudou nunca deixam a vida acima do
+   teto —, a vida nunca abaixo de 1. A âncora vai para `CharacterRuntime.worldPosition` (o mundo a lê
+   em `placeOnEnter`: cai no templo se ela não existe) e a cidade para `townId`. As condições entram
+   no `CharacterRuntime` e o `onEnter` do ruleset as rearma como eventos (`HuntRuleset#armConditions`).
+3. **Sessão → extrato** (`game/host.ts`, `#worldStateOf`, SÓ com a flag). Os dois extratos de estado
+   absoluto INTEIRO (`#persistReceipt` e `#saveDurableReceipt`) e o do snapshot irrestaurável
+   (`settleSnapshotAsReceipt`, opção `openWorld`) levam o mesmo conjunto — o hazard-choice
+   (`#saveHazardChoice`), que é parcial de propósito, não. A âncora sai como está: quem a mantém é o
+   dono da sessão, na saída e no checkpoint (OW-16/OW-20).
+4. **Extrato → Redis** (`receipts.ts`). `SessionReceipt extends WorldState`, e `parseReceipt` é lista
+   de PERMISSÃO — o `...readReceiptWorldState(value)` no fim dele é o que impede o campo de sumir no
+   caminho de volta sem erro. `parseInitialCharacter` (`tickets.ts`) idem, com `readTicketWorldState`.
+5. **Extrato → coluna** (`jobs/ledger.ts`, `applyProgression`). ABSOLUTOS e última-escrita-vence,
+   guardados por `absolute` (`durable_version`, #823): extrato atrasado nunca devolve a vida de ontem
+   nem o tile de antes. Vida e mana DESCEM e SOBEM, a posição muda a cada passo — nada de fusão por
+   máximo. Montados num objeto só (`world`), porque mais cinco `...(cond ? {} : {})` no `set` estouram
+   o que o compilador representa (TS2590).
+
+**`null` e `[]` no extrato são VALORES, a ausência é "não toque".** `worldPosition: null` zera as três
+colunas — "volta ao templo", o `0,0,0` do Canary, que é o de quem morreu e de quem nunca esteve no
+mundo —, e `conditions: []` grava nulo. Omitir deixa a coluna como estava.
+
+**`townId` é a MARCA de que o `api` leu o mundo deste personagem** (`receiptWorldStateOf`): o ticket a
+leva SEMPRE com a flag ligada, e sem ela o extrato NÃO leva NADA. Sem a marca, um `api` anterior ou
+com a flag desligada emitiu um ticket sem o mundo, e `worldPosition: null` apagaria a posição da linha
+enquanto a vida cheia desfaria a que ela guarda. Teste de host que fale do mundo põe `townId` no
+`CharacterRuntime`.
+
+**Quem morreu leva a vida e a mana CHEIAS, a posição `null` e `conditions: []`** — a morte do Tibia
+manda ao templo, de volta ao máximo (`player.cpp:4226-4252`). O morto tem vida zero, e zero nunca
+chega à linha.
+
+**As condições viajam como PRAZO RESTANTE, não como instante de relógio.** `expiresAtMs` e
+`nextTickAtMs` de uma `ConditionState` são instantes do relógio LÓGICO da sessão, e o repouso não
+conta tempo (o Canary guarda os `ticks` que faltavam, `condition.cpp:300`). `CharacterRuntime.
+conditionsAsRemaining()` (`sim`) subtrai o relógio a que o personagem está ligado — só ele sabe qual,
+porque numa transição o destino é construído ANTES de a origem encerrar e os instantes já estão no
+relógio dele. O caminho de volta é o inverso: o personagem do ticket nasce com o restante (relógio
+zero) e **`Session.enter` não traduz quem nunca esteve numa sessão**. Uma sessão que já andou — o
+recém-chegado de uma party em curso, a Cidade, o mundo — veria toda condição como vencida e o
+`armConditions` a apagaria. Por isso **`carryRestoredConditions(character, session)`**
+(`world-state.ts`) soma o relógio da sessão ANTES de `enter`: `#admitLateJoiner` e `CityShard.admit
+(character, true)` já o chamam, e o `WorldShard` (OW-18) tem de chamar. Numa sessão que nasce agora
+(relógio zero) é nada. Chamá-lo para quem já andou por outra sessão desloca duas vezes.
+
+**O repouso é `'offline'` na lista de personagens** (`api/characters.ts`, `toDto`), só com a flag: a
+coluna `state` (default `'city'`) é o que sobrou de antes de a sessão existir, e o estado sem sessão
+do invariante 8 é o personagem deslogado. O `select` consulta o diretório antes de dizer `offline`.
+
+**`upgrade-existing-schema.sql` NÃO ganha estas colunas**, como não ganhou a `durable_version`: ele é o
+upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a `0029` falhar ao rodar
+depois dele (`ADD COLUMN` sem `IF NOT EXISTS`). O banco legado entra pela migração.
+
+**O que NÃO existe ainda.** Nada ESCREVE a âncora no mundo (a saída e o checkpoint são OW-16/OW-20), o
+`jobs` ainda grava uma linha de ledger por extrato mesmo sem valor movido (OW-17), e nenhuma sessão de
+mundo é hospedada (OW-18): hoje o login cai na Cidade, que CURA ao entrar (`city.ts:126-130`), então
+a vida do ticket só sobrevive numa hunt idle ou no mundo, nunca na praça. O que existe é o contrato —
+coluna, ticket, sessão, extrato — com teste de ponta a ponta (`jobs/world-vitals.postgres.test.ts`).
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 

@@ -17,7 +17,10 @@ nunca é recolhida** — desconectar não pode encerrar nada, ou o modo idle dei
 (ADR 0001). A carência existe para reconexão não virar rotatividade: recarregar a página ou
 perder o Wi-Fi por um instante não custa a sessão.
 
-Sem sessão hospedada, o personagem continua **na cidade** — repouso não precisa de nó.
+Sem sessão hospedada, o personagem continua **na cidade** — repouso não precisa de nó. Com o mundo
+aberto ligado (`OPEN_WORLD`, #836 OW-15) o repouso é o personagem **deslogado**: a API o reporta como
+`'offline'`, e a linha guarda o mundo, a posição absoluta, a cidade, a vida, a mana e as condições com que
+ele saiu — [`open-world.md`](open-world.md#o-personagem-em-repouso-ow-15-836).
 
 O estado de atividade que a API devolve (`state`, `sessionId`) vem do **diretório de sessões**,
 não da coluna do banco. A coluna existe e não é escrita por ninguém: a verdade sobre em que
@@ -133,6 +136,11 @@ Banco existente da `main` anterior à FUN-11: execute
 Nomes legados que colidem fazem a transação falhar e preservam os dados anteriores; resolva
 as colisões explicitamente, sem apagar personagens automaticamente. O teste de migração
 comprova preservação de Premium, personagem e ledger, além do rollback em colisões.
+
+O `upgrade-existing-schema.sql` é só o upgrade do schema anterior à FUN-11 e **não** ganha as colunas das
+migrações posteriores (a `0028` da `durable_version`, a `0029` do mundo e dos vitais): uma coluna que ele
+criasse faria a migração falhar ao rodar depois dele. O banco legado que estabelecer a baseline do journal
+(parágrafo seguinte) recebe as colunas novas pelas migrações posteriores.
 
 Esse banco legado, criado via `db:push`, continua sem journal da migração inicial. Não execute
 `db:migrate` nele sem antes estabelecer uma baseline revisada do journal; o SQL de atualização
