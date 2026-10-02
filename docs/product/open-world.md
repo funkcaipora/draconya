@@ -368,7 +368,7 @@ o login rápido paga desde a FUN-56, e não mudou.
   ganham a origem e o andar `z` não muda, porque os andares do recorte são chaveados pelo `z`
   absoluto.
 - **`capacity`** é o teto de gente, e vale só na entrada, vindo do repouso: quem volta de uma
-  instância sempre entra (ADR 0060 d.2.b). Começa em 200, o `CITY_SHARD_CAPACITY` de hoje, e o
+  instância para a qual SAIU do mundo sempre entra (ADR 0060 d.2.b; a hunt que nasceu do repouso não tem esse passe, OW-20). Começa em 200, o `CITY_SHARD_CAPACITY` de hoje, e o
   `bench:world` o fixa. Esta issue só **guarda** o número; quem o lê é a admissão (OW-18/OW-20).
 - Sem arte (invariante 6): o schema é `strictObject`, e `appearanceId` ou qualquer chave que
   ninguém lê derruba o boot.
@@ -693,7 +693,7 @@ identidade: a Cidade é uma praça que enche e abre outra cópia; o mundo é **u
 |---|---|
 | Uma sessão por `world_id` no processo | `admit('main', personagem, entrada)` cria o mundo na primeira chegada e devolve a MESMA sessão nas seguintes — dois logins são duas pessoas na mesma sessão, nunca "Thais 2" |
 | O mundo vazio é esquecido | Quando o último sai, o hospedeiro larga a sessão e a próxima chegada cria outra, com `session_id` novo e a versão de conteúdo de agora (invariante 7): o `seq` do ledger recomeça em zero, e reusar o id colidiria com os extratos da anterior (invariante 10) |
-| O teto vale só na entrada do repouso | `entry: 'rest'` — o login — recusa o mundo cheio com `WorldFullError`; `entry: 'instance'` — quem volta de uma hunt — **nunca recusa**: já estava no mundo, e barrá-lo o deixaria numa sessão encerrada. O teto é o `capacity` do conteúdo (200); a fila com posição (`world-full`) e a hunt idle direta são a OW-21, abaixo |
+| O teto vale só na entrada do repouso | `entry: 'rest'` — o login — recusa o mundo cheio com `WorldFullError`; `entry: 'instance'` — quem volta de uma instância para a qual saiu do mundo — **nunca recusa**: já estava no mundo, e barrá-lo o deixaria numa sessão encerrada; `entry: 'instance-from-rest'` — a hunt idle direta e a party largada do repouso, que nunca ocuparam vaga — recusa como o `'rest'` (OW-20). O teto é o `capacity` do conteúdo (200); a fila com posição (`world-full`) e a hunt idle direta são a OW-21, abaixo |
 | O personagem do ticket traz as condições no relógio de zero | `carryRestoredConditions` as leva para o relógio do mundo, que já andou — sem isso `armConditions` as daria por vencidas na entrada (ver "O personagem em repouso") |
 | O mundo padrão é `main` | `characters.world_id` nasce `'main'` e o ticket ainda não o leva: a escolha do mundo é da OW-50. Conteúdo sem `worlds/main.json` com `OPEN_WORLD` ligado **não sobe** (recusa na construção, não no primeiro ticket) |
 
@@ -951,7 +951,9 @@ cheio, fora do ar ou atrás da flag.
 - Quem estava na fila do mundo e entra numa hunt direta **sai da fila** (`WorldEntryGate.leave`): a vaga que
   ele guardava não é mais dele, e sem isto ela ficaria ocupada até o prazo, com gente atrás esperando.
 - A âncora do mundo — onde o personagem deslogou — atravessa a hunt em `CharacterRuntime.worldPosition` e
-  volta ao banco no extrato dela (OW-15). A volta ao mundo e o repouso ao fim da hunt são da OW-20.
+  volta ao banco no extrato dela (OW-15). A volta ao mundo e o repouso ao fim da hunt são da OW-20 — e a hunt
+  direta **não leva o passe do teto**: nunca ocupou vaga no mundo, e a volta a respeita
+  ([O mundo e a hunt idle](#o-mundo-e-a-hunt-idle-ow-20-841), "O teto na volta").
 
 ### A fila do mundo cheio
 
@@ -967,7 +969,7 @@ os prazos (`…:until`) e o contador que dá a ordem de chegada (`…:seq`), tud
 | Quem volta | Mantém a posição e renova o prazo |
 | Quem não volta | Sai da fila no prazo — a espera da posição mais 15 s —, e quem estava atrás sobe. Não há varredura: quem limpa é a próxima chamada |
 | Premium | Vai na frente dos comuns, como a lista de prioridade do Canary (`waitlist.cpp:95-115`); entre premiums, a ordem de chegada |
-| Quem volta de uma instância | **Nunca passa por aqui**: já estava no mundo, e o teto vale só na entrada (OW-18) |
+| Quem volta de uma instância | **Nunca passa por aqui** se saiu do mundo para ela: já estava nele, e o teto vale só na entrada (OW-18). A hunt que nasceu do repouso — a direta — NÃO tem esse passe e bate na porta na volta (OW-20) |
 
 Limpar, entrar na fila e decidir são **uma operação só** (script Lua): duas tentativas simultâneas lendo a
 mesma fila deixariam as duas acharem que são a primeira.
@@ -1033,7 +1035,7 @@ No fim da instância — a regra de saída, a morte, o `leave-hunt` — o hosped
 
 | Situação | Destino | Posição | Vida e mana |
 |---|---|---|---|
-| Com visualizador | a sessão do mundo | a âncora; o templo na morte | as da volta; cheias na morte |
+| Com visualizador | a sessão do mundo, **se couber** (ver "O teto na volta") | a âncora; o templo na morte | as da volta; cheias na morte |
 | Sem visualizador | o **repouso**: o extrato que acabou de pousar é o checkpoint, e o personagem é solto | a âncora; o templo na morte | as da volta; cheias na morte |
 
 - **Ninguém é posto no mundo desassistido.** Lá nada o tiraria de uma luta, e ele ficaria parado e vulnerável por
@@ -1051,6 +1053,35 @@ No fim da instância — a regra de saída, a morte, o `leave-hunt` — o hosped
 - **O `leave-hunt` e o retry manual** de uma sucessão que falhou vão ao mundo com a flag ligada: quem pediu está
   olhando.
 
+### O teto na volta: o passe é de quem saiu do mundo
+
+O teto do mundo vale só na entrada (ADR 0060 d.2b), e a OW-20 precisou dizer **quem já entrou**. Quem **saiu do
+mundo** para a instância — o `enter-hunt`, o treino, a party largada do mundo — guarda o passe: ocupou uma vaga,
+e a volta passa do teto se for preciso (a regra da OW-21). Quem **nunca esteve nele** — a hunt idle direta
+(`entry: { hunt }`, a primeira sessão do personagem) e a party largada de quem estava em repouso — não tem passe, e
+a volta o trata como o login:
+
+| De onde a instância veio | Mundo com vaga e sem fila | Com gente esperando à frente, ou sem vaga |
+|---|---|---|
+| Do mundo (`enter-hunt`, party largada do mundo) | volta | **volta**, mesmo acima do teto — o passe |
+| Do repouso (hunt direta, party largada do repouso) | volta | **repouso**: a porta bate como o login (`WorldEntryGate#login`, premium na frente) e o shard recusa o cheio (`WorldFullError`) |
+
+O repouso aqui não perde nada: o extrato que acabou de pousar É o checkpoint (a âncora, os vitais), o
+visualizador recebe o `session-ended` — o resumo da hunt — e o socket fecha com `1000`, e o cliente reconecta pelo
+ticket, que o devolve ao mundo ou à fila, **com a posição que a porta já guardou**. Sem esta distinção o mundo cheio
+engordava justamente com quem escolheu a hunt por ele estar cheio, e esse personagem furava a fila em que os outros
+ainda esperavam.
+
+- **O hospedeiro sabe de onde cada um veio**: `SessionHost#leftWorld` marca quem saiu do mundo (a transição e a
+  largada de party) e desmarca quem chega a ele ou é esquecido. Ausente é o lado seguro: um nó que retomou a hunt
+  de um snapshot não lembra de onde ela veio, e com o mundo cheio o personagem vai ao repouso em vez de passar do
+  teto.
+- **A volta manual** (`leave-hunt` de uma sessão sem `requestExit`, o retry de uma sucessão que falhou) segue a
+  mesma regra: o mundo cheio para quem não tem o passe grava o extrato e solta o personagem, em vez de recusar a
+  transição.
+- A entrada é `'instance-from-rest'` no shard: o teto vale, mas `carryRestoredConditions` — que é do login — NÃO
+  roda, porque quem já andou por uma sessão foi traduzido por `moveToClock` e seria deslocado duas vezes.
+
 ### A largada de party a partir do mundo
 
 O primeiro ticket da party que chega ao `game` cria a hunt com todos e tira cada membro do mundo. Antes de mover
@@ -1062,13 +1093,17 @@ qualquer um, todo membro que está no mundo deste nó passa por `canLogout`:
 - o ticket de **entrada numa hunt em curso** de quem está em luta é recusado do mesmo jeito;
 - membro **em repouso** — sem sessão neste nó — não tem o que conferir, e entra direto na hunt da party;
 - **a âncora atravessa a largada**: cada membro leva para a hunt o tile de onde saiu do mundo, e é nele que a party
-  o devolve — não no do último checkpoint, que o ticket carrega.
+  o devolve — não no do último checkpoint, que o ticket carrega. Vale para os dois tickets que chegam **juntos**
+  (cada `prepare` constrói a sua `Session` e só a primeira que hospeda fica): a âncora é escrita no personagem da
+  sessão que sobrou, depois de hospedar — e vale para o ticket de entrada (`join`) de quem chega depois.
 
 ### Em teste
 
 `game/world-idle-hunt.test.ts` (Thais e `rat-cellars` reais, o hospedeiro de produção): a recusa de cada motivo e
 a janela de 60 s; do templo à hunt e de volta ao mesmo tile; a morte com e sem visualizador; o visualizador que cai
-durante a gravação; a party com um membro em luta; a drenagem; a flag desligada.
+durante a gravação; a party com um membro em luta; a âncora de dois tickets que chegam juntos, em qualquer ordem, e a
+do `join`; o passe do teto — a hunt direta com o mundo cheio vai ao repouso, a que saiu do mundo volta, a fila é
+consultada, a party largada do repouso e a do mundo, a volta manual; a drenagem; a flag desligada.
 `game/world-idle-hunt.postgres.test.ts`: a linha de `characters` que o próximo ticket lê — o tile, a vida e a mana.
 
 ## O cliente do mundo (OW-23, #846)

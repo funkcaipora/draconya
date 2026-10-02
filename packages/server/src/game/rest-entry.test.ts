@@ -397,7 +397,7 @@ describe('`offersHunts`: a hunt idle está ao alcance de quem não coube no mund
   });
 });
 
-describe.runIf(available)('quem volta de uma instância nunca passa pela fila (#842, OW-21)', () => {
+describe.runIf(available)('quem volta de uma instância para a qual SAIU do mundo nunca passa pela fila (#842, OW-21)', () => {
   it('com o mundo cheio, o personagem que voltou da hunt entra, e a fila não é nem consultada', async () => {
     const n = node({ capacity: 2 });
     await n.prepare('a');
@@ -419,5 +419,28 @@ describe.runIf(available)('quem volta de uma instância nunca passa pela fila (#
     expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(3);
     expect(login).not.toHaveBeenCalled();
     expect(await n.queue.size(DEFAULT_WORLD_ID)).toBe(queued);
+  });
+
+  it('a hunt idle direta, que NUNCA esteve no mundo, bate na fila na volta: o mundo cheio a leva ao repouso, na posição dela (#841)', async () => {
+    const n = node({ capacity: 2 });
+    await n.prepare('a');
+    await n.prepare('b');
+    // `c` escolheu a hunt idle porque o mundo estava cheio — e nunca ocupou vaga nele.
+    expect(await n.prepare('c', {}, HUNT)).toEqual({ created: true });
+    expect(n.typeOf('c')).toBe('hunt');
+    expect(n.wiring.worldShard?.isFull(DEFAULT_WORLD_ID)).toBe(true);
+
+    await n.host.transition('c', { to: 'world' });
+
+    // Mutação que mata: a volta sempre como `'instance'` — o mundo passaria a 3 de 2 e `c` furaria a fila.
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(2);
+    expect(n.host.sessionFor('c')).toBeUndefined();
+    // A porta guardou o lugar dele: ele é o primeiro da fila, e reconectar o encontra na mesma posição.
+    expect(await n.queue.size(DEFAULT_WORLD_ID)).toBe(1);
+    expect((await n.prepare('c')).worldFull).toEqual({ position: 1, retryAfterMs: 5_000 });
+    // Quando a vaga abre, ele entra — pela fila, como qualquer um.
+    await n.host.release('a', 1000, 'logout');
+    expect(await n.prepare('c')).toEqual({ created: true });
+    expect(n.typeOf('c')).toBe('world');
   });
 });

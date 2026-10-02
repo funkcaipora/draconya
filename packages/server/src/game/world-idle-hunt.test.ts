@@ -13,6 +13,7 @@ import type { ReceiptStore } from '../receipts.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { SessionHost } from './host.js';
 import type { PrepareResult } from './host.js';
+import type { WorldEntryGate, WorldEntryVerdict } from './rest-entry.js';
 import { createLateJoiner, createSessionWiring, DEFAULT_WORLD_ID } from './sessions.js';
 import type { SessionWiring } from './sessions.js';
 import { FakeSocket } from './testing.js';
@@ -91,6 +92,8 @@ interface Node {
   readonly typeOf: (id: string) => string | undefined;
   /** O último extrato gravado de `id`. */
   readonly lastLine: (id: string) => SavedLine | undefined;
+  /** Quem bateu na porta da fila (`queue`), na ordem — o login do mundo também bate. */
+  readonly knocks: { characterId: string; premium: boolean }[];
 }
 
 interface Login {
@@ -111,11 +114,27 @@ function node(options: {
   readonly gateSave?: Promise<void>;
   /** As primeiras N gravações de extrato avulso FALHAM (o Redis que pisca): a sucessão que não fecha. */
   readonly failSaves?: number;
+  /** O teto do mundo (`WorldShard`): para o mundo CHEIO sem duzentas pessoas. */
+  readonly capacity?: number;
+  /** A fila do mundo cheio: o que a porta responde a quem bate nela (OW-21). Ausente, o nó não tem fila. */
+  readonly queue?: (characterId: string, premium: boolean) => WorldEntryVerdict;
 } = {}): Node {
   const content = real();
   let nowMs = 0;
   const openWorld = options.openWorld !== false;
-  const wiring = createSessionWiring(content, () => nowMs, { openWorld });
+  const wiring = createSessionWiring(content, () => nowMs, {
+    openWorld, ...(options.capacity === undefined ? {} : { worldShard: { capacity: options.capacity } }),
+  });
+  /** Quem bateu na porta da fila, na ordem: a prova de que a volta da hunt direta a consultou. */
+  const knocks: { characterId: string; premium: boolean }[] = [];
+  const queue = options.queue;
+  const gate: WorldEntryGate | undefined = queue === undefined ? undefined : {
+    login: async (characterId, premium) => {
+      knocks.push({ characterId, premium });
+      return queue(characterId, premium);
+    },
+    leave: async () => undefined,
+  };
   const saved: SavedLine[] = [];
   const released: string[] = [];
   const located = new Map<string, SessionLocation>();
@@ -150,6 +169,7 @@ function node(options: {
   } as unknown as SessionDirectory;
   const host = new SessionHost({
     nodeId: 'n1', contentVersion: content.version, logger, receipts, directory, now: () => nowMs, openWorld,
+    ...(gate === undefined ? {} : { worldEntry: gate }),
     createSession: wiring.createSession,
     buildSession: wiring.buildSession,
     createParticipant: createLateJoiner(content, () => nowMs),
@@ -169,7 +189,7 @@ function node(options: {
     return { viewer, socket };
   };
   return {
-    host, wiring, saved, released, located, login,
+    host, wiring, saved, released, located, login, knocks,
     now: () => nowMs,
     tick: (ms) => { nowMs += ms; host.cycle(nowMs); },
     session: (id) => {
@@ -453,6 +473,204 @@ describe('a hunt acaba COM visualizador: volta ao mundo, no tile de onde saiu (#
   });
 });
 
+describe('o passe de volta ao mundo é de quem SAIU dele: a hunt que nasceu do repouso respeita o teto e a fila (#841, ADR 0060 d.2b)', () => {
+  /** A hunt idle direta (OW-21): a primeira sessão do personagem, sem passar pelo mundo, com o navegador aberto. */
+  const direct = (n: Node, id: string, initial: Partial<InitialCharacter> = {}): Promise<Login> =>
+    n.login(id, { worldPosition: absolute(STREET), ...initial }, { entry: { hunt: HUNT } });
+  /** A hunt do personagem acaba por regra de saída, dentro de um avanço — como acaba de verdade. */
+  const finish = async (n: Node, id: string, ms = 1_000): Promise<void> => {
+    endInsideNextAdvance(n.session(id), (hunt) => { hunt.end('exit-rule'); });
+    n.tick(ms);
+    await settle();
+    n.host.flush();
+  };
+
+  it('com o mundo CHEIO, a hunt idle direta que acaba olhada vai ao REPOUSO, e o mundo não passa do teto', async () => {
+    const n = node({ capacity: 1 });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    expect(n.wiring.worldShard?.isFull(DEFAULT_WORLD_ID)).toBe(true);
+    // Escolheu a hunt idle justamente porque o mundo estava cheio (ADR 0060 d.6b): nunca ocupou vaga nele.
+    const b = await direct(n, 'b');
+    expect(n.typeOf('b')).toBe('hunt');
+
+    await finish(n, 'b');
+
+    // Mutação que mata: admitir como `'instance'` — o mundo passaria a 2 de 1, e furaria quem espera na fila.
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(1);
+    expect(n.session('keeper').participants.map((participant) => participant.id)).toEqual(['keeper']);
+    expect(n.host.sessionFor('b')).toBeUndefined();
+    expect(n.located.has('b')).toBe(false);
+    expect(n.released).toContain('b');
+    // Nada se perdeu: o extrato que acabou de pousar é o checkpoint — a âncora de saída e os vitais.
+    expect(n.lastLine('b')).toMatchObject({ reason: 'exit-rule', worldPosition: absolute(STREET), townId: 'thais' });
+    expect(n.lastLine('b')?.health).toBeGreaterThan(0);
+    // Viu o fim da hunt e o socket fechou: o cliente reconecta pelo ticket, e a fila o recebe como a qualquer um.
+    expect(ofType(b.socket.received(), 'session-ended').map((message) => message.reason)).toEqual(['exit-rule']);
+    expect(b.socket.ended).toMatchObject({ code: 1000 });
+  });
+
+  it('com vaga, a mesma hunt volta ao mundo — o teto só barra quando não há onde', async () => {
+    const n = node({ capacity: 2 });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    await direct(n, 'b');
+
+    await finish(n, 'b');
+
+    expect(n.typeOf('b')).toBe('world');
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(2);
+    expect(n.character('b').position).toEqual(STREET);
+  });
+
+  it('quem SAIU do mundo para a hunt volta mesmo com o mundo cheio: o passe é dele', async () => {
+    const n = node({ capacity: 1 });
+    const a = await n.login('a', { worldPosition: absolute(STREET) });
+    n.host.handle(a.viewer, { type: 'enter-hunt', huntId: HUNT });
+    await settle();
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(0);
+    // A vaga dele foi de outro enquanto caçava: o mundo está cheio de novo.
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    expect(n.wiring.worldShard?.isFull(DEFAULT_WORLD_ID)).toBe(true);
+
+    await finish(n, 'a');
+
+    // Já estava no mundo antes de sair, e barrá-lo é negar o que ele já tinha: passa do teto, como a OW-21 diz.
+    expect(n.typeOf('a')).toBe('world');
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(2);
+    expect(n.character('a').position).toEqual(STREET);
+  });
+
+  it('com gente na fila, a hunt direta bate na porta como o login — e sem lugar vai ao repouso, premium inclusive', async () => {
+    // O mundo TEM vaga (teto 3, um dentro), mas a fila diz que há quem espere à frente — a partir de agora.
+    let verdict: WorldEntryVerdict = { admitted: true };
+    const n = node({ capacity: 3, queue: () => verdict });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    await direct(n, 'b', { premium: true });
+    verdict = { admitted: false, position: 2, retryAfterMs: 5_000 };
+    n.knocks.length = 0;
+
+    await finish(n, 'b');
+
+    expect(n.knocks).toEqual([{ characterId: 'b', premium: true }]);
+    expect(n.host.sessionFor('b')).toBeUndefined();
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(1);
+    expect(n.lastLine('b')).toMatchObject({ reason: 'exit-rule', worldPosition: absolute(STREET) });
+  });
+
+  it('a fila que o admite deixa a hunt direta voltar ao mundo; quem saiu do mundo nem bate na porta', async () => {
+    const n = node({ capacity: 3, queue: () => ({ admitted: true }) });
+    const a = await n.login('a', { worldPosition: absolute(STREET) });
+    n.host.handle(a.viewer, { type: 'enter-hunt', huntId: HUNT });
+    await settle();
+    await direct(n, 'b');
+    n.knocks.length = 0;
+
+    await finish(n, 'b');
+    expect(n.knocks).toEqual([{ characterId: 'b', premium: false }]);
+    expect(n.typeOf('b')).toBe('world');
+
+    // `a` saiu do mundo: o passe dele não passa pela fila (`login` não é chamado de novo).
+    await finish(n, 'a');
+    expect(n.typeOf('a')).toBe('world');
+    expect(n.knocks).toHaveLength(1);
+  });
+
+  it('a fila que não responde (o Redis pisca) leva a hunt direta ao repouso, e não a deixa numa sessão encerrada', async () => {
+    let broken = false;
+    const n = node({ capacity: 3, queue: () => { if (broken) throw new Error('redis down'); return { admitted: true }; } });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    await direct(n, 'b');
+    broken = true;
+
+    await finish(n, 'b');
+
+    expect(n.host.sessionFor('b')).toBeUndefined();
+    expect(n.located.has('b')).toBe(false);
+    expect(n.lastLine('b')).toMatchObject({ reason: 'exit-rule', worldPosition: absolute(STREET) });
+  });
+
+  it('a party largada do REPOUSO não leva o passe: com o mundo cheio, todos vão ao repouso', async () => {
+    const n = node({ capacity: 1 });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    const party: PartyTicket = {
+      sessionId: 's-rest', leaderId: 'p1', shareCosts: false, splitLoot: false, huntId: HUNT, difficulty: 'cautious',
+      members: ['p1', 'p2'].map((characterId) => ({
+        characterId, accountId: `acc-${characterId}`,
+        initialCharacter: { level: 1, xp: 0, townId: 'thais', name: characterId, worldPosition: absolute(STREET) },
+      })),
+    };
+    expect(await n.host.prepare('p1', party.members[0]?.initialCharacter, 'acc-p1', party)).toEqual({ created: true });
+    for (const id of ['p1', 'p2']) n.host.handle(n.host.attach(new FakeSocket(), id), { type: 'session-attach' });
+    expect(n.typeOf('p1')).toBe('hunt');
+
+    await finish(n, 'p1');
+
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(1);
+    expect(n.host.sessionFor('p1')).toBeUndefined();
+    expect(n.host.sessionFor('p2')).toBeUndefined();
+    expect(n.lastLine('p2')).toMatchObject({ reason: 'exit-rule', worldPosition: absolute(STREET) });
+  });
+
+  it('a party largada do MUNDO guarda o passe de cada um, mesmo com o mundo cheio quando volta', async () => {
+    const n = node({ capacity: 2 });
+    await n.login('leader', { worldPosition: absolute(STREET) });
+    await n.login('mate', { worldPosition: absolute(OTHER_STREET) });
+    const members = ['leader', 'mate'];
+    const party: PartyTicket = {
+      sessionId: 's-world', leaderId: 'leader', shareCosts: false, splitLoot: false, huntId: HUNT, difficulty: 'cautious',
+      members: members.map((characterId) => ({
+        characterId, accountId: `acc-${characterId}`, initialCharacter: { level: 1, xp: 0, townId: 'thais', name: characterId },
+      })),
+    };
+    await n.host.prepare('leader', party.members[0]?.initialCharacter, 'acc-leader', party);
+    for (const id of members) n.host.handle(n.host.attach(new FakeSocket(), id), { type: 'session-attach' });
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(0);
+    // Dois outros ocupam as vagas que eles deixaram.
+    await n.login('x', { worldPosition: absolute(STREET) });
+    await n.login('y', { worldPosition: absolute(OTHER_STREET) });
+    expect(n.wiring.worldShard?.isFull(DEFAULT_WORLD_ID)).toBe(true);
+
+    await finish(n, 'leader');
+
+    expect(n.typeOf('leader')).toBe('world');
+    expect(n.typeOf('mate')).toBe('world');
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(4);
+  });
+
+  it('a transição manual de volta (`to: world`) com o mundo cheio também leva a hunt direta ao repouso, e grava o extrato', async () => {
+    const n = node({ capacity: 1 });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    await direct(n, 'b');
+
+    await n.host.transition('b', { to: 'world' });
+
+    expect(n.host.sessionFor('b')).toBeUndefined();
+    expect(n.located.has('b')).toBe(false);
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(1);
+    expect(n.lastLine('b')).toMatchObject({ reason: 'manual-exit', worldPosition: absolute(STREET) });
+  });
+
+  it('o passe não sobrevive ao repouso: quem saiu do mundo, caçou e foi ao repouso volta pela hunt direta SEM ele', async () => {
+    const n = node({ capacity: 2 });
+    const a = await n.login('a', { worldPosition: absolute(STREET) });
+    await n.login('keeper', { worldPosition: absolute(OTHER_STREET) });
+    n.host.handle(a.viewer, { type: 'enter-hunt', huntId: HUNT });
+    await settle();
+    // O navegador fecha na hunt e ela acaba sem ninguém olhando: o personagem vai ao repouso.
+    n.host.detach(a.viewer);
+    await finish(n, 'a');
+    expect(n.host.sessionFor('a')).toBeUndefined();
+    // O mundo enche enquanto ele está em repouso, e ele volta pela hunt idle direta.
+    await n.login('filler', { worldPosition: absolute(STREET) });
+    expect(n.wiring.worldShard?.isFull(DEFAULT_WORLD_ID)).toBe(true);
+    await direct(n, 'a');
+
+    await finish(n, 'a');
+
+    expect(n.host.sessionFor('a')).toBeUndefined();
+    expect(n.wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(2);
+  });
+});
+
 describe('a hunt acaba SEM ninguém olhando: o repouso, e nunca o mundo (#841, ADR 0060 d.6c)', () => {
   it('fecha o navegador na hunt e deixa-a acabar por regra de saída (`out-of-gold`): repouso no tile de saída, e o mundo nem nasce', async () => {
     const n = node();
@@ -691,20 +909,22 @@ describe('a largada de party a partir do mundo checa canLogout de cada membro (#
     expect(ofType(late.socket.received(), 'logout-refused')).toEqual([{ type: 'logout-refused', reason: 'in-fight' }]);
   });
 
+  /**
+   * O ticket como o `api` o emite: o banco tem a posição de um checkpoint atrás — o templo —, e o mundo já andou.
+   * É a âncora que a hunt NÃO pode usar ao devolver o membro.
+   */
+  const stale = (party: PartyTicket): PartyTicket => ({
+    ...party,
+    members: party.members.map((member) => ({
+      ...member, initialCharacter: { ...member.initialCharacter, worldPosition: { ...absolute(TEMPLE) } },
+    })),
+  });
+
   it('a party largada do mundo VOLTA ao tile de onde cada um saiu: a âncora de agora, não a do último checkpoint', async () => {
     const n = node();
     const leader = await n.login('leader', { worldPosition: absolute(STREET) });
     const mate = await n.login('mate', { worldPosition: absolute(OTHER_STREET) });
-    // O banco tem a posição de um checkpoint atrás: o ticket da party a carrega, e o mundo já andou.
-    const stale = { ...absolute(TEMPLE) };
-    const party = ticket(['leader', 'mate']);
-    const staleParty: PartyTicket = {
-      ...party,
-      members: party.members.map((member) => ({
-        ...member, initialCharacter: { ...member.initialCharacter, worldPosition: stale },
-      })),
-    };
-    await launch(n, staleParty);
+    await launch(n, stale(ticket(['leader', 'mate'])));
     watch(n, 'leader');
     watch(n, 'mate');
     expect(n.typeOf('leader')).toBe('hunt');
@@ -724,6 +944,68 @@ describe('a largada de party a partir do mundo checa canLogout de cada membro (#
     expect(n.character('mate').position).toEqual(OTHER_STREET);
     void leader;
     void mate;
+  });
+
+  it('dois tickets da MESMA party que chegam juntos: cada um leva a âncora de agora, em qualquer ordem', async () => {
+    // Os tickets dos membros vêm de `/api/party/mine` independentes e chegam ao `game` dentro da janela do
+    // `prepare` do primeiro. Cada `prepare` constrói a sua `Session` da party, e o `#createLocal` guarda a que
+    // hospeda primeiro: a âncora escrita na descartada se perdia, e o fim da hunt gravava a do ticket por cima.
+    for (const order of [['leader', 'mate'], ['mate', 'leader']] as const) {
+      const n = node();
+      await n.login('leader', { worldPosition: absolute(STREET) });
+      await n.login('mate', { worldPosition: absolute(OTHER_STREET) });
+      const party = stale(ticket(['leader', 'mate']));
+
+      await Promise.all(order.map((id) => launch(n, party, id)));
+
+      // Uma hunt só, com os dois, e a âncora de CADA UM é a de onde saiu do mundo.
+      expect(n.host.sessionCount).toBe(1);
+      expect(n.session('leader')).toBe(n.session('mate'));
+      expect(n.character('leader').worldPosition).toEqual(absolute(STREET));
+      expect(n.character('mate').worldPosition).toEqual(absolute(OTHER_STREET));
+
+      // E a volta confirma: o extrato do fim da hunt leva essas âncoras, e os dois voltam ao tile de saída.
+      watch(n, 'leader');
+      watch(n, 'mate');
+      endInsideNextAdvance(n.session('leader'), (session) => { session.end('exit-rule'); });
+      n.tick(1_000);
+      await settle();
+      expect(n.typeOf('leader')).toBe('world');
+      expect(n.typeOf('mate')).toBe('world');
+      expect(n.character('leader').position).toEqual(STREET);
+      expect(n.character('mate').position).toEqual(OTHER_STREET);
+    }
+  });
+
+  it('o ticket de ENTRADA (`join`) de quem está no mundo leva a âncora de agora para a hunt em curso', async () => {
+    const n = node();
+    await n.login('leader');
+    await n.login('mate');
+    await launch(n, ticket(['leader', 'mate']));
+    expect(n.typeOf('leader')).toBe('hunt');
+    // Quem chega depois, do mundo, fora de luta e longe do templo.
+    await n.login('late', { worldPosition: absolute(STREET) });
+    n.tick(120_000);
+    const join: PartyTicket = {
+      ...ticket(['leader', 'mate']), join: true,
+      members: [{
+        characterId: 'late', accountId: 'acc-late',
+        // O banco, um checkpoint atrás: o templo.
+        initialCharacter: { level: 1, xp: 0, townId: 'thais', name: 'late', worldPosition: { ...absolute(TEMPLE) } },
+      }],
+    };
+
+    expect(await n.host.prepare('late', join.members[0]?.initialCharacter, 'acc-late', join)).toEqual({ created: true });
+    watch(n, 'late');
+
+    expect(n.typeOf('late')).toBe('hunt');
+    // A âncora do recém-chegado é a de agora, e não a do ticket.
+    expect(n.character('late').worldPosition).toEqual(absolute(STREET));
+    endInsideNextAdvance(n.session('late'), (session) => { session.end('exit-rule'); });
+    n.tick(1_000);
+    await settle();
+    expect(n.typeOf('late')).toBe('world');
+    expect(n.character('late').position).toEqual(STREET);
   });
 
   it('o membro que sai por dentro vai ao repouso SEM encerrar a hunt dos outros; o último, olhando, volta ao mundo', async () => {

@@ -174,6 +174,46 @@ describe('o teto vale só na entrada do repouso (ADR 0060 d.2b)', () => {
     expect(() => shard.admit(DEFAULT_WORLD_ID, fromTicket('d'), 'rest')).toThrow(WorldFullError);
   });
 
+  it('quem volta de uma instância que NASCEU do repouso (`instance-from-rest`) é recusado pelo teto como o login (#841)', () => {
+    const shard = new WorldShard(real(), undefined, { capacity: 2 });
+    shard.admit(DEFAULT_WORLD_ID, fromTicket('a'), 'rest');
+    shard.admit(DEFAULT_WORLD_ID, fromTicket('b'), 'rest');
+
+    // Mutação que mata: tratá-lo como `'instance'` — a hunt idle direta, que nunca ocupou vaga, engordaria o mundo cheio.
+    const refused = hero('c');
+    expect(() => shard.admit(DEFAULT_WORLD_ID, refused, 'instance-from-rest')).toThrow(WorldFullError);
+    expect(shard.populationOf(DEFAULT_WORLD_ID)).toBe(2);
+    expect((shard.sessionOf(DEFAULT_WORLD_ID) as Session).participants.some((p) => p.id === 'c')).toBe(false);
+    // E com vaga ele entra, na MESMA sessão.
+    const session = shard.sessionOf(DEFAULT_WORLD_ID) as Session;
+    session.leave('b', 'manual-exit');
+    expect(shard.admit(DEFAULT_WORLD_ID, hero('c'), 'instance-from-rest')).toBe(session);
+    expect(session.participants.map((participant) => participant.id)).toEqual(['a', 'c']);
+  });
+
+  it('`instance-from-rest` NÃO desloca as condições de novo: quem já andou por uma sessão foi traduzido por `moveToClock`', () => {
+    // O mesmo caminho — mundo, hunt, mundo — com as duas entradas: o prazo que falta é o mesmo. Com
+    // `carryRestoredConditions` (que é do `'rest'`) a de `instance-from-rest` ganharia o relógio do mundo em cima.
+    const remaining = (entry: 'instance' | 'instance-from-rest'): number | undefined => {
+      const wiring = createSessionWiring(real(), () => 0, { openWorld: true, worldShard: { capacity: 5 } });
+      const world = wiring.createSession('b', {
+        level: 1, xp: 0, townId: 'thais', conditions: [{ key: 'haste', expiresAtMs: 20_000, speedPercent: 30 }],
+      });
+      wiring.createSession('a', { level: 1, xp: 0, townId: 'thais' });
+      world.advanceBy(5_000);
+      const hunt = wiring.buildSession({ to: 'hunt', huntId: 'rat-cellars' }, world, 'b') as Session;
+      world.leave('b', 'manual-exit');
+      hunt.advanceBy(2_000);
+      const back = wiring.buildSession({ to: 'world', worldEntry: entry }, hunt, 'b') as Session;
+      const haste = back.participants.find((p) => p.id === 'b')?.conditions.getState().find((c) => c.key === 'haste');
+      return haste === undefined ? undefined : haste.expiresAtMs - back.nowMs;
+    };
+
+    const passed = remaining('instance');
+    expect(passed).toBeGreaterThan(0);
+    expect(remaining('instance-from-rest')).toBe(passed);
+  });
+
   it('o teto padrão é o `capacity` do conteúdo do mundo (main.json: 200)', () => {
     const shard = new WorldShard(real());
     expect(real().worlds.get(DEFAULT_WORLD_ID)?.capacity).toBe(200);
@@ -318,6 +358,17 @@ describe('a costura de sessões do nó e a flag OPEN_WORLD (#839)', () => {
     const back = wiring.buildSession({ to: 'world' }, hunt as Session, 'b');
     expect(back).toBe(world);
     expect(back?.participants.map((participant) => participant.id)).toEqual(['a', 'b']);
+  });
+
+  it('o builder pede o teto quando o host diz que a instância nasceu do repouso: `worldEntry: instance-from-rest` lança `WorldFullError` (#841)', () => {
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true, worldShard: { capacity: 1 } });
+    wiring.createSession('a', { level: 1, xp: 0, townId: 'thais' });
+    const city = wiring.cityShard.admit(fromTicket('b'), true);
+    const hunt = wiring.buildSession({ to: 'hunt', huntId: 'rat-cellars' }, city, 'b') as Session;
+
+    expect(() => wiring.buildSession({ to: 'world', worldEntry: 'instance-from-rest' }, hunt, 'b')).toThrow(WorldFullError);
+    // Sem a indicação — ou com o passe —, a volta segue sem teto, como sempre foi.
+    expect(wiring.buildSession({ to: 'world', worldEntry: 'instance' }, hunt, 'b')?.participants).toHaveLength(2);
   });
 
   it('o shard da Cidade segue como era, ao lado do mundo: o mesmo `CityShard` nos dois caminhos', () => {

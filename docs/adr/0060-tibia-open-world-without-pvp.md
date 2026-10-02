@@ -180,7 +180,7 @@ Todo número será medido na arquitetura de destino (ADR 0013:41-45).
 
 **b. O teto vale só na entrada.**
 - O `capacity` do mundo limita quem entra vindo do repouso.
-- Quem volta de uma instância é sempre admitido, porque já estava no mundo.
+- Quem volta de uma instância é sempre admitido, porque já estava no mundo — só quem SAIU do mundo para ela; a hunt que nasceu do repouso respeita o teto e a fila na volta (emenda de 2026-10-02, #841).
 - Mundo cheio responde como a fila do Canary, com posição e tempo para tentar de novo (`canary/src/server/network/protocol/protocolgame.cpp:1005-1008`), e oferece entrar direto numa hunt idle (decisão 6b).
 - Nunca se abre “Thais 2”.
 - O teto começa em 200 (`CITY_SHARD_CAPACITY`, `packages/server/src/game/sessions.ts:70`) e o `bench:world` o fixa (decisão 11).
@@ -910,13 +910,28 @@ volta ir ao mundo com visualizador e ao repouso sem. A OW-20 as implementou no `
   personagem do ticket — a linha do banco, um checkpoint atrás —, e sem herdar a de agora o fim da hunt a gravaria
   por cima, com versão maior.
 
-**O que a OW-20 deixa, com dono:** o texto do `logout-refused` e do `member-in-fight` no cliente, e o `HuntsModal` que
-mostra o `in-fight` (OW-23); a party recusada que só se desfaz pelo prazo (se o dono quiser desfazê-la na hora, é o
+- **O passe de volta é de quem saiu do mundo.** A decisão 2b diz que quem volta de uma instância "já estava no
+  mundo", e isso só é verdade para quem entrou nela vindo dele. A hunt idle direta (6b) e a party largada de quem
+  estava em repouso nunca ocuparam vaga: se a volta fosse sempre `'instance'`, o mundo cheio engordaria com quem
+  escolheu a hunt justamente por ele estar cheio, e esse personagem furaria a fila em que os outros ainda esperam.
+  O hospedeiro lembra de onde cada um saiu (`leftWorld`): quem saiu do mundo guarda o passe — o teto não o alcança
+  (a emenda da OW-21, "quem volta pode passar do teto") —, e quem nunca esteve nele bate na porta como o login
+  (`WorldEntryGate#login`, premium na frente) e passa pelo teto do shard (`'instance-from-rest'`). Sem lugar, o
+  destino é o repouso, e nada se perde: o extrato que acabou de pousar É o checkpoint, o visualizador recebe o
+  resumo da hunt e reconecta pelo ticket — ao mundo ou à fila, que já guarda a posição dele. A marca não sobrevive ao
+  nó: uma hunt retomada de snapshot não a tem, e com o mundo cheio vai ao repouso — o lado seguro.
+- **A âncora da largada de party vale com os tickets juntos.** Dois tickets da mesma party que chegam dentro da
+  janela do primeiro constroem uma `Session` cada, e só a primeira que hospeda fica; a âncora herdada é escrita no
+  personagem da sessão que sobrou, depois de hospedar, e não na que cada ticket construiu.
+
+**O que a OW-20 deixa, com dono:** o texto do `member-in-fight` no cliente (o do `logout-refused` e o `HuntsModal` que
+mostra o `in-fight` a OW-23 já escreveu); a party recusada que só se desfaz pelo prazo (se o dono quiser desfazê-la na hora, é o
 `game` falar com o `party-store`); a morte no mundo, que continua levando a Cidade pelo `member-left` até a OW-32.
 
-**Efeito no que esta decisão escreveu:** nenhum. As decisões 6a e 6c continuam valendo; esta emenda só registra
-quando se pergunta, em que mensagem a recusa volta, onde mora o checkpoint do repouso, por que soltar não é
-`release`, quem cura o morto e onde a largada de party se confere.
+**Efeito no que esta decisão escreveu:** as decisões 6a e 6c continuam valendo; esta emenda registra quando se
+pergunta, em que mensagem a recusa volta, onde mora o checkpoint do repouso, por que soltar não é `release`, quem
+cura o morto e onde a largada de party se confere. A decisão 2b ganha uma precisão: o passe do teto na volta é de
+quem saiu do mundo, e não de toda instância.
 
 ## Emenda — 2026-10-02 (#846, OW-23): o cliente do mundo — a rota do menu, o que o fechamento do socket quer dizer e o canal da recusa
 
