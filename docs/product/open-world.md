@@ -333,8 +333,8 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 - A suspensão **não** entra no snapshot: o mundo não tem snapshot (ADR 0060 d.10a). Quem chega ao
   mundo sem visualizador recebe `presence-lost` na chegada, e quem sai ou volta pelo mesmo id começa
   sem suspensão.
-- A instância não muda: a suspensão é um `Set` vazio em toda hunt, lido pelas sete guardas do
-  caminho quente (`HuntRuleset#isSuspended`).
+- A instância não muda: o conjunto de suspensos é `null` em toda hunt (só nasce na primeira queda de
+  um mundo), lido pelas sete guardas do caminho quente (`HuntRuleset#isSuspended`).
 
 ### Os tetos da sessão
 

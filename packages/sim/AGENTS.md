@@ -1389,8 +1389,8 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   Canary). A suspensão mora em `HuntRuleset#suspendAutomation`/`resumeAutomation` (protegidos) e em
   sete guardas `#isSuspended` — `#attackTarget` (sem ele o herói bateria no melhor ao alcance pela
   política, que é o bot escolhendo), `#autoSelectTarget`, `#armBot`/`#onBot`, `#armAutomations`/
-  `#onAutomation` e `#playerStep` —, todas um `Set.size` num conjunto vazio na instância, que continua
-  byte a byte. Código novo que faça o personagem AGIR sem o jogador (um tipo novo de automação, uma
+  `#onAutomation` e `#playerStep` —, todas uma comparação com `null` na instância (o conjunto de suspensos só nasce
+  na primeira queda), que continua byte a byte. Código novo que faça o personagem AGIR sem o jogador (um tipo novo de automação, uma
   nova eleição de alvo) tem de passar por `#isSuspended`, ou o personagem sem conexão passa a agir.
   (3) **Nada é cancelado na fila ao suspender**: o golpe e os grupos já agendados vencem, encontram o
   personagem sem dono e não fazem nada, e `#onAutomation` suspenso NÃO se reagenda (um ciclo por

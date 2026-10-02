@@ -2069,12 +2069,13 @@ export class HuntRuleset implements Ruleset {
 
   /**
    * Os personagens cuja AUTOMAÇÃO está suspensa: o jogador que os dirigia não está mais (a perda de
-   * conexão do mundo, OW-14 — `suspendAutomation`). Vazio em toda hunt e em todo mundo em que
-   * ninguém caiu, e lido por `#isSuspended` no caminho quente: um `Set.size` num conjunto vazio.
-   * Não entra no snapshot — o mundo não tem snapshot (ADR 0060 d.10a), e quem o hospeda entrega
-   * `presence-lost` a quem chega sem visualizador.
+   * conexão do mundo, OW-14 — `suspendAutomation`). `null` em toda hunt (nasce sob demanda: um Set
+   * vazio custa ~200 bytes por sessão, e a instância é a base econômica do jogo) e lido por
+   * `#isSuspended` no caminho quente: uma comparação com `null`. Não entra no snapshot — o mundo não
+   * tem snapshot (ADR 0060 d.10a), e quem o hospeda entrega `presence-lost` a quem chega sem
+   * visualizador.
    */
-  readonly #suspended = new Set<string>();
+  #suspended: Set<string> | null = null;
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
@@ -3155,7 +3156,7 @@ export class HuntRuleset implements Ruleset {
     // quem entra nunca esteve na fila (o primeiro nasce com ela; o de party é um id novo) —, e não
     // consome `seq` nem toca em evento de ninguém.
     session.cancelEvents(character.id);
-    this.#suspended.delete(character.id);
+    this.#suspended?.delete(character.id);
     // A âncora do tempo cobrado acompanha o ÚLTIMO EVENTO, e o mundo pode ficar sem evento nenhum
     // (vazio, e sem monstro dormente enquanto a OW-30 não chega): com ninguém dentro o relógio
     // anda e a âncora fica parada no último evento. O primeiro evento de quem chega depois cobraria
@@ -3298,7 +3299,7 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
     // Quem sai leva a suspensão consigo: o mesmo id que voltar entra dirigido por quem o loga.
-    this.#suspended.delete(character.id);
+    this.#suspended?.delete(character.id);
     // O `lootSeq` fica com a sessão: quem voltar pelo mesmo id continua dele (ver `onEnter`).
     if (this.#topology.namesOwnerInItemIds) this.#lootSeqOfDeparted.set(character.id, character.lootSeq);
     // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
@@ -6148,8 +6149,8 @@ export class HuntRuleset implements Ruleset {
    */
   protected suspendAutomation(characterId: string): boolean {
     const runner = this.#runners.get(characterId);
-    if (runner === undefined || this.#suspended.has(characterId)) return false;
-    this.#suspended.add(characterId);
+    if (runner === undefined || this.#suspended?.has(characterId) === true) return false;
+    (this.#suspended ??= new Set()).add(characterId);
     runner.attackTarget = null;
     runner.attackTargetPinned = false;
     runner.botCandidate = null;
@@ -6165,7 +6166,7 @@ export class HuntRuleset implements Ruleset {
    * Devolve `false` se não estava suspenso.
    */
   protected resumeAutomation(session: Session, characterId: string): boolean {
-    if (!this.#suspended.delete(characterId)) return false;
+    if (this.#suspended?.delete(characterId) !== true) return false;
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return true;
     this.#autoSelectTarget(session, character);
@@ -6174,9 +6175,9 @@ export class HuntRuleset implements Ruleset {
     return true;
   }
 
-  /** O personagem está sem dono (`suspendAutomation`)? Um `Set.size` num conjunto quase sempre vazio. */
+  /** O personagem está sem dono (`suspendAutomation`)? Uma comparação com `null` onde ninguém caiu. */
   #isSuspended(characterId: string): boolean {
-    return this.#suspended.size !== 0 && this.#suspended.has(characterId);
+    return this.#suspended !== null && this.#suspended.has(characterId);
   }
 
   /**
