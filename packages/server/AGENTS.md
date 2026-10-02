@@ -836,7 +836,12 @@ membro de party, #194, tem a mesma janela). **Perguntas por `ruleset.type === 'c
 `buy-item`, o livro do offline training, e a marca `dirty` do `use-slot` — não são ramos de
 `shared`, ficam como estão. O mundo ganhou tipo próprio na OW-13 (`'world'`) e a pergunta do tile
 tem resposta no `sim` (`Ruleset.acceptsCityServices`), mas nenhuma sessão de mundo é hospedada
-ainda: trocar essas conferências por ela é do `WorldShard` (OW-18).
+ainda: trocar essas conferências por ela é do `WorldShard` (OW-18). **Eventos notáveis por
+personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
+`Session.notableEventsFor(characterId, from)`, nunca `session.notableEvents` crua — no mundo cada
+evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
+Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
+na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 
