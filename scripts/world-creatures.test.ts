@@ -54,11 +54,11 @@ describe('buildCreatures', () => {
 });
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BLOCK = join(ROOT, 'things', '1332', 'world', 'creatures', '8', '129-126.json');
+const BLOCK = join(ROOT, 'things', '1533', 'world', 'creatures', '8', '129-126.json');
 
 describe.skipIf(!existsSync(BLOCK))('criaturas reais (things/)', () => {
   it('a caverna de rotworms de Darashia tem os 35 pontos de Rotworm do ADR 0025 (#511)', () => {
-    const types = JSON.parse(readFileSync(join(ROOT, 'things', '1332', 'world', 'creatures', 'types.json'), 'utf8')) as Array<{ name: string }>;
+    const types = JSON.parse(readFileSync(join(ROOT, 'things', '1533', 'world', 'creatures', 'types.json'), 'utf8')) as Array<{ name: string }>;
     const block = JSON.parse(readFileSync(BLOCK, 'utf8')) as Array<[number, number, number, number]>;
     const inBox = block.filter(([x, y, t]) => x >= 33098 && x <= 33185 && y >= 32401 && y <= 32473 && types[t]?.name === 'Rotworm');
     expect(inBox).toHaveLength(35);
