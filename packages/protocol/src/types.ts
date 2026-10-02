@@ -556,6 +556,16 @@ export const C2S_SCHEMAS = {
    * `purchasable`, preço, saldo e capacidade são do servidor (invariante 4).
    */
   'buy-item': z.object({ itemId: z.string().min(1) }),
+  /**
+   * Escolher o nível de Hazard de uma zona (M44-14, #632). INTENÇÃO: só a zona e o nível; se o
+   * nível cabe no teto que o personagem desbloqueou é do servidor (invariante 4), e só a Cidade
+   * aceita (o nível de uma hunt em curso é fixo, ADR 0052 d.5). `level` é inteiro positivo: zero
+   * e negativo não são níveis.
+   */
+  'set-hazard-level': z.object({
+    zoneId: z.string().min(1).max(64),
+    level: z.number().int().positive().max(1_000),
+  }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -1049,6 +1059,11 @@ export const S2C_SCHEMAS = {
        */
       description: z.string().min(1).optional(),
       /**
+       * A zona de Hazard desta hunt (M44-14, #632): a chave de `catalogue.hazard.zones[].id`. Ausente
+       * é uma hunt sem nível de perigo — a tela não oferece o seletor.
+       */
+      hazardZoneId: z.string().min(1).optional(),
+      /**
        * A contagem de monstros por dificuldade (SV-19, #355) — "Ousado · 4" do Huntera.
        * Mesma ordem de `difficulties`. `default([])`: nó game anterior manda sem.
        */
@@ -1165,6 +1180,17 @@ export const S2C_SCHEMAS = {
       chance: z.tuple([z.number(), z.number(), z.number()]),
       points: z.tuple([z.number().int().positive(), z.number().int().positive(), z.number().int().positive()]),
     })).default([]),
+    /**
+     * As zonas de Hazard (M44-14, #632): o que a tela precisa para oferecer o seletor de nível —
+     * nome e faixa de cada zona. O que o personagem já desbloqueou é o `hazard` (S2C), por
+     * personagem; aqui é o conteúdo, fixado na sessão. Ausente: nó anterior a esta issue.
+     */
+    hazardZones: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      minLevel: z.number().int().positive(),
+      maxLevel: z.number().int().positive(),
+    })).optional(),
     /**
      * O que a UI do bot pode oferecer (AB-09, ADR 0032 d.1/d.9).
      *
@@ -1842,6 +1868,17 @@ export const S2C_SCHEMAS = {
     object: z.boolean().optional(),
     colors: OutfitColors.optional(),
     addons: z.number().int().min(0).max(3).optional(),
+  }),
+  /**
+   * O Hazard do PRÓPRIO personagem (M44-14, #632, ADR 0052 d.1): o registro CRU — o teto
+   * desbloqueado e o nível escolhido de cada zona —, como `charms`. Zona ausente é o `minLevel`
+   * dela (`catalogue.hazard.zones`). Só para o dono, como `blessings`.
+   */
+  hazard: z.object({
+    /** `zoneId` → o maior nível que o personagem pode escolher. */
+    maxLevel: z.record(z.string().min(1), z.number().int().positive()),
+    /** `zoneId` → o nível que vale na próxima entrada. */
+    currentLevel: z.record(z.string().min(1), z.number().int().positive()),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 

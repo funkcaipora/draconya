@@ -80,7 +80,7 @@ describe('checkWorld', () => {
 // com o que o leitor do OTBM entrega para a mesma região. Pula onde o mapa não foi gerado.
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OTBM = join(ROOT, 'things', 'maps', 'otservbr.otbm');
-const THAIS_SECTOR = join(ROOT, 'things', '1332', 'world', sectorPath(7, 1011, 1007));
+const THAIS_SECTOR = join(ROOT, 'things', '1533', 'world', sectorPath(7, 1011, 1007));
 const real = existsSync(OTBM) && existsSync(THAIS_SECTOR);
 
 describe.skipIf(!real)('mundo real (things/)', () => {

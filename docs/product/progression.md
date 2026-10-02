@@ -210,7 +210,7 @@ Agora:
   (`STUCK_RECEIPT_AFTER`, ~50 s) ele deixa de segurar os seguintes, para o personagem não ficar
   preso até o TTL do Redis — os absolutos dele se perdem (a guarda já subiu) e isso vai ao log.
 - **Todo campo absoluto só é escrito quando a versão do extrato é maior que
-  `characters.durable_version`**, que sobe na mesma transação (migração 0027, `bigint` com default
+  `characters.durable_version`**, que sobe na mesma transação (migração 0028, `bigint` com default
   0). Extrato atrasado entra só com os deltas: XP, gold, item criado/vendido, e o que é monotônico
   por natureza (Bestiário pelo máximo, vocação, promoção, magias aprendidas pela união). Um
   extrato sem versão segue a regra de antes e não mexe na coluna.

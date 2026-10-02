@@ -1,7 +1,7 @@
-// #823, OW-02 (ADR 0060 decisão 10e): a migração 0027 acrescenta `character.durable_version` — a
+// #823, OW-02 (ADR 0060 decisão 10e): a migração 0028 acrescenta `character.durable_version` — a
 // versão do último extrato de estado absoluto que o ledger aplicou — com `DEFAULT 0`. Este teste
-// aplica as migrações 0000–0026 (o schema como era ANTES da 0027), insere personagens com dado de
-// verdade, roda só a 0027 e confere o que a issue promete: NENHUMA linha existente é reescrita nem
+// aplica as migrações 0000–0027 (o schema como era ANTES da 0028), insere personagens com dado de
+// verdade, roda só a 0028 e confere o que a issue promete: NENHUMA linha existente é reescrita nem
 // perde nada (ADR 0014), todas nascem na versão 0 — "nenhum extrato versionado aplicado ainda", e
 // o primeiro extrato versionado (>= 1) é sempre mais novo —, e a coluna não aceita nulo.
 //
@@ -14,17 +14,17 @@ import { describe, expect, it } from 'vitest';
 
 const databaseUrl = process.env['DATABASE_TEST_URL'];
 const migrationsDir = new URL('../../migrations/', import.meta.url);
-const targetMigrationUrl = new URL('../../migrations/0027_823-durable-version.sql', import.meta.url);
+const targetMigrationUrl = new URL('../../migrations/0028_823-durable-version.sql', import.meta.url);
 
-/** Tudo do personagem que a 0027 NÃO pode tocar, na ordem em que os testes o comparam. */
+/** Tudo do personagem que a 0028 NÃO pode tocar, na ordem em que os testes o comparam. */
 const UNTOUCHED_COLUMNS = `
   id, account_id, name, vocation, promoted, level, xp, gold, soul, blessings, fed_ms, stamina_ms,
   state, capacity, fight_mode, skills::text as skills
 `;
 
-describe.runIf(databaseUrl !== undefined)('migração 0027: a versão durável do personagem (#823, ADR 0060)', () => {
+describe.runIf(databaseUrl !== undefined)('migração 0028: a versão durável do personagem (#823, ADR 0060)', () => {
   it('preserva todo personagem existente — nenhuma coluna muda — e todos nascem na versão 0', async () => {
-    const fixture = await schemaBeforeMigration0027(databaseUrl!);
+    const fixture = await schemaBeforeMigration0028(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Knight One', {
         vocation: 'knight', promoted: true, level: 210, xp: 12_345_678, gold: 900_000, blessings: 127,
@@ -47,7 +47,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0027: a versão durável d
   });
 
   it('quem nasce depois da migração também entra na versão 0, sem a coluna no INSERT', async () => {
-    const fixture = await schemaBeforeMigration0027(databaseUrl!);
+    const fixture = await schemaBeforeMigration0028(databaseUrl!);
     try {
       await runSqlFile(fixture.sql, targetMigrationUrl);
       await fixture.sql`insert into character (id, account_id, name) values ('c3', 'a1', 'Hero c3')`;
@@ -59,7 +59,7 @@ describe.runIf(databaseUrl !== undefined)('migração 0027: a versão durável d
   });
 
   it('a coluna guarda versões altas e recusa nulo — o ledger sobe a versão, nunca a apaga', async () => {
-    const fixture = await schemaBeforeMigration0027(databaseUrl!);
+    const fixture = await schemaBeforeMigration0028(databaseUrl!);
     try {
       await fixture.insertCharacter('c1', 'Knight One', {});
       await runSqlFile(fixture.sql, targetMigrationUrl);
@@ -84,7 +84,7 @@ interface SeedOptions {
   readonly blessings?: number;
 }
 
-async function schemaBeforeMigration0027(url: string) {
+async function schemaBeforeMigration0028(url: string) {
   const schemaName = `test_${randomUUID().replaceAll('-', '')}`;
   const administrator = postgres(url, { max: 1, onnotice: () => {} });
   await administrator.unsafe(`create schema "${schemaName}"`);
@@ -96,10 +96,10 @@ async function schemaBeforeMigration0027(url: string) {
   const sql = postgres(scopedUrl.toString(), { max: 1 });
 
   try {
-    // As migrações como elas eram ANTES da 0027 — em ordem, pelo nome do arquivo, como o
+    // As migrações como elas eram ANTES da 0028 — em ordem, pelo nome do arquivo, como o
     // `drizzle-orm/postgres-js/migrator` aplica de verdade.
     const files = (await readdir(migrationsDir))
-      .filter((name) => name.endsWith('.sql') && name < '0027_')
+      .filter((name) => name.endsWith('.sql') && name < '0028_')
       .sort();
     for (const name of files) await runSqlFile(sql, new URL(name, migrationsDir));
 

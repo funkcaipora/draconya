@@ -833,3 +833,14 @@ mostraria a barra inteira como "não aprendida". `slotView` recebe o registro e 
 `action-slot-unlearned` (apagado, borda tracejada) e "não aprendida" no tooltip. O slot continua na
 barra e continua disparável: quem recusa é o servidor (`not-learned` no `slot-result`).
 
+## O seletor de Hazard (#632, M44-14)
+
+O modal "Escolha uma caçada" mostra, sob a lista, o seletor "Hazard · <zona>" só quando a hunt
+selecionada tem `hazardZoneId` (`hazardChoiceOf`, função pura e testada, em `HuntsModal.tsx`). Ele
+oferece os níveis de `zone.minLevel` ao TETO que o `hazard` (S2C, registro cru em `hud.hazard`)
+diz que o personagem desbloqueou, e manda `set-hazard-level { zoneId, level }` — o servidor confere
+o teto e recusa fora da Cidade, então com uma caçada em curso o seletor aparece desabilitado.
+**O cliente não calcula nenhum efeito do hazard** (invariante 4): XP, dano e loot são do servidor, e
+a frase "mais perigo, mais XP e mais loot" é só rótulo. `catalogue.hazardZones` é opcional no
+protocolo (nó anterior a esta issue não manda), e `apply.ts` só o copia quando presente.
+

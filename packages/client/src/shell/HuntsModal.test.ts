@@ -3,7 +3,8 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, findPartyDecision, resolveSelection,
+  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, findPartyDecision, hazardChoiceOf,
+  hazardLevelMessage, resolveSelection,
 } from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
@@ -258,5 +259,71 @@ describe('attemptEnter (RF-04, RF-09)', () => {
     expect(attemptEnter(null, send, onClose)).toBe(false);
     expect(send).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('o seletor de Hazard (M44-14, #632)', () => {
+  const zone = { id: 'gardens', name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12 };
+  const hazardHunt: HuntListing = {
+    id: 'gnomprona-gardens', name: 'Gnomprona Gardens', recommendedLevel: 400,
+    difficulties: ['default'], outfitIds: [], lootDrops: 3, difficultyDetails: [],
+    monsters: [], loot: [], hazardZoneId: 'gardens',
+  };
+  const withHazard = (register: { maxLevel: Record<string, number>; currentLevel: Record<string, number> } | null) => {
+    hud.set((state) => ({
+      ...state,
+      catalogue: { ...catalogue, hunts: [hazardHunt, ...hunts], hazardZones: [zone] },
+      hazard: register,
+    }));
+  };
+
+  it('hazardChoiceOf: sem zona na hunt, sem zona no catálogo ou sem hunt, não há seletor', () => {
+    expect(hazardChoiceOf(hunts[0]!, [zone], null)).toBeNull();
+    expect(hazardChoiceOf(null, [zone], null)).toBeNull();
+    expect(hazardChoiceOf(hazardHunt, [], null)).toBeNull();
+    expect(hazardChoiceOf(hazardHunt, undefined, null)).toBeNull();
+  });
+
+  it('hazardChoiceOf: quem nunca escolheu vê só o nível mínimo, e o escolhido nunca passa do teto', () => {
+    expect(hazardChoiceOf(hazardHunt, [zone], null)).toMatchObject({ current: 1, max: 1, levels: [1] });
+    const register = { maxLevel: { gardens: 5 }, currentLevel: { gardens: 3 } };
+    expect(hazardChoiceOf(hazardHunt, [zone], register)).toMatchObject({
+      current: 3, max: 5, levels: [1, 2, 3, 4, 5],
+    });
+    // Registro torto: o escolhido acima do teto desbloqueado cai no teto; o teto acima da zona cai na zona.
+    expect(hazardChoiceOf(hazardHunt, [zone], { maxLevel: { gardens: 99 }, currentLevel: { gardens: 50 } }))
+      .toMatchObject({ current: 12, max: 12 });
+    expect(hazardChoiceOf(hazardHunt, [zone], { maxLevel: { gardens: 4 }, currentLevel: { gardens: 9 } }))
+      .toMatchObject({ current: 4, max: 4 });
+  });
+
+  it('hazardLevelMessage é só a zona e o nível: o servidor confere o teto', () => {
+    expect(hazardLevelMessage('gardens', 3)).toEqual({ type: 'set-hazard-level', zoneId: 'gardens', level: 3 });
+  });
+
+  it('a hunt de zona de hazard mostra o seletor com o nível escolhido e os desbloqueados', async () => {
+    withHazard({ maxLevel: { gardens: 3 }, currentLevel: { gardens: 2 } });
+    const html = await render({ hunting: false });
+    expect(html).toContain('Hazard · Gnomprona Gardens');
+    expect(html).toContain('aria-label="Nível de hazard"');
+    expect(html).toContain('Nível 1');
+    expect(html).toContain('Nível 3');
+    expect(html).not.toContain('Nível 4');
+    expect(html).toContain('desbloqueados até o nível 3 de 12');
+    expect(html).toContain('Zona de hazard');
+  });
+
+  it('numa hunt em curso o nível é fixo: o seletor aparece desabilitado e avisa', async () => {
+    withHazard({ maxLevel: { gardens: 3 }, currentLevel: { gardens: 2 } });
+    const html = await render({ hunting: true });
+    expect(html).toMatch(/<select[^>]*disabled/);
+    expect(html).toContain('O nível é fixo enquanto a caçada dura');
+  });
+
+  it('a hunt sem zona (a primeira da lista, sem seleção) não mostra o seletor', async () => {
+    hud.set((state) => ({ ...state, catalogue: { ...catalogue, hazardZones: [zone] } }));
+    const html = await render({ hunting: false });
+    expect(html).not.toContain('Nível de hazard');
+    expect(html).not.toContain('Zona de hazard');
   });
 });

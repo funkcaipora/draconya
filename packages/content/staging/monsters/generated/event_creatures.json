@@ -202,6 +202,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/event_creatures/bones.lua"
     },
+    "rewardBoss": true,
     "outfitId": 231
   },
   {
@@ -495,6 +496,7 @@
       "commit": "47dfd51f45280a59a1d3e50ba7edd573d7234446",
       "path": "data-otservbr-global/monster/event_creatures/fluffy.lua"
     },
+    "rewardBoss": true,
     "outfitId": 240
   },
   {
@@ -5264,6 +5266,7 @@
       "rarity": "nemesis",
       "raceId": 466
     },
+    "rewardBoss": true,
     "outfitId": 292
   },
   {

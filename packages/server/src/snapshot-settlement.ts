@@ -153,6 +153,9 @@ export async function settleSnapshotAsReceipt(
     // O registro do Treino (#631, ADR 0059 d.3): ABSOLUTO como `charms` — sem ele aqui, o banco de
     // offline training que a sessão caída tinha acumulado sumiria junto com o snapshot.
     ...(owner?.training === undefined ? {} : { training: owner.training }),
+    // O Hazard (#632): ABSOLUTO como `charms` — sem ele aqui, uma subida de nível de hazard feita
+    // antes da queda sumiria junto com o snapshot irrestaurável.
+    ...(owner?.hazard === undefined ? {} : { hazard: owner.hazard }),
     // Estoque de supply/munição do loot (#520), pela mesma razão da munição escolhida.
     // O estoque de supply/munição do loot (#520): NÃO gatear por vazio — `{}` é "esgotado nesta
     // sessão", e omitir a chave deixaria o valor antigo ressuscitar no próximo login. O `?? {}`

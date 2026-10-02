@@ -16,10 +16,12 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
-import { isCharacterStorageMap, isFamiliarState, isFightMode, readOfflineTrainingState } from '@draconya/sim';
+import {
+  isCharacterStorageMap, isFamiliarState, isFightMode, isHazardState, readOfflineTrainingState,
+} from '@draconya/sim';
 import type {
   BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, FamiliarState, FightMode,
-  LearnedSpellsState, OfflineTrainingState,
+  HazardState, LearnedSpellsState, OfflineTrainingState,
 } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
@@ -216,6 +218,14 @@ export interface InitialCharacter {
    * anterior: a sessão parte de banco zero e nenhuma skill escolhida.
    */
   readonly training?: OfflineTrainingState;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.1/d.5): o teto desbloqueado e o nível escolhido de cada
+   * zona. Entra na sessão, e não só sai dela, porque o nível de uma hunt de hazard é o que o
+   * personagem escolheu ANTES de entrar — e uma party que começa por tickets (#195) traz o de cada
+   * membro. Validado como os Charms (`isHazardState`). Ausente é personagem que nunca escolheu nem
+   * subiu nível nenhum, ou ticket de um `api` anterior: toda zona vale o `minLevel`.
+   */
+  readonly hazard?: HazardState;
   /**
    * Comida ativa (#726, ADR 0049 decisão 5): `fedMs` restante, lido de `characters.fed_ms`.
    * Entra na sessão, e não só sai dela — sem isto, quem comeu antes de deslogar voltaria em
@@ -757,6 +767,8 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // O registro do Treino (#631): a leitura defensiva do `sim` — banco não negativo e skill não
     // vazia —, e torto vira AUSENTE, nunca ticket recusado, como o Bestiário.
     ...trainingOf(initial['training']),
+    // O Hazard (#632): mesma régua — forma validada por inteiro, torto vira AUSENTE.
+    ...(isHazardState(initial['hazard']) ? { hazard: initial['hazard'] } : {}),
     // Comida ativa (#726): inteiro seguro não negativo, ou AUSENTE — a mesma régua acima.
     ...(typeof initial['fedMs'] === 'number' && Number.isSafeInteger(initial['fedMs'])
       && initial['fedMs'] >= 0

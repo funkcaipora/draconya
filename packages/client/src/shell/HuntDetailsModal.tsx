@@ -18,6 +18,7 @@ import { Checkbox } from './ui/Checkbox.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 import { StatRow } from './ui/StatRow.js';
+import { hazardChoiceOf } from './HuntsModal.js';
 
 /**
  * Os monstros da hunt, na ordem de `hunt.monsters` (SV-02). Monstro sem entrada em
@@ -84,6 +85,7 @@ function HuntDetailsBody() {
   const huntId = useHudSlice((state) => state.huntId);
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
+  const hazardRegister = useHudSlice((state) => state.hazard);
   const hunt = huntId === null ? null : (catalogue?.hunts.find((entry) => entry.id === huntId) ?? null);
 
   if (hunt === null) {
@@ -95,6 +97,9 @@ function HuntDetailsBody() {
   }
 
   const monsters = monstersOf(hunt, catalogue?.monsters ?? []);
+  // O nível de hazard FIXO desta hunt (M44-14, #632): o que o personagem escolheu na Cidade. Numa
+  // party vale o MENOR entre os membros — o servidor decide, a tela só avisa.
+  const hazardChoice = hazardChoiceOf(hunt, catalogue?.hazardZones, hazardRegister);
   const lootItems = lootItemsOf(hunt, catalogue?.items ?? []);
 
   // A configuração de loot do líder (#405, ADR 0035 D2): só existe com party e `splitLoot`
@@ -116,6 +121,13 @@ function HuntDetailsBody() {
         <section className="hunt-details-modal-info">
           <Kicker tone="muted">Sobre esta caçada</Kicker>
           <StatRow label="Nível recomendado" value={`${String(hunt.recommendedLevel)}+`} bar={false} />
+          {hazardChoice !== null && (
+            <StatRow label={`Hazard · ${hazardChoice.zone.name}`}
+              value={partyView === null
+                ? `Nível ${String(hazardChoice.current)}`
+                : `Nível ${String(hazardChoice.current)} (party: o menor)`}
+              bar={false} />
+          )}
         </section>
         {monsters.length > 0 && (
           <>

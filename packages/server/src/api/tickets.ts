@@ -4,10 +4,10 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import {
-  isFamiliarState, isFightMode, readItemOverlay, readOfflineTrainingState, settleOfflineTraining,
+  isFamiliarState, isFightMode, isHazardState, readItemOverlay, readOfflineTrainingState, settleOfflineTraining,
 } from '@draconya/sim';
 import type {
-  BestiaryState, BosstiaryState, CharmsState, FamiliarState, LearnedSpellsState, OfflineTrainingRules,
+  BestiaryState, BosstiaryState, CharmsState, FamiliarState, HazardState, LearnedSpellsState, OfflineTrainingRules,
   OfflineTrainingSettlement, OfflineTrainingState, SkillsState,
 } from '@draconya/sim';
 import {
@@ -376,6 +376,8 @@ export function initialCharacterOf(
     ...familiarOf(character.familiar),
     // E o registro do Treino (#631, ADR 0059): a régua do `sim`, torto vira ausente.
     ...trainingOf(character.training),
+    // E o Hazard (M44-14, #632): o nível que ele escolheu na Cidade entra na hunt fixado.
+    ...hazardOf(character.hazard),
     // E os storages (#731, ADR 0050 d.6 T2): uma linha por chave, não uma coluna — a montagem é
     // a mesma ideia de `inventoryOf`, reduzindo as linhas do banco a um mapa.
     ...storagesOf(storages),
@@ -457,6 +459,11 @@ function familiarOf(stored: unknown): { familiar?: FamiliarState } {
 function trainingOf(stored: unknown): { training?: OfflineTrainingState } {
   const training = readOfflineTrainingState(stored);
   return training === undefined ? {} : { training };
+}
+
+/** O Hazard (M44-14, #632), pela mesma régua e razão de `charmsOf`. */
+function hazardOf(stored: unknown): { hazard?: HazardState } {
+  return isHazardState(stored) ? { hazard: stored } : {};
 }
 
 /**

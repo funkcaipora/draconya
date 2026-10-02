@@ -705,16 +705,23 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
 
-  it('o catálogo lista as nove hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586, #587)', () => {
+  it('o catálogo lista as dez hunts em ordem de level, e a Rotworm Caves traz monstro e loot (#511, #520, #586, #587, #632)', () => {
     const realContent = loadContent(DATA);
     const { hunts } = buildCatalogue(realContent);
     // Ordem por recommendedLevel crescente, empate por id (huntListings, packages/sim/src/hunt/
     // catalogue.ts): rat-cellars=1, dwarf-mines=rotworm-caves=8 (empate, "dwarf-mines" <
     // "rotworm-caves"), cyclopolis=34, darashia-dragon-lair=40, minotaur-camp=60, bone-crypt=100,
-    // hydra-mountain=150, hellhound-den=250 — o primeiro lote de hunts reais por faixa (#587).
+    // hydra-mountain=150, hellhound-den=250 — o primeiro lote de hunts reais por faixa (#587) —,
+    // gnomprona-gardens=400, a zona de hazard (#632).
     expect(hunts.map((h) => h.id)).toEqual([
       'rat-cellars', 'dwarf-mines', 'rotworm-caves', 'cyclopolis', 'darashia-dragon-lair',
-      'minotaur-camp', 'bone-crypt', 'hydra-mountain', 'hellhound-den',
+      'minotaur-camp', 'bone-crypt', 'hydra-mountain', 'hellhound-den', 'gnomprona-gardens',
+    ]);
+    // Só a Gnomprona Gardens é zona de hazard, e a faixa dela vem do conteúdo (#632).
+    expect(hunts.filter((h) => h.hazardZoneId !== undefined).map((h) => h.id))
+      .toEqual(['gnomprona-gardens']);
+    expect(buildCatalogue(realContent).hazardZones).toEqual([
+      { id: 'gnomprona-gardens', name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12 },
     ]);
     const rotworm = hunts.find((h) => h.id === 'rotworm-caves');
     // Composição real do Canary (#586): rotworm E terramite, não mais só rotworm.

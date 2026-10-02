@@ -67,6 +67,15 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   ataque de monstro, ataque do jogador, regeneração e respawn são todos eventos que se
   reagendam. O acumulador de duração (`timesThatFit`) foi removido: ele devolvia N aplicações e
   deixava quem chamava decidir o que fazer com o N, que é a forma exata do defeito da FUN-67.
+- **A fila tem dois regimes de cancelamento, e a ordem da instância é contrato** (#827, ADR 0060
+  d.5c). Até 1.024 eventos (a hunt) `cancelEvent`/`cancelEvents` filtram o vetor e reempilham — sem
+  índice, sem lápide, sem memória a mais; acima disso (o mundo) o evento fica no heap, morto, e quem
+  o encontra no topo o descarta. Em qualquer dos dois `pendingEvents` e `snapshot().schedule` só
+  mostram os vivos. A fila desempata por `(dueAtMs, priority, seq)`, byte a byte como sempre foi —
+  `tieBreak: 'stable'` (`(dueAtMs, priority, subject, kind, seq)`) é SÓ do mundo, e a escolha vai no
+  `ScheduleState`. Mexer em `schedule.ts` exige as sequências do FUN-63, 1 Hz = 10 Hz e o
+  `bench:hunts` antes e depois — e a memória por sessão que ele imprime, porque foi nela que a
+  primeira versão (índice sempre ligado) regrediu 12%.
 - **Grandeza contínua é evento periódico**: uma taxa de `r` por segundo é um evento a cada
   `1000 / r` ms. Não some `r * dtMs / 1000` num acumulador fracionário — somar `0,1` dez vezes em
   ponto flutuante dá `0,9999…` e some uma unidade a cada dez. Já foi tentado e revertido. Onde o
@@ -443,6 +452,72 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   atrás dele a hunt inteira, e foi o primeiro defeito da party. O snapshot leva `runners` por
   id E os campos soltos do primeiro (um nó anterior continua lendo o solo); `restore` guarda o
   que leu e `onResume` casa com os participantes, que só existem depois.
+- **O que supõe "sessão = party" mora na `SessionTopology`, e a `instanceTopology` é o código de
+  antes da costura** (`rulesets/topology.ts`, OW-12, ADR 0060 d.4). Crédito do abate, elegibilidade,
+  destinatário do loot, líder, fim quando vazia, morte, saída concluída, spawn e regras de saída
+  com o primeiro corredor, colocação na entrada, rota e stamina por tempo são perguntas dela; o
+  `HuntRuleset` a recebe em `HuntRulesetOptions.topology` (ausente é a de instância) e **não
+  decide nenhuma das onze por conta própria**. Cinco armadilhas. (1) **A instância é byte a byte a
+  de antes**: mexer numa condição de `instanceTopology` é mexer na hunt de todo mundo, e o portão são
+  as sequências do FUN-63, 1 Hz = 10 Hz e o `pnpm bench:hunts` — `lootRecipient` consome
+  `session.rng` e o número e a ordem dos sorteios são contrato. (2) **Um `session.participants`
+  novo no `HuntRuleset` precisa de classe**: "criaturas presentes" (busca por id, ocupação, alvo de
+  monstro, área de magia: fica) ou "roster da party" (vai para a topologia, ou fica guardado por
+  `#party`/`#bag` e dito). `docs/session-topology-audit.md` tem os 135 usos e as quatro classes, e
+  o que ficou aberto com dono — a XP pelo roster e o Bosstiary (OW-28), as magias e a cura de party,
+  o medo e o nível de hazard da party (OW-43). (3) **A topologia é um valor**: sem estado, congelada, compartilhada por toda
+  sessão que a usa; o que muda mora no ruleset ou na `Session`. (4) **Ela NÃO vai no snapshot**:
+  `huntRulesetFromSnapshot` e `changeDifficulty` montam o default, o que é certo para a instância
+  (a sessão de mundo é `checkpointed` e não tem snapshot, ADR 0060 d.10a). (5) **`TopologyHost`
+  existe porque a decisão é da topologia e o mecanismo é do ruleset**: `depart` emite o extrato de
+  quem sai e roda a cascata pendente, e isso mexe em estado privado dele. A topologia nunca chama
+  `session.leave` por conta própria numa saída decidida pelo ruleset — o `member-left` e a ordem
+  dos extratos (#193) se perderiam.
+- **O mundo aberto é o `HuntRuleset` com a topologia de mundo, e a identidade mora em
+  `WorldRuleset`** (`rulesets/world.ts`, OW-13, ADR 0060 d.2 e d.4): `createWorldSession` monta a
+  sessão `type: 'world'`, `shared`, `progress: 'checkpointed'`, 10 Hz sempre, que NUNCA termina —
+  esvaziar, morrer e concluir a saída tiram só quem saiu (`host.depart`), nunca `session.end`.
+  Oito armadilhas. (1) **A hunt não muda**: `HuntRuleset.type` é só um campo de tipo largo
+  (`'hunt' | 'world'`), `contentOptionsOf` é o que `createHuntRuleset` já montava, e o portão é o
+  mesmo da costura (FUN-63, 1 Hz = 10 Hz, `bench:hunts`). Opção NOVA de conteúdo que a hunt passe a
+  ler entra em `contentOptionsOf`, e não só em `createHuntRuleset` — senão o mundo a esquece. (2)
+  **`CharacterRuntime.worldPosition` é uma ÂNCORA em coordenada absoluta, não a posição ao vivo**:
+  ninguém a reescreve por passo. `WorldRuleset#worldPositionOf` traduz o `position` de agora; quem
+  grava a âncora é o dono da sessão, e **a leitura tem de vir ANTES de o personagem ser movido** —
+  numa transição o destino é construído antes de a origem encerrar, e o `position` já é o do
+  destino (o mesmo defeito do `onLeave` da Cidade). (3) **Posição salva inutilizável cai no
+  templo, nunca lança**: parede, fora do recorte, andar sem chão e o `0,0,0` do Canary são o
+  caminho esperado; só o templo recusado lança (conteúdo quebrado, que o boot já recusa). (4) **O
+  mundo não cura na entrada** (a Cidade curava): a vida e a mana são as do ticket, e a regeneração
+  da hunt corre em PZ e fora dela. (5) **`acceptsCityServices` lê o BIT da PZ** (`hasZoneFlag`),
+  não `zoneAt`: o tile `P` (PZ + no-logout) é `'protection'` no tipo e aceita serviço, e o
+  no-logout continua recusando a saída (`canLogout` lê o mesmo bit). É a pergunta; quem recusa a
+  intenção é o hospedeiro (OW-18). (6) **`creditKill`/`rewardEligible`/`lootRecipient` do mundo são
+  PROVISÓRIOS**: só o dono do golpe final, sem sorteio, até o crédito do Canary (OW-28). Sortear
+  ali mudaria o `session.rng` do mundo inteiro. (7) **`startsInstanceSchedules` é `false`**: o
+  mundo não semeia spawn com quem entra, e sem pontos de spawn (OW-25) ele anda sem monstro; o
+  spawn inicial da criação é da OW-31. (8) **A fila estável (`tieBreak: 'stable'`, OW-06) ainda não
+  é pedida**: `createWorldSession` é o lugar, e o #827 ainda não pousou. Os tetos da sessão
+  (`WORLD_SESSION_LIMITS`) são ponto de partida; o `bench:world` (OW-35) os fixa. O `id` da sessão é
+  o da ENCARNAÇÃO: o ledger é `UNIQUE (session_id, seq)` e o `seq` recomeça em zero.
+  **O mundo é a primeira sessão em que o mesmo id VOLTA e em que estranhos dividem uma lista**, e
+  isso trouxe mais quatro armadilhas (revisão da OW-13). (9) **`onEnter` faz
+  `cancelEvents(character.id)` antes de agendar**: `onLeave` deixa a fila de quem saiu morrer
+  sozinha ("não encontram o personagem"), e isso só é verdade até o mesmo id voltar — o passo, a
+  regeneração e o bot achariam o `CharacterRuntime` novo e empilhariam uma cadeia por relogue. Um
+  no-op na instância (o id de quem entra nunca esteve na fila). Subject por personagem NOVO que o
+  `onEnter` não cancele é a mesma regressão. (10) **A âncora do tempo cobrado só anda com evento**:
+  o mundo vazio não tem evento, e `onEnter` do mundo cobra os que já estavam e leva
+  `#staminaAnchorMs` para agora — senão o primeiro a entrar paga a comida do intervalo vazio. (11)
+  **O id de item novo nasce em `#newInstanceId` e só lá**: o critério é `partyOptions` OU
+  `topology.namesOwnerInItemIds`, e o `lootSeq` de quem saiu fica guardado por id
+  (`#lootSeqOfDeparted`) para o mesmo personagem não cunhar `world-1:a:0` duas vezes. Um quarto
+  ponto que cunhe `${session.id}:…` por conta própria reabre a colisão em `item_instance`. (12)
+  **Evento notável de personagem passa o DONO** — `session.record(tipo, detalhe, character.id)` —,
+  e `Session.record` só o grava onde `Ruleset.scopesEventsToOwner` é `true` (o mundo): a lista da
+  instância continua `{ atMs, type, detail }` byte a byte, que é o que a party e a hunt solo leem.
+  Quem lê por personagem usa `Receipt`, `Session.notableEventsFor` ou `isNotableEventVisibleTo`, nunca
+  `notableEvents` crua; evento novo de personagem sem o dono vaza o extrato de um estranho no outro.
 - **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
   acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile
@@ -1228,6 +1303,32 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   registro (`exerciseExhaustedUntilMs`), comparado com o `nowMs` que o servidor passa. `buyItem` (`purchase.ts`) é a compra mínima do `buy-item`: confere
   TUDO antes de mexer em `goldDelta` ou na mochila. `holdStamina` (`stamina.ts`) avança o marco sem
   recuperar — o que o Treino faz ao sair (ADR 0060 d.14c).
+- **O Hazard (#632, M44-14, ADR 0052 d.5/d.7) vive em `hazard.ts` (o registro `HazardProgress`, do
+  personagem), `combat/hazard.ts` (puro) e nos métodos `#hazard*` do `HuntRuleset`, e SÓ roda no
+  `combat-v4` (`hasHazardStage`) numa hunt com `hazardZoneId`.** Seis armadilhas custam caro. (1)
+  **Todo golpe de monstro no jogador passa por `#hazardOnMonsterHit` ANTES dos charms defensivos, e
+  todo golpe do jogador num monstro por `#hazardOnPlayerHit` ANTES de a vida mudar** — são oito
+  pontos (habilidade, tique de condição de monstro VIVO e reflexo do lado do monstro; `#land`,
+  `#applyHits`, dano de charm, reflexo e tique de condição de personagem do lado do jogador): um
+  caminho novo em que um dos dois acerta o outro precisa chamar o seu. (2) **O golpe reforçado é
+  `extension`, e `extension` pula `#rollDefensiveCharms`** — não "arrume": é o
+  `!damage.extension` do `Game::combatChangeHealth`. (3) **O nível é o MENOR entre os participantes**
+  (`#hazardPoints`) lido a cada golpe, e é fixo porque a escolha é recusada dentro da hunt, não por
+  cópia; na morte o nível é o menor entre os FERIDORES. (4) **A rolagem é sempre consumida**: a
+  normal de `1..10000` do crítico/esquiva e a `0..100` do loot saem mesmo sem efeito, e a
+  `normal_random` é truncada — as probabilidades reais (~2,3 % o crítico, ~0,2 %–3,4 % a esquiva)
+  são o comportamento do Canary, não um defeito deste motor. Invocação (`masterId !== null`) NÃO é
+  monstro de hazard (`isHazardMonster`). O carimbo `hazardCriticalAtMs` é do relógio LÓGICO da
+  sessão: viaja no snapshot e `Session.enter` o zera (`resetSessionClockState`). `HazardProgress.revision` é só para o host
+  comparar um inteiro por ciclo; não é persistido. (5) **O mana shield absorve o golpe de ANTES do
+  reforço**: `Game::combatChangeHealth` soma `healthChange` antes de `handleHazardSystemAttack` e não
+  o recalcula, então o crítico e o reforço caem INTEIROS na vida. O estágio carrega o dano de antes
+  em `DamageOutcome.preHazardDamage` e `applyDamageOutcome` o usa como teto da absorção (a mesma
+  leitura vale para o Energy Ring); um caminho novo que aplique o outcome de um golpe de hazard num
+  personagem precisa passar por `applyDamageOutcome`, e não por conta própria. (6) **O chefe de
+  recompensa (`MonsterDefinition.rewardBoss`, o `flags.rewardBoss` do Canary) não rola casulo nem
+  Plunder** — o próprio Plunder Patriarch é um —, mas a subida de nível não confere a flag (é outro
+  script).
 - **A aparência emprestada é a condição `outfit` (#621, M44-03, ADR 0041 d.1), e o `sim` só diz
   QUEM vestiu o quê.** `ConditionState.look` (`{ monsterId } | { itemId } | { objectKey }`) nunca
   é arte; o evento `creature-look-changed { creatureId, look | null }` (`presence.ts`) sai em TODA
@@ -1251,3 +1352,24 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   instanceId }`, resolvido por `Inventory.itemIdOf` (mochila, bolsa e corpo). `not-illusionable` é
   o `RETURNVALUE_NOTPOSSIBLE` dos dois scripts. Toda condição `outfit` aplicada fora dessas portas
   (um teste que faz `conditions.apply` direto) não emite o evento — use a magia ou a ability.
+- **Zona por tile e `canLogout` são `zones.ts` (OW-10, #831, ADR 0060 d.6 e d.7) — funções puras que
+  só LÊEM, e hoje ninguém as chama.** `zoneAt(map, point)` devolve o tipo com a precedência de
+  `Tile::getZoneType` (PZ, no-pvp, arena, no-logout, normal), `hasZoneFlag` lê um bit, e
+  `canLogout(character, map, nowMs)` devolve `{ ok: true }` ou `{ ok: false, reason: 'no-logout-tile'
+  | 'in-fight' }`. Quatro armadilhas. (1) **Decidir saída pelo TIPO reabre o logout num tile `P`
+  (PZ + no-logout):** `zoneAt` diz `'protection'` e esconde o no-logout, mas o Canary testa o no-logout
+  ANTES da PZ (`player.cpp:6972-6978`) e a PZ só isenta da LUTA, nunca do tile. `canLogout` lê os
+  bits (`zoneFlagsAt`); quem escrever outra consulta de saída (o x-log, a entrada em hunt idle)
+  chama `canLogout`, não reimplementa. (2) **A recusa por tile vence a por luta:** num tile
+  no-logout, em luta, o motivo é `'no-logout-tile'`. (3) **Luta é só `isInFight`** (`combat/in-fight.ts`,
+  #625) — o pz-lock do Canary vem de agredir jogador, que o mundo `no-pvp` não tem, e uma segunda
+  fórmula de "em combate" é a divergência que aquele arquivo existe para evitar. (4) **A coordenada é
+  a LOCAL do mapa**, a de `isBlocked` e do `CharacterRuntime.position` — a absoluta do Tibia
+  (`characters.world_x/y/z`) passa por `absoluteToLocal` antes. **Sem dado, sem restrição:** mapa sem
+  a camada `zones` no andar (todo recorte de hunt de hoje), andar ausente e ponto fora da grade são
+  tile NORMAL, e a Cidade segue protect zone por construção (ADR 0004), sem consultar nada daqui.
+  `'pvp'` (arena) sai como o Canary o chama; tratá-la como no-pvp é do portão de combate (OW-27, ADR
+  0060 d.8), não desta consulta. O vocabulário de zona é sem hífen (`'nopvp'`, `'nologout'`) e o
+  `ZoneKind` do protocolo tem hífen: quem emite `player-stats.zone` traduz. Os motivos de recusa do
+  `canLogout` são os de `LogoutRefusedReason` (OW-11), com um teste de compilação que prende a
+  igualdade — o `sim` não importa o protocolo para isso.

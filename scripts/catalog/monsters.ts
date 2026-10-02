@@ -1207,6 +1207,9 @@ export function convertMonster(
     entity['boss'] = true;
     entity['bosstiary'] = bosstiary;
   }
+  // O chefe de recompensa (#632): `flags.rewardBoss` do Canary (`isRewardBoss`). Só escreve quando é
+  // `true` — ausente é o `false` do schema, e o catálogo inteiro não ganha uma chave por monstro.
+  if (bool(flags['rewardBoss']) === true) entity['rewardBoss'] = true;
   // Staging (#580 separa): a ficha de Bestiário e o outfit não moram na entidade de `data/`.
   if (typeof bestiary === 'object') entity['bestiary'] = bestiary;
   if (lookType > 0) entity['outfitId'] = lookType;

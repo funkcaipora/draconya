@@ -31,10 +31,10 @@
 // versão: o ledger o aplica pela regra de antes. A tolerância sai numa issue de limpeza depois.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import { isFamiliarState, isFightMode, readOfflineTrainingState } from '@draconya/sim';
+import { isFamiliarState, isFightMode, isHazardState, readOfflineTrainingState } from '@draconya/sim';
 import type {
   Aggregates, BestiaryState, BosstiaryState, CharacterStorageMap, CharmsState, EndReason, FamiliarState,
-  FightMode, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, OfflineTrainingState, SkillsState,
+  FightMode, HazardState, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, OfflineTrainingState, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -133,6 +133,12 @@ export interface SessionReceipt {
    * gasto. Extrato SEM o campo (nó antigo em deploy) não toca na coluna.
    */
   readonly training?: OfflineTrainingState;
+  /**
+   * O Hazard (M44-14, #632, ADR 0052 d.1): o teto desbloqueado e o nível escolhido de cada zona.
+   * ABSOLUTO e ÚLTIMA-ESCRITA-VENCE, como `charms` — a escolha desce e sobe por vontade do
+   * jogador, e fundir pelo maior a desfaria. Ausente é quem nunca tocou no hazard.
+   */
+  readonly hazard?: HazardState;
   /**
    * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
    * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
@@ -553,6 +559,8 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['bosstiary'] === 'object' && value['bosstiary'] !== null
       ? { bosstiary: value['bosstiary'] as BosstiaryState }
       : {}),
+    // O Hazard (#632): lista de PERMISSÃO, pela razão das skills — e só a FORMA, como os Charms.
+    ...(isHazardState(value['hazard']) ? { hazard: value['hazard'] } : {}),
     // A economia de Charms (M39-02, #602): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['charms'] === 'object' && value['charms'] !== null
       ? { charms: value['charms'] as CharmsState }

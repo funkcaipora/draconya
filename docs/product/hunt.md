@@ -542,6 +542,17 @@ Efeitos, só para o monstro que É a boosted do dia (`packages/sim/src/rulesets/
 Sem `boosted/baseline.json` no conteúdo, ou sem `content.bestiary`, o `jobs` não sorteia nada e
 nenhum efeito liga — é o conteúdo de teste que não fala de engajamento diário.
 
+## Hazard — o nível de perigo opcional de uma zona (#632)
+
+Uma hunt com `hazardZoneId` (`data/hunts/gnomprona-gardens.json`) deixa o jogador escolher, NA
+CIDADE, o nível de hazard de 1 a 12 que o personagem desbloqueou; o nível fica fixo na entrada e
+liga os estágios do `combat-v4` (reforço e crítico do monstro, esquiva do monstro, XP, loot extra,
+Plunder Patriarch). O sistema inteiro — fórmulas, parâmetros, persistência e o que ficou de fora —
+está em [`hazard.md`](./hazard.md). A hunt da zona é o recorte real da componente central dos
+Jardins de Gnomprona (151×141, andar 14, rota de 1.828 tiles) com os 135 pontos de spawn que o
+catálogo resolve hoje (Hulking Prehemoth, Stalking Stalk e Gore Horn); as outras 12 espécies do
+Canary são relatadas por `pnpm catalog:spawns` e entram quando o catálogo as tiver.
+
 ## O ruleset, e por que ele é o molde dos outros cinco
 
 Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, boss e guild war:
@@ -674,6 +685,38 @@ encerramento.
 
 Level up é notável justamente por contraste com o abate: é a única coisa que aconteceu numa hunt
 de oito horas que o jogador quer ver ao voltar.
+
+### A topologia da sessão: o que supõe "sessão = party" (OW-12, ADR 0060 d.4)
+
+O `HuntRuleset` nasceu para uma sessão que **é** uma party, e a hunt é a base econômica do jogo:
+tudo o que supõe isso mora agora num objeto, a `SessionTopology` de
+`packages/sim/src/rulesets/topology.ts`, que o ruleset recebe em `HuntRulesetOptions.topology`.
+Ausente, vale a `instanceTopology` — o
+código de antes da costura, **sem tocar numa condição**: a hunt, solo e party, sai byte a byte a
+de sempre (as sequências do FUN-63, 1 Hz = 10 Hz, a retomada de snapshot
+e o `pnpm bench:hunts` são o portão). A topologia não vai no snapshot e não muda o formato dele.
+
+A instância é a topologia de hoje. O mundo aberto (ADR 0060) usa o mesmo motor com outra, a
+`worldTopology` da OW-13 (`docs/product/open-world.md`, "A sessão do mundo"): a hunt só ganhou um
+campo `type` de tipo largo e o `contentOptionsOf` extraído de `createHuntRuleset`, e o portão
+acima continua o mesmo.
+
+| Pergunta | Na instância (o de hoje) |
+|---|---|
+| quem leva a contagem do abate (`creditKill`) | todo presente |
+| quem pode receber a XP (`rewardEligible`) | solo: o matador; party: todo presente vivo e com stamina |
+| quem recebe o loot (`lootRecipient`) | solo: o matador, sem sorteio; party `split`: um elegível sorteado; `shared`: ninguém, vai para a bolsa |
+| o que acontece quando esvazia (`onEmpty`) | a sessão acaba |
+| quem lidera (`leaderOf`, `onLeaderGone`) | o líder da party, ou o mais antigo; quem fica assume |
+| o que a morte e a saída concluída fazem (`onCharacterDied`, `onExitFinished`) | solo encerra; party solta quem saiu com o extrato dele |
+| o que nasce com o primeiro corredor (`startsInstanceSchedules`) | o spawn inicial e as regras de saída |
+| onde quem entra é colocado (`placeOnEnter`) | o primeiro no tile inicial da rota, o segundo no livre mais próximo |
+| a rota, as regras de saída e a stamina por tempo (`runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime`) | valem (a chave `burnsStaminaByTime` é só da stamina e do aviso `stamina-exhausted`; a comida drena sempre) |
+| se o extrato nomeia o dono (`namesOwnerInEvents`) | só com mais de um presente |
+
+Cada uso de `session.participants` do ruleset foi classificado — o que é "criaturas presentes" e
+fica, o que é "roster da party" e foi para a topologia, e o que ainda é roster sem guarda e tem
+dono — em [`session-topology-audit.md`](../session-topology-audit.md).
 
 ## Como se entra numa hunt
 
@@ -810,6 +853,79 @@ de ataque por **timestamp absoluto** dentro do modelo de tick parecia resolver e
 abates passavam a divergir entre taxas (299 a 20 Hz contra 277 a 1 Hz), porque um ataque que
 ficava pronto no meio do tick disparava atrasado e o resto era descartado. O que resolveu não foi
 trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
+
+### A fila por dentro: cancelamento preguiçoso e desempate (#827, OW-06)
+
+A fila de eventos (`packages/sim/src/schedule.ts`) ganhou duas coisas para o mundo aberto (ADR 0060
+d.5c), sem mudar nada do que a instância despacha: o resultado da hunt é byte a byte o de antes.
+
+**Dois regimes de cancelamento, escolhidos pelo tamanho da fila.** `cancel` e `cancelSubject`
+filtravam e reempilhavam o heap inteiro: O(n log n) por morte, e o mundo tem centenas de criaturas
+numa fila só.
+- **Fila pequena (até `DEFAULT_INDEX_ABOVE`, 1.024 eventos) — a da hunt.** Não há índice nem lápide:
+  cancelar filtra o vetor e reempilha em O(n) (Floyd). Com dezenas de eventos isso custa ~1 µs, e o
+  evento continua sendo o objeto de cinco chaves de sempre. É a escolha que mantém a instância, a
+  base econômica do jogo, como era em CPU e em memória: o índice custa ~100 bytes por par
+  `(kind, subject)` e um acesso a `Map` por evento, e medido numa sessão fria do `bench:hunts` isso
+  eram +11 KiB (+12%) de memória e +25% a +50% no custo da própria fila — para nada, porque uma
+  hunt cancela pouco.
+- **Fila grande (o mundo) — cancelamento O(1) amortizado.** Cada par guarda um slot (`floorSeq`,
+  vivos, lápides) e cancelar grava nele o próximo `seq`: todo evento do par com `seq` menor é lápide.
+  O `seq` já é único e crescente, então ele É a geração — o evento não carrega campo novo, e o
+  snapshot não muda. `pop` e `peek` descartam a lápide que encontram no topo; a fila compacta
+  (O(n), e só então) quando **mais da metade** do heap é lápide — conta amortizada, porque a
+  reconstrução paga o que pelo menos n/2 cancelamentos acumularam; `size` (e `Session.pendingEvents`)
+  conta só os vivos, `getState` nunca serializa lápide e `dueAtOf` as ignora.
+- A fila indexa ao passar de 1.024 eventos e larga o índice ao cair a um quarto disso (histerese:
+  oscilar em torno do limiar não constrói e destrói o índice a cada evento). Os slots de pares
+  ociosos são varridos em lote, quando o registro dobra de tamanho: o id de monstro só cresce, e sem
+  a varredura o mapa teria um subject por criatura que já nasceu. O slot NÃO é apagado no `pop`,
+  porque o ciclo do timer é vencer e se reagendar no mesmo despacho.
+- A ordem de despacho é a mesma nos dois regimes, e a prova é um oráculo: o teste mantém a fila de
+  antes do #827 e roda sequências aleatórias de agendar, cancelar, avançar, restaurar e esvaziar nas
+  duas filas, em três regimes e com 7 ou 150 subjects. E o resultado de hunts reais também: 60 hunts de
+  30 minutos, a 1 Hz e a 10 Hz, nos cenários frio e de combate, dão os mesmos eventos de domínio e o
+  mesmo snapshot com o índice desligado e com ele ligado desde o primeiro evento.
+- Custo medido, fila isolada (M2, arm64, 500 criaturas × 6 timers): cancelar uma criatura que morre
+  fica ~10× mais barato (4,4 µs → 0,45 µs por iteração com uma morte a cada 20 despachos) e o ciclo
+  `pop` + reagendamento fica ~70 ns mais caro (contabilidade do slot) — o que o mundo paga e a hunt
+  não.
+- **`bench:hunts` pareado, a linha de base que a OW-13 e a OW-30 comparam (#827, PR #901).** Base =
+  `tibia-parity` em `609d88c1`; branch = a mesma árvore com o #827. Máquina darwin arm64, Apple M2 ×
+  8, Node v24.14.1, compartilhada com outros agentes — por isso cada medida é um PAR rodado ao mesmo
+  tempo (a ordem de largada alterna a cada rodada) e o que vale é a diferença dentro do par, não o
+  valor absoluto, que varia de 108 a 175 µs com a carga. 600 hunts desanexadas × 5 min a 1 Hz,
+  `node --expose-gc`; reproduz com `HUNTS=600 MINUTES=5 [SCENARIO=combat] pnpm bench:hunts` em duas
+  worktrees ao mesmo tempo.
+
+  | cenário | rodada | por tick/instância, base → branch | CPU, base → branch | memória por sessão | snapshot por sessão | abates |
+  |---|---|---|---|---|---|---|
+  | frio | a | 175,0 → 175,2 µs | 13,8 → 13,8 s | 91,1 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | frio | b | 169,0 → 169,7 µs | 13,4 → 13,7 s | 91,2 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | frio | c | 148,5 → 151,7 µs | 11,8 → 12,1 s | 91,1 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | frio | d | 107,7 → 108,8 µs | 9,4 → 9,6 s | 91,2 → 91,2 KiB | 15,8 KiB | 10.800 |
+  | combate | a | 239,3 → 241,6 µs | 19,7 → 19,8 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
+  | combate | b | 314,4 → 314,4 µs | 24,2 → 24,3 s | 94,0 → 93,6 KiB | 18,8 KiB | 6.041 |
+  | combate | c | 230,0 → 231,5 µs | 18,2 → 18,4 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
+  | combate | d | 122,8 → 121,3 µs | 11,9 → 11,7 s | 94,0 → 94,1 KiB | 18,8 KiB | 6.041 |
+
+  O custo por tick fica a +0,1% a +2,2% no frio (média ~+0,9%) e a −1,2% a +1,0% no combate (média
+  ~+0,1%), dentro do ruído de uma máquina disputada. A memória por sessão varia em ~0,1 KiB, até
+  0,4 KiB para menos (o par de campos novos do `Schedule`, mais o ruído do GC). O snapshot e os
+  abates são IDÊNTICOS em todas as oito medidas. Quem mexer em `schedule.ts` de novo repete o par
+  contra a `tibia-parity` do momento, não contra estes valores.
+
+**`tieBreak`: `'insertion'` (default) ou `'stable'`.** A ordem do mesmo `(dueAtMs, priority)` era a
+da inserção (`seq`). `'stable'` ordena por `(dueAtMs, priority, subject, kind, seq)` — comparando
+strings por unidade de código, nunca por locale — e é o que a dormência do mundo precisa: o timer
+que sai da fila ao dormir e volta ao acordar ganha um `seq` novo, e só uma ordem que não olha a
+inserção o devolve ao lugar em que estaria. O `seq` fica no fim só para a ordem seguir total.
+- A instância NÃO usa: `Session` nasce `'insertion'`, e `SessionOptions.tieBreak: 'stable'` é do
+  mundo (ainda sem quem o chame: o primeiro chamador é `createWorldSession`, a OW-13 (#834); a
+  dormência da OW-30 (#853) é quem depende da ordem estável).
+- A escolha vai no `ScheduleState` (`tieBreak: 'stable'`), e SÓ no `'stable'`: o snapshot da
+  instância não ganha chave nenhuma. Restaurar um snapshot do mundo devolve uma fila estável sem
+  que quem restaura precise saber.
 
 ## Parâmetros de balanceamento
 

@@ -1,0 +1,14 @@
+-- #632 (M44-14): o Hazard — o nível de perigo opcional de uma zona de hunt. O registro por
+-- personagem do ADR 0052 decisão 1: `{ maxLevel: { zoneId: n }, currentLevel: { zoneId: n },
+-- version }`, o `player:kv():scoped(zona)` do `data/libs/systems/hazard.lua` do Canary
+-- (`max-level`, `current-level`).
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default. `null` é quem nunca
+-- escolheu nem subiu nível de hazard nenhum — toda zona vale o `minLevel`, o mesmo personagem
+-- novo que `charms`/`bestiary` já tratam.
+-- `jsonb`, como o resto do padrão: lido INTEIRO no ticket, escrito INTEIRO no extrato pela
+-- transação do ledger — ÚLTIMA ESCRITA VENCE (ADR 0052 d.1), como `charms`/`ammo`, NÃO fusão por
+-- máximo como o Bestiário: a escolha do nível DESCE e SOBE por vontade do jogador, e fundir pelo
+-- maior desfaria "voltei ao nível 3". Sem CHECK: `zoneId` é conteúdo, versionado à parte, e uma
+-- zona que saiu do conteúdo simplesmente não resolve nada, nunca uma linha ilegível.
+ALTER TABLE character ADD COLUMN hazard jsonb;
