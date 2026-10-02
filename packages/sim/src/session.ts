@@ -15,6 +15,7 @@ import type { Rng, RngState } from './rng.js';
 import type { CharacterNotice, CombatEvent, PartyEvent } from './combat-events.js';
 import type { CreatureMoved, MoveResult } from './movement.js';
 import type { PresenceEvent } from './presence.js';
+import type { WorldExitEvent } from './world-exit.js';
 import type { EquipmentChanged } from './inventory.js';
 import type { GridPoint } from './monster/step.js';
 import { Schedule } from './schedule.js';
@@ -29,7 +30,8 @@ import type { ScheduleState, ScheduledEvent, TieBreak } from './schedule.js';
  * desanexada: o evento nasce dos dois lados, e só num deles alguém o serializa.
  */
 export type DomainEvent =
-  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged | CharacterNotice;
+  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged | CharacterNotice
+  | WorldExitEvent;
 
 /**
  * Teto de eventos de domínio guardados à espera de quem os leia.
