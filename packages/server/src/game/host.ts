@@ -48,7 +48,8 @@ import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
-import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { EncodeCache, Viewer, type EncodeStats, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { ViewerSet } from './viewer-set.js';
 import { findPersonText } from './find-text.js';
 import { hitEffectOf, isPhysicalHit, monsterLookOf, monsterOutfitOf, monsterPresentationOf } from './monster-look.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
@@ -258,6 +259,15 @@ export interface SessionHostOptions {
    * ela, a praça volta a mandar tudo para todos: caro, e visivelmente correto.
    */
   readonly areaOfInterest?: boolean;
+  /**
+   * Serializar uma vez por ciclo a mesma mensagem entregue a vários visualizadores (OW-22). Padrão:
+   * sim. Desligado, cada visualizador codifica a sua cópia no flush, como antes.
+   *
+   * Existe desligável pela mesma razão de `areaOfInterest`: é o GRUPO DE CONTROLE da medição —
+   * `pnpm bench:city` com `ENCODE=each` mede a CPU sem o cache no mesmo processo e na mesma hora —
+   * e é o que prova, em teste, que o fio é o mesmo byte a byte com e sem ele.
+   */
+  readonly encodeOnce?: boolean;
   /**
    * O catálogo do que existe: hunts (FUN-79) e vocabulário do bot (FUN-89).
    *
@@ -993,7 +1003,11 @@ export type BotConfigLoadResult =
 
 interface HostedSession {
   readonly session: Session;
-  readonly viewers: Set<Viewer>;
+  /**
+   * Os visualizadores, com o índice por personagem (OW-22): `viewers.of(id)` e `viewers.countOf(id)`
+   * no lugar de varrer a sessão inteira filtrando por `characterId`.
+   */
+  readonly viewers: ViewerSet;
   /**
    * Quando esta sessão foi avançada pela última vez, no relógio monotônico DESTE processo.
    *
@@ -1256,6 +1270,10 @@ export class SessionHost {
 
   /** Por sessão. O índice por personagem existe porque uma sessão terá vários (guild war). */
   readonly #sessions = new Map<string, HostedSession>();
+  /** O cache de codificação do flush (OW-22): um por nó, esvaziado a cada sessão. */
+  readonly #encodeCache = new EncodeCache();
+  /** O controle (`encodeOnce: false`): codifica por visualizador, mas conta como o cache. */
+  readonly #encodeEach = new EncodeCache({ memoize: false });
   readonly #sessionIdByCharacter = new Map<string, string>();
   readonly #accountIdByCharacter = new Map<string, string>();
   /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
@@ -1335,6 +1353,21 @@ export class SessionHost {
     return this.#sessions.size;
   }
 
+  /**
+   * O que o flush já codificou e reaproveitou, desde que o nó subiu (OW-22): contadores que só
+   * sobem. Existe para MEDIR — o `bench:city` lê antes e depois da janela e subtrai —, e é o que
+   * separa "bytes entregues" de "bytes serializados" na conta do leque de saída.
+   */
+  get encodeStats(): EncodeStats {
+    const once = this.#encodeCache.stats;
+    const each = this.#encodeEach.stats;
+    return {
+      encoded: once.encoded + each.encoded,
+      reused: once.reused + each.reused,
+      encodedBytes: once.encodedBytes + each.encodedBytes,
+    };
+  }
+
   get viewerCount(): number {
     let total = 0;
     for (const hosted of this.#sessions.values()) total += hosted.viewers.size;
@@ -1351,7 +1384,7 @@ export class SessionHost {
   get connectedCharacterCount(): number {
     const characters = new Set<string>();
     for (const hosted of this.#sessions.values()) {
-      for (const viewer of hosted.viewers) characters.add(viewer.characterId);
+      for (const characterId of hosted.viewers.characterIds()) characters.add(characterId);
     }
     return characters.size;
   }
@@ -4090,9 +4123,7 @@ export class SessionHost {
         notableEvents: hosted.session.notableEventsFor(character.id, since).map((event) => ({ ...event })),
         ...(party === undefined ? {} : { party }),
       };
-      for (const viewer of hosted.viewers) {
-        if (viewer.characterId === character.id) viewer.send(message);
-      }
+      this.#sendToViewersOf(hosted, character.id, message);
     }
   }
 
@@ -4436,7 +4467,9 @@ export class SessionHost {
     if (party === undefined) return;
     if (hosted.sentParty !== null && sameParty(hosted.sentParty, party)) return;
     hosted.sentParty = party;
-    for (const viewer of hosted.viewers) viewer.send({ type: 'party-state', ...party });
+    // Um objeto só para a sessão inteira: o cache de codificação do flush o serializa uma vez.
+    const message: S2CMessage = { type: 'party-state', ...party };
+    for (const viewer of hosted.viewers) viewer.send(message);
   }
 
   /**
@@ -4556,9 +4589,9 @@ export class SessionHost {
 
   /** Manda para todos os visualizadores de UM personagem. Abas contam separado. */
   #sendToViewersOf(hosted: HostedSession, characterId: string, message: S2CMessage): void {
-    for (const viewer of hosted.viewers) {
-      if (viewer.characterId === characterId) viewer.send(message);
-    }
+    // Pelo índice (OW-22): o custo é o número de abas DELE, e não o de visualizadores da sessão —
+    // numa praça de trezentos, o passo de um jogador era `vizinhos × visualizadores` comparações.
+    for (const viewer of hosted.viewers.of(characterId)) viewer.send(message);
   }
 
   /**
@@ -4573,18 +4606,29 @@ export class SessionHost {
     subject: string,
     change: { readonly appeared: readonly string[]; readonly vanished: readonly string[] },
   ): void {
-    for (const other of change.appeared) {
-      this.#sendToViewersOf(hosted, other, this.#appearance(hosted, subject));
-      this.#sendToViewersOf(hosted, subject, this.#appearance(hosted, other));
+    // O `creature-appear` de quem se moveu é UM objeto para todos que passaram a vê-lo: o cache de
+    // codificação do flush o serializa uma vez (OW-22), e na hora do login numa praça cheia é o
+    // anúncio que mais se repete. Montado ANTES do laço e só se alguém o vê, o que mantém a ordem
+    // em que os ids de criatura são atribuídos (`#creatureId`): o dele primeiro, e depois o de
+    // cada um que apareceu, como quando era montado a cada volta.
+    if (change.appeared.length > 0) {
+      const own = this.#appearance(hosted, subject);
+      for (const other of change.appeared) {
+        this.#sendToViewersOf(hosted, other, own);
+        this.#sendToViewersOf(hosted, subject, this.#appearance(hosted, other));
+      }
     }
+    // Idem para o sumiço de quem se moveu: um objeto só para todos que deixaram de vê-lo (OW-22),
+    // e quem sai da praça cheia é o `leave`, que devolve a vizinhança inteira em `vanished`.
+    const gone = hosted.creatureIds.get(subject);
+    const goneMessage: S2CMessage | undefined = gone === undefined
+      ? undefined
+      : { type: 'creature-disappear', id: gone };
     for (const other of change.vanished) {
       // O id numérico NÃO é reciclado aqui: sumir de vista não é sair da sessão, e um id novo
       // no reaparecimento deixaria o sprite antigo parado para sempre na tela do cliente.
-      const gone = hosted.creatureIds.get(subject);
       const theirs = hosted.creatureIds.get(other);
-      if (gone !== undefined) {
-        this.#sendToViewersOf(hosted, other, { type: 'creature-disappear', id: gone });
-      }
+      if (goneMessage !== undefined) this.#sendToViewersOf(hosted, other, goneMessage);
       if (theirs !== undefined) {
         this.#sendToViewersOf(hosted, subject, { type: 'creature-disappear', id: theirs });
       }
@@ -4764,8 +4808,7 @@ export class SessionHost {
     this.#settling.add(characterId);
     try {
       await this.#saveReceipt(characterId, hosted, receipt, departed);
-      for (const viewer of hosted.viewers) {
-        if (viewer.characterId !== characterId) continue;
+      for (const viewer of hosted.viewers.of(characterId)) {
         viewer.send({
           type: 'session-ended',
           reason: receipt.reason,
@@ -4884,8 +4927,7 @@ export class SessionHost {
       }
       if (receipt !== null) {
         await this.#saveReceipt(characterId, hosted, receipt, departed);
-        for (const viewer of hosted.viewers) {
-          if (viewer.characterId !== characterId) continue;
+        for (const viewer of hosted.viewers.of(characterId)) {
           viewer.send({
             type: 'session-ended',
             reason: receipt.reason,
@@ -4924,7 +4966,7 @@ export class SessionHost {
     //
     // Só os DELE: num shard os outros continuam na sessão anterior, e levá-los junto seria
     // arrastar a praça inteira para dentro da hunt de um jogador.
-    const following = [...hosted.viewers].filter((v) => v.characterId === characterId);
+    const following = [...hosted.viewers.of(characterId)];
     for (const viewer of following) {
       hosted.viewers.delete(viewer);
       hosted.session.detach(viewer.id);
@@ -4948,7 +4990,7 @@ export class SessionHost {
     // ids de criatura de quem já estava lá.
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
-      session: next, viewers: new Set(), creatureIds: new Map(), raceBySubject: new Map(), nextCreatureId: 1,
+      session: next, viewers: new ViewerSet(), creatureIds: new Map(), raceBySubject: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
@@ -5079,8 +5121,7 @@ export class SessionHost {
     closeCode?: number,
     closeReason?: string,
   ): void {
-    for (const viewer of [...hosted.viewers]) {
-      if (viewer.characterId !== characterId) continue;
+    for (const viewer of [...hosted.viewers.of(characterId)]) {
       if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
       hosted.viewers.delete(viewer);
       hosted.session.detach(viewer.id);
@@ -5089,23 +5130,38 @@ export class SessionHost {
 
   /** Quantos visualizadores estão olhando ESTE personagem. Abas contam separado. */
   #watchers(hosted: HostedSession, characterId: string): number {
-    let count = 0;
-    for (const viewer of hosted.viewers) if (viewer.characterId === characterId) count += 1;
-    return count;
+    return hosted.viewers.countOf(characterId);
   }
 
-  /** Manda o acumulado e derruba quem não está drenando. */
+  /**
+   * Manda o acumulado e derruba quem não está drenando.
+   *
+   * **Serializar uma vez** (OW-22): a mesma mensagem entregue a vários visualizadores é codificada
+   * uma vez por ciclo, pelo `EncodeCache`. Só onde há mais de um visualizador — a hunt de um dono e
+   * uma aba só (as 5.000 instâncias frias) não tem com quem dividir o frame, e pagaria uma
+   * inserção no mapa por mensagem para nada. O cache é esvaziado a cada sessão: mensagem é objeto
+   * da sessão, e nenhum frame sobrevive ao flush que o produziu.
+   */
   flush(): void {
     for (const hosted of this.#sessions.values()) {
-      for (const viewer of hosted.viewers) {
-        viewer.flush();
-        if (!viewer.dead) continue;
-        this.#logger.warn(
-          { characterId: viewer.characterId },
-          'Dropping viewer that stopped draining',
-        );
-        viewer.close(1013, 'backpressure');
-        this.detach(viewer);
+      const cache = this.#options.encodeOnce === false
+        ? this.#encodeEach
+        : hosted.viewers.size > 1 ? this.#encodeCache : undefined;
+      try {
+        for (const viewer of hosted.viewers) {
+          viewer.flush(cache);
+          if (!viewer.dead) continue;
+          this.#logger.warn(
+            { characterId: viewer.characterId },
+            'Dropping viewer that stopped draining',
+          );
+          viewer.close(1013, 'backpressure');
+          this.detach(viewer);
+        }
+      } finally {
+        // Mesmo que um `send` lance (socket que o uWS já fechou): um frame velho no cache seria
+        // mandado no ciclo seguinte no lugar do conteúdo de então.
+        cache?.clear();
       }
     }
   }
@@ -5162,8 +5218,7 @@ export class SessionHost {
           const receipt = receiptOf(hosted, characterId);
           if (receipt === null) throw new Error(`no receipt for ${characterId} in ${sessionId}`);
           await this.#saveReceipt(characterId, hosted, receipt);
-          for (const viewer of hosted.viewers) {
-            if (viewer.characterId !== characterId) continue;
+          for (const viewer of hosted.viewers.of(characterId)) {
             viewer.sendNow({
               type: 'session-ended',
               reason: receipt.reason,
@@ -5934,7 +5989,7 @@ export class SessionHost {
     const existing = this.#sessions.get(session.id);
     const hosted: HostedSession = existing ?? {
       session,
-      viewers: new Set(),
+      viewers: new ViewerSet(),
       creatureIds: new Map(),
       raceBySubject: new Map(),
       nextCreatureId: 1,

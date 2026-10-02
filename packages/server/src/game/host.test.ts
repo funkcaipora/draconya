@@ -2671,6 +2671,235 @@ describe('a praça não manda tudo para todos (FUN-33)', () => {
   });
 });
 
+describe('o leque de saída é barato (OW-22)', () => {
+  /**
+   * Uma Cidade de 64×64 com TRÊS andares — 7 (a rua), 9 e 10 — e escadas entre eles. O 9 é um andar
+   * que o Canary deixa ver da rua (de z 7 se vê até o 9); o 10 não (`spectators.cpp:125-139`). As
+   * escadas de descida ficam em (22,10) e (22,12) da rua; as de volta, nos andares de baixo.
+   */
+  const cidadeComAndares = () => {
+    const size = 64;
+    const grid = Array.from({ length: size }, (_, y) =>
+      Array.from({ length: size }, (_, x) =>
+        (x === 0 || y === 0 || x === size - 1 || y === size - 1 ? '#' : '.')).join(''));
+    const content = buildContent({
+      ...rawTestContent(),
+      maps: [TEST_MAP, {
+        id: 'city', z: 7, entryPoint: { x: 2, y: 2 },
+        floors: { '7': { grid }, '9': { grid }, '10': { grid } },
+        floorChanges: [
+          { from: { x: 22, y: 10, z: 7 }, to: { x: 23, y: 10, z: 9 } },
+          { from: { x: 24, y: 10, z: 9 }, to: { x: 24, y: 10, z: 7 } },
+          { from: { x: 22, y: 12, z: 7 }, to: { x: 23, y: 12, z: 10 } },
+          { from: { x: 24, y: 12, z: 10 }, to: { x: 24, y: 12, z: 7 } },
+        ],
+      }],
+      city: { mapId: 'city', stepDurationMs: 500 },
+    });
+    const shard = new CityShard(content, () => 0);
+    let clock = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      now: () => (clock += 1_000),
+    });
+    const enter = (characterId: string, to: { x: number; y: number }) => {
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, characterId);
+      const character = host.sessionFor(characterId)?.participants.find((p) => p.id === characterId);
+      for (let step = 0; step < size * 4 && character !== undefined; step++) {
+        const { x, y } = character.position;
+        if (x === to.x && y === to.y) break;
+        const dx = Math.sign(to.x - x);
+        const dy = Math.sign(to.y - y);
+        for (const [sx, sy] of [[dx, dy], [dx, 0], [0, dy]] as const) {
+          if (sx === 0 && sy === 0) continue;
+          host.handle(viewer, { type: 'walk-to', destination: { x: x + sx, y: y + sy, z: 7 } });
+          if (character.position.x !== x || character.position.y !== y) break;
+        }
+      }
+      if (character !== undefined && (character.position.x !== to.x || character.position.y !== to.y)) {
+        throw new Error(`${characterId} não chegou em (${String(to.x)},${String(to.y)})`);
+      }
+      socket.frames.length = 0;
+      return { socket, viewer, character: character as NonNullable<typeof character> };
+    };
+    const quiet = (...sockets: readonly FakeSocket[]): void => {
+      host.flush();
+      for (const socket of sockets) socket.frames.length = 0;
+    };
+    return { host, enter, quiet };
+  };
+
+  it('quem desce para um andar que o Canary não deixa ver some da tela de quem ficou na rua', () => {
+    // É o critério da issue em um teste: dois andares que o Canary não deixa se ver não se veem,
+    // por perto que estejam em x e y. O andar 10 está fora do alcance do 7.
+    const { host, enter, quiet } = cidadeComAndares();
+    const rua = enter('rua', { x: 10, y: 12 });
+    const andarilho = enter('andarilho', { x: 21, y: 12 });
+    quiet(rua.socket, andarilho.socket);
+
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+
+    expect(andarilho.character.position.z).toBe(10);
+    expect(rua.socket.received()).toContainEqual(expect.objectContaining({ type: 'creature-disappear' }));
+    // E o andarilho também deixa de ver a rua: a visibilidade é simétrica.
+    expect(andarilho.socket.received()).toContainEqual(expect.objectContaining({ type: 'creature-disappear' }));
+    expect(host.interestOf('rua')).toEqual([]);
+
+    // Andar lá embaixo não chega à rua: nenhum `creature-move` do 10 vai para quem está no 7.
+    quiet(rua.socket, andarilho.socket);
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'south' });
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+    expect(rua.socket.received()).toEqual([]);
+  });
+
+  it('e volta a aparecer quando sobe a escada de volta', () => {
+    const { host, enter, quiet } = cidadeComAndares();
+    const rua = enter('rua', { x: 10, y: 12 });
+    const andarilho = enter('andarilho', { x: 21, y: 12 });
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'east' });
+    quiet(rua.socket, andarilho.socket);
+
+    // De (23,12,10) um passo a leste é a escada (24,12,10), que leva à rua.
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+
+    expect(andarilho.character.position.z).toBe(7);
+    expect(rua.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'creature-appear', name: 'andarilho' }),
+    );
+    expect(host.interestOf('rua')).toEqual(['andarilho']);
+  });
+
+  it('o andar 9 o Canary deixa ver da rua: descer para ele não tira ninguém da tela', () => {
+    const { host, enter, quiet } = cidadeComAndares();
+    const rua = enter('rua', { x: 10, y: 10 });
+    const andarilho = enter('andarilho', { x: 21, y: 10 });
+    quiet(rua.socket, andarilho.socket);
+
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+
+    expect(andarilho.character.position.z).toBe(9);
+    expect(rua.socket.received().filter((m) => m.type === 'creature-disappear')).toEqual([]);
+    expect(host.interestOf('rua')).toEqual(['andarilho']);
+
+    // E o passo dele no 9 ainda chega à rua.
+    quiet(rua.socket);
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'south' });
+    host.flush();
+    expect(rua.socket.received()).toContainEqual(expect.objectContaining({ type: 'creature-move' }));
+  });
+
+  it('o session-state de quem olha não lista quem está num andar que ele não vê', () => {
+    const { host, enter, quiet } = cidadeComAndares();
+    const rua = enter('rua', { x: 10, y: 12 });
+    const fundo = enter('fundo', { x: 21, y: 12 });
+    host.handle(fundo.viewer, { type: 'walk', direction: 'east' });
+    quiet(rua.socket);
+
+    host.handle(rua.viewer, { type: 'session-attach' });
+    host.flush();
+
+    const state = rua.socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    expect(state.world.creatures.map((c) => c.name)).toEqual(['rua']);
+  });
+
+  it('o mesmo passo para vários vizinhos é codificado UMA vez', () => {
+    // O que a issue pede: a mesma mensagem para N visualizadores, uma codificação. Quatro
+    // visualizadores recebem o passo (o do próprio andarilho e os três vizinhos): uma mensagem
+    // codificada, três entregas reaproveitadas do cache do ciclo.
+    const { host, enter, quiet } = cidadeComAndares();
+    const vizinhos = ['a', 'b', 'c'].map((id, index) => enter(id, { x: 10 + index, y: 20 }));
+    const andarilho = enter('andarilho', { x: 14, y: 21 });
+    quiet(...vizinhos.map((v) => v.socket), andarilho.socket);
+    const before = host.encodeStats;
+
+    host.handle(andarilho.viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+    const after = host.encodeStats;
+
+    for (const { socket } of [...vizinhos, andarilho]) {
+      expect(socket.received()).toContainEqual(expect.objectContaining({ type: 'creature-move' }));
+    }
+    expect(after.encoded - before.encoded).toBe(1);
+    expect(after.reused - before.reused).toBe(3);
+  });
+
+  it('cada visualizador recebe os passos na ordem em que aconteceram, íntegros', () => {
+    // A garantia de que o cache não troca frame de lugar: dois passos seguidos de dois jogadores
+    // diferentes chegam a todos na ordem, com o conteúdo de sempre.
+    const { host, enter, quiet } = cidadeComAndares();
+    const ouvinte = enter('ouvinte', { x: 10, y: 20 });
+    const um = enter('um', { x: 12, y: 21 });
+    const dois = enter('dois', { x: 14, y: 21 });
+    quiet(ouvinte.socket, um.socket, dois.socket);
+
+    host.handle(um.viewer, { type: 'walk', direction: 'north' });
+    host.handle(dois.viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+
+    const moves = ouvinte.socket.received().filter((m) => m.type === 'creature-move');
+    expect(moves).toHaveLength(2);
+    expect(moves[0]).toMatchObject({ from: { x: 12, y: 21, z: 7 }, to: { x: 12, y: 20, z: 7 } });
+    expect(moves[1]).toMatchObject({ from: { x: 14, y: 21, z: 7 }, to: { x: 14, y: 20, z: 7 } });
+    // O próprio `um` vê os dois passos, o dele primeiro.
+    const seenByUm = um.socket.received().filter((m) => m.type === 'creature-move');
+    expect(seenByUm.map((m) => (m as { from: { x: number } }).from.x)).toEqual([12, 14]);
+  });
+
+  it('uma sessão de um visualizador só não usa o cache: a hunt fria não paga por ele', () => {
+    // As 5.000 instâncias frias têm um visualizador cada: sem com quem dividir o frame, uma
+    // inserção no mapa por mensagem seria custo puro.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset);
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    viewer.send({ type: 'pong', t: 1 });
+    host.flush();
+
+    expect(host.encodeStats).toEqual({ encoded: 0, reused: 0, encodedBytes: 0 });
+  });
+
+  it('e com duas abas do mesmo personagem o cache entra: a mesma mensagem, uma codificação', () => {
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset);
+    const sockets = [new FakeSocket(), new FakeSocket()];
+    const abas = sockets.map((socket) => host.attach(socket, 'p1'));
+    host.flush();
+    sockets.forEach((socket) => { socket.frames.length = 0; });
+    const before = host.encodeStats;
+
+    const shared: S2CMessage = { type: 'system-message', level: 'info', text: 'oi' };
+    for (const aba of abas) aba.send(shared);
+    host.flush();
+
+    expect(host.encodeStats.encoded - before.encoded).toBe(1);
+    expect(host.encodeStats.reused - before.reused).toBe(1);
+    for (const socket of sockets) expect(socket.received()).toEqual([shared]);
+  });
+
+  it('quem chega no meio de uma praça aparece igual para todos que o veem', () => {
+    // O `creature-appear` do recém-chegado é UM objeto para os vizinhos (o cache o codifica uma
+    // vez): o conteúdo, o id incluído, é o mesmo para todos.
+    const { host, enter, quiet } = cidadeComAndares();
+    const vizinhos = ['a', 'b', 'c'].map((id, index) => enter(id, { x: 10 + index, y: 30 }));
+    quiet(...vizinhos.map((v) => v.socket));
+
+    enter('novo', { x: 14, y: 31 });
+    host.flush();
+
+    const anuncios = vizinhos.map(({ socket }) => socket.received()
+      .filter((m) => m.type === 'creature-appear' && m.name === 'novo'));
+    for (const anuncio of anuncios) expect(anuncio).toHaveLength(1);
+    expect(anuncios[1]).toEqual(anuncios[0]);
+    expect(anuncios[2]).toEqual(anuncios[0]);
+  });
+});
+
 describe('o catálogo chega ao cliente (FUN-79, FUN-89)', () => {
   const content = testContent();
   const catalogue = buildCatalogue(content);
