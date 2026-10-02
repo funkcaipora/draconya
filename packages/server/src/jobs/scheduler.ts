@@ -40,8 +40,8 @@ export interface JobsDependencies {
   /** Curva de XP, para o `jobs` derivar o level ao creditar a progressão (FUN-54). */
   readonly progression?: Progression;
   /**
-   * A flag `OPEN_WORLD` (#838, OW-17): ligada, o extrato versionado sem valor movido é aplicado só como
-   * estado absoluto, sem linha de ledger (ver `LedgerSweepOptions.openWorld`). Ausente é desligada.
+   * A flag `OPEN_WORLD` (#838, OW-17): ligada, o checkpoint versionado sem valor movido é aplicado só
+   * como estado absoluto, sem linha de ledger (ver `LedgerSweepOptions.openWorld`). Ausente é desligada.
    */
   readonly openWorld?: boolean;
   /** Onde o ciclo conta o que fez (FUN-59). Ausente: o `jobs` roda igual, só não expõe nada. */

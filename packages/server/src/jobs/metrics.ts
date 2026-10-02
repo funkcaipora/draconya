@@ -29,8 +29,8 @@ export interface CycleResult {
   readonly receiptsWritten: number;
   readonly receiptsFailed: number;
   /**
-   * Dos `receiptsWritten`, quantos foram aplicados SEM linha de ledger (#838, OW-17): o extrato sem
-   * valor movido, só com `OPEN_WORLD`. Ausente é zero.
+   * Dos `receiptsWritten`, quantos foram aplicados SEM linha de ledger (#838, OW-17): o checkpoint
+   * sem valor movido, só com `OPEN_WORLD`. Ausente é zero.
    */
   readonly receiptsStateOnly?: number;
 }

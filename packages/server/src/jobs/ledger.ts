@@ -6,11 +6,14 @@
 // apaga. Morrer entre inserir e apagar custa uma tentativa repetida, e a tentativa repetida é
 // operação nula.
 //
-// **A exceção que não é exceção (#838, OW-17, ADR 0060 d.10.d-e):** o extrato que NÃO move valor —
-// o checkpoint do mundo, só posição e vitais — não é linha de ledger. O invariante 10 fala de
-// movimentação de valor, e aqui nenhum se move: o `jobs` aplica só o estado absoluto, guardado por
-// `characters.durable_version`, e a idempotência vem da versão em vez da chave única. Só com
-// `OPEN_WORLD`, só para o extrato versionado (`movesValue`, `appliesAsStateOnly`).
+// **A exceção que não é exceção (#838, OW-17, ADR 0060 d.10.d-e):** o CHECKPOINT do mundo que NÃO move
+// valor — só posição e vitais — não é linha de ledger. O invariante 10 fala de movimentação de valor, e
+// aqui nenhum se move: o `jobs` aplica só o estado absoluto, guardado por `characters.durable_version`,
+// e a idempotência vem da versão em vez da chave única. Só com `OPEN_WORLD`, só para o extrato
+// versionado e só o de `reason: 'checkpoint'` (`movesValue`, `appliesAsStateOnly`): o fim de sessão e a
+// saída seguem com a linha, porque a chave `(session_id, seq)` é o que reconhece o extrato que
+// `settleSnapshotAsReceipt` rederiva de um snapshot — e a sessão do mundo, a única que faz checkpoint,
+// não tem snapshot (ADR 0060 d.10.a).
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
@@ -47,13 +50,15 @@ export interface LedgerSweepOptions {
    */
   readonly failures?: Map<string, number>;
   /**
-   * A flag `OPEN_WORLD` (#838, OW-17, ADR 0060 d.10.d-e). Ligada, o extrato VERSIONADO sem valor
-   * movido (`movesValue`) é aplicado só como estado absoluto — guardado por `durable_version` —, SEM
-   * linha de ledger: é o checkpoint do mundo, que a 60 s por personagem passaria de 288 mil linhas
-   * por dia por mundo só para dizer onde o jogador está. Desligada (o default), todo extrato grava a
-   * linha, exatamente como antes. O `jobs` e o `api` (a liquidação do ticket) precisam da MESMA
-   * flag do `game`, mas uma divergência é inofensiva: o mesmo extrato aplicado pelos dois caminhos
-   * dá o mesmo estado, com uma linha de ledger a mais ou a menos.
+   * A flag `OPEN_WORLD` (#838, OW-17, ADR 0060 d.10.d-e). Ligada, o CHECKPOINT do mundo
+   * (`reason: 'checkpoint'`) VERSIONADO sem valor movido (`movesValue`) é aplicado só como estado
+   * absoluto — guardado por `durable_version` —, SEM linha de ledger: a 60 s por personagem seriam 288
+   * mil linhas por dia por mundo só para dizer onde o jogador está. Desligada (o default), todo extrato
+   * grava a linha, exatamente como antes — e, ligada, o extrato de fim de sessão e de saída também:
+   * é a linha dele que a liquidação de um snapshot irrestaurável encontra para não aplicar duas vezes.
+   * O `jobs` e o `api` (a liquidação do ticket) precisam da MESMA flag do `game`, mas uma divergência
+   * é inofensiva: o mesmo extrato aplicado pelos dois caminhos dá o mesmo estado, com uma linha de
+   * ledger a mais ou a menos.
    */
   readonly openWorld?: boolean;
 }
@@ -107,23 +112,96 @@ export const STUCK_RECEIPT_AFTER = 5;
  * (Bestiário, Bosstiary, magias aprendidas, vocação, promoção) também não contam: já são idempotentes
  * por si (máximo, união, `coalesce`, `OR`) e entram em todo extrato.
  *
+ * **`acquired` é CUMULATIVO, e por isso só o item NOVO conta.** O emissor (`acquiredBy`, `game/host.ts`)
+ * lista todo item que ainda está na mochila, na satchel ou no corpo e leva o prefixo da sessão — e o
+ * id de loot (`${sessionId}:bag:N`) não muda. Numa sessão que dura (o mundo), o personagem que pegou
+ * uma espada em t0 a leva em TODO checkpoint seguinte, sem ter pegado nada de novo: contar a lista
+ * como valor deixaria todo personagem que já lootou uma vez na linha de ledger para sempre, e os 288 mil
+ * por dia seriam o caso típico, e não o teto. `owned` são os ids de `acquired` que o dono JÁ TEM como
+ * linha de `item_instance` (`ownedAcquired`): o item que já está lá não nasce de novo, e o `INSERT` que
+ * o extrato faria seria operação nula. Ausente é "nenhum": o item conta, que é o lado conservador.
+ *
  * Exportada para o teste.
  */
-export function movesValue(receipt: SessionReceipt): boolean {
+export function movesValue(receipt: SessionReceipt, owned: ReadonlySet<string> = NO_ITEMS): boolean {
+  return movesValueBesidesItems(receipt)
+    || (receipt.acquired ?? []).some((item) => !owned.has(item.instanceId));
+}
+
+/** O que `movesValue` decide SEM olhar o banco: agregados e item que morreu (`removedInstances`). */
+function movesValueBesidesItems(receipt: SessionReceipt): boolean {
   const { xpGained, goldGained, goldSpent, kills, deaths } = receipt.aggregates;
   return xpGained !== 0 || goldGained !== 0 || goldSpent !== 0 || kills !== 0 || deaths !== 0
-    || (receipt.acquired?.length ?? 0) > 0
     || (receipt.removedInstances?.length ?? 0) > 0;
 }
 
+const NO_ITEMS: ReadonlySet<string> = new Set();
+
 /**
- * O extrato é aplicado SEM linha de ledger? Só com a flag, só se for versionado e só se não moveu
- * valor. O SEM versão não tem a guarda que o torna idempotente — a chave única do ledger é a única
+ * O motivo do extrato que o hospedeiro do mundo emite a cada `WORLD_CHECKPOINT_MS` (`ReceiptReason`,
+ * `receipts.ts`, OW-16). É o único que pode pular o ledger.
+ */
+const CHECKPOINT_REASON = 'checkpoint';
+
+/**
+ * O extrato é aplicado SEM linha de ledger? Só com a flag, só se for versionado, só se for o CHECKPOINT
+ * do mundo e só se não moveu valor.
+ *
+ * **Só o checkpoint, e não todo extrato sem valor**, por causa do snapshot. O fim de uma sessão que
+ * tem snapshot (hunt, Treino, party) deixa o `(session_id, seq)` dela na linha de ledger, e é essa
+ * chave que `settleSnapshotAsReceipt` — o crédito de um snapshot irrestaurável, que reemite o mesmo
+ * `seq = ledgerSeq + 1` com uma versão NOVA — encontra para virar operação nula. Sem a linha, o
+ * extrato rederivado chegaria com versão maior que a do último aplicado e sobrescreveria, com o estado
+ * de alguns segundos antes, o que o extrato final já tinha gravado. A sessão do mundo, a única que faz
+ * checkpoint, NÃO tem snapshot (ADR 0060 d.10.a): não existe gêmeo a reconhecer, e a versão basta.
+ *
+ * O SEM versão também não tem a guarda que o torna idempotente — a chave única do ledger é a única
  * idempotência dele —, então segue o caminho de antes mesmo sem valor (é a degradação de um nó
  * anterior, ver `applyProgression`).
  */
-function appliesAsStateOnly(receipt: SessionReceipt, options: LedgerSweepOptions): boolean {
-  return options.openWorld === true && receipt.durableVersion !== undefined && !movesValue(receipt);
+function appliesAsStateOnly(
+  receipt: SessionReceipt, options: LedgerSweepOptions, owned: ReadonlySet<string> = NO_ITEMS,
+): boolean {
+  return options.openWorld === true
+    && receipt.durableVersion !== undefined
+    && receipt.reason === CHECKPOINT_REASON
+    && !movesValue(receipt, owned);
+}
+
+/**
+ * Quais itens de `acquired` o dono JÁ TEM como linha de `item_instance` (#838): o que decide se o
+ * `acquired` cumulativo de um checkpoint seguinte é item novo ou o mesmo de antes. Só olha o banco
+ * quando é preciso — a flag, o checkpoint versionado e nenhum outro valor, que é o que
+ * `appliesAsStateOnly` pergunta com o item todo como "já tido" — e só para quem tem `acquired`.
+ *
+ * Roda DENTRO da transação e depois da trava da linha do personagem, a mesma que `applyProgression`
+ * toma: o `jobs` e o ticket do `api` liquidam o mesmo personagem, e a conferência sob a trava é a que
+ * vê o item que o outro acabou de inserir. Escopado por DONO, como o resto do arquivo: a linha de outro
+ * personagem com o mesmo id não conta, e o extrato segue o caminho do ledger.
+ */
+async function ownedAcquired(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  receipt: SessionReceipt,
+  options: LedgerSweepOptions,
+): Promise<ReadonlySet<string>> {
+  const acquired = receipt.acquired ?? [];
+  if (acquired.length === 0) return NO_ITEMS;
+  // Os itens todos como "já tidos": se mesmo assim há valor, ou não é checkpoint, não há o que perguntar.
+  if (!appliesAsStateOnly(receipt, options, new Set(acquired.map((item) => item.instanceId)))) return NO_ITEMS;
+  const [locked] = await tx
+    .select({ id: characters.id })
+    .from(characters)
+    .where(eq(characters.id, receipt.characterId))
+    .for('update');
+  if (locked === undefined) return NO_ITEMS;
+  const rows = await tx
+    .select({ id: itemInstances.id })
+    .from(itemInstances)
+    .where(and(
+      eq(itemInstances.ownerCharacterId, receipt.characterId),
+      inArray(itemInstances.id, acquired.map((item) => item.instanceId)),
+    ));
+  return new Set(rows.map((row) => row.id));
 }
 
 /** A identidade de um extrato: a mesma da chave do Redis e do `UNIQUE (session_id, seq)` do ledger. */
@@ -223,22 +301,25 @@ async function writeReceipts(
   for (const receipts of groupByCharacter(pending)) {
     for (const [position, receipt] of receipts.entries()) {
       const identity = identityOf(receipt);
-      const withoutLedger = appliesAsStateOnly(receipt, options);
       try {
         // Uma transação: ou a linha de ledger e a progressão entram juntas, ou nenhuma das
         // duas. Separadas, uma queda no meio deixaria o gold creditado no ledger sem estar na
         // linha do personagem — e a reconciliação entre os dois é justamente o que o
         // invariante 10 existe para não precisar.
-        await options.database.transaction(async (tx) => {
-          // **SEM VALOR MOVIDO (#838, OW-17): só o estado absoluto, sem linha de ledger.** Não há
-          // o que o ledger registrar — o gold, o XP e os itens são zero — e a idempotência que a
-          // chave `(session_id, seq)` daria vem da versão durável: reaplicar o mesmo extrato, ou um
-          // mais velho, encontra `durable_version` já igual ou maior e não escreve nada. O invariante
-          // 10 fala de movimentação de VALOR, e aqui nenhum se move. A trava de linha continua — é ela
-          // que serializa o `jobs` e o `api` (ADR 0024) —, e o que custa o ledger é só a inserção.
-          if (withoutLedger) {
+        //
+        // Devolve se o extrato foi aplicado SEM linha de ledger — decidido dentro da transação, porque o
+        // `acquired` cumulativo pede uma leitura do banco — e é só o contador que o lê.
+        const withoutLedger = await options.database.transaction(async (tx): Promise<boolean> => {
+          // **CHECKPOINT SEM VALOR MOVIDO (#838, OW-17): só o estado absoluto, sem linha de ledger.**
+          // Não há o que o ledger registrar — o gold, o XP e os itens NOVOS são zero — e a
+          // idempotência que a chave `(session_id, seq)` daria vem da versão durável: reaplicar o
+          // mesmo extrato, ou um mais velho, encontra `durable_version` já igual ou maior e não
+          // escreve nada. O invariante 10 fala de movimentação de VALOR, e aqui nenhum se move. A
+          // trava de linha continua — é ela que serializa o `jobs` e o `api` (ADR 0024) —, e o que
+          // custa o ledger é só a inserção.
+          if (appliesAsStateOnly(receipt, options, await ownedAcquired(tx, receipt, options))) {
             await applyProgression(tx, receipt, options.progression, false);
-            return;
+            return true;
           }
           const inserted = await tx
             .insert(ledger)
@@ -264,8 +345,9 @@ async function writeReceipts(
 
           // Vazio = a linha já existia, este extrato já foi creditado. Aplicar a progressão
           // agora seria creditar duas vezes um delta que a chave única acabou de recusar.
-          if (inserted.length === 0) return;
+          if (inserted.length === 0) return false;
           await applyProgression(tx, receipt, options.progression, true);
+          return false;
         });
 
         await options.receipts.remove(receipt.sessionId, receipt.characterId, receipt.seq);
@@ -382,9 +464,10 @@ async function applyProgression(
   receipt: SessionReceipt,
   progression: Progression | undefined,
   /**
-   * O extrato tem linha de ledger? `false` é o extrato SEM valor movido (#838, OW-17): nada de XP,
+   * O extrato tem linha de ledger? `false` é o checkpoint SEM valor movido (#838, OW-17): nada de XP,
    * gold ou level na linha do personagem — não há delta a somar, e reescrever o level derivado de
-   * uma XP que não mudou seria só uma escrita a mais numa coluna econômica.
+   * uma XP que não mudou seria só uma escrita a mais numa coluna econômica — e nada de `item_instance`
+   * novo: o `acquired` que ele leva, se leva, é cumulativo e já está todo no banco.
    */
   ledgered: boolean,
 ): Promise<void> {
@@ -632,7 +715,10 @@ async function applyProgression(
 
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
-  if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
+  //
+  // O extrato SEM linha de ledger (#838) não insere: o `acquired` dele, se há, é só o que o dono JÁ TEM
+  // (`ownedAcquired` decidiu isso sob a trava), e o `INSERT` seria operação nula a cada checkpoint.
+  if (ledgered && receipt.acquired !== undefined && receipt.acquired.length > 0) {
     await tx
       .insert(itemInstances)
       .values(receipt.acquired.map((item) => ({

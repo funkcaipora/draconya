@@ -60,4 +60,31 @@ describe('movesValue', () => {
     expect(movesValue(receiptOf({ acquired: [{ instanceId: 's:0', itemId: 'spike-sword', quantity: 1 }] }))).toBe(true);
     expect(movesValue(receiptOf({ removedInstances: ['s:0'] }))).toBe(true);
   });
+
+  // `acquired` é CUMULATIVO (`acquiredBy`, `game/host.ts`): todo item da sessão que ainda está na
+  // mochila, em TODO checkpoint. Só o item que o dono ainda não tem como linha de `item_instance` nasceu.
+  describe('o `acquired` cumulativo de um checkpoint seguinte', () => {
+    const sword = { instanceId: 's:bag:1', itemId: 'spike-sword', quantity: 1 };
+    const shield = { instanceId: 's:bag:2', itemId: 'plate-shield', quantity: 1 };
+
+    it('o item que o dono JÁ TEM não é valor: é a lista de antes, repetida', () => {
+      expect(movesValue(receiptOf({ acquired: [sword] }), new Set([sword.instanceId]))).toBe(false);
+      expect(movesValue(receiptOf({ acquired: [sword, shield] }), new Set([sword.instanceId, shield.instanceId]))).toBe(false);
+    });
+
+    it('um item NOVO ao lado dos que já existem é valor', () => {
+      expect(movesValue(receiptOf({ acquired: [sword, shield] }), new Set([sword.instanceId]))).toBe(true);
+    });
+
+    it('sem a conferência com o banco o item conta — o lado conservador', () => {
+      expect(movesValue(receiptOf({ acquired: [sword] }))).toBe(true);
+      expect(movesValue(receiptOf({ acquired: [sword] }), new Set())).toBe(true);
+    });
+
+    it('os itens que o dono já tem não escondem o resto do valor do extrato', () => {
+      const owned = new Set([sword.instanceId]);
+      expect(movesValue(receiptOf({ acquired: [sword], aggregates: { ...EMPTY, goldGained: 5 } }), owned)).toBe(true);
+      expect(movesValue(receiptOf({ acquired: [sword], removedInstances: ['s:bag:9'] }), owned)).toBe(true);
+    });
+  });
 });

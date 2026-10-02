@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { totalXpForLevel } from '@draconya/sim';
-import type { ConditionState, LearnedSpellsState } from '@draconya/sim';
+import type { ConditionState, LearnedSpellsState, SessionSnapshot } from '@draconya/sim';
 import { afterAll, describe, expect, it } from 'vitest';
-import { accounts, characterStorages, characters, ledger } from '../db/schema.js';
+import { accounts, characterStorages, characters, itemInstances, ledger } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore } from '../receipts.js';
 import type { SessionReceipt } from '../receipts.js';
+import { settleSnapshotAsReceipt } from '../snapshot-settlement.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
 import { testContent } from '../testing/content.js';
@@ -16,9 +17,9 @@ import { JobsMetrics } from './metrics.js';
 import { createJobsCycle } from './scheduler.js';
 
 // A liquidação do checkpoint do mundo no `jobs` (#838, OW-17, ADR 0060 d.10.d-e), no Postgres de
-// verdade: o extrato SEM valor movido é aplicado só como estado absoluto, guardado por
-// `characters.durable_version`, e não cria linha de ledger. O extrato COM valor segue o caminho de
-// hoje, e a flag `OPEN_WORLD` desligada deixa tudo como era.
+// verdade: o CHECKPOINT (`reason: 'checkpoint'`) SEM valor movido é aplicado só como estado absoluto,
+// guardado por `characters.durable_version`, e não cria linha de ledger. O extrato COM valor, o de fim de
+// sessão e o de saída seguem o caminho de hoje, e a flag `OPEN_WORLD` desligada deixa tudo como era.
 
 const logger = createLogger('silent', 'test');
 const { redis, available: redisReady } = await connectTestRedis(27);
@@ -70,7 +71,7 @@ const NOTHING = {
 const checkpointOf = (
   sessionId: string, characterId: string, seq: number, overrides: Partial<SessionReceipt> = {},
 ): Omit<SessionReceipt, 'endedAtMs'> => ({
-  sessionId, characterId, accountId: 'a1', reason: 'drain', seq, durableVersion: seq,
+  sessionId, characterId, accountId: 'a1', reason: 'checkpoint', seq, durableVersion: seq,
   aggregates: NOTHING, notableEvents: [],
   worldPosition: STREET, townId: 'thais', health: 100, mana: 20,
   ...overrides,
@@ -241,7 +242,8 @@ describe.runIf(ready)('o checkpoint é liquidado como estado absoluto, sem linha
 
   it('a linha COM valor segue o caminho de hoje: 100 de loot + 50 de venda, dois checkpoints e um logout somam 150', async () => {
     // O portão do plano §4 (um canal de gold), do lado do `jobs`: o ledger só cresce onde valor se
-    // moveu, e a conta fecha. v1 (+100), v2 (nada), v3 (+50), v4 (logout, nada).
+    // moveu, e a conta fecha. v1 (+100), v2 (nada), v3 (+50), v4 (logout, nada). O logout NÃO é
+    // checkpoint: leva a linha de ledger dele (delta zero), como a de toda saída.
     const database = db as NonNullable<typeof db>;
     const characterId = await seedCharacter(database);
     const receipts = new ReceiptStore(redis);
@@ -253,13 +255,14 @@ describe.runIf(ready)('o checkpoint é liquidado como estado absoluto, sem linha
     await receipts.save(checkpointOf(sessionId, characterId, 4, { reason: 'manual-exit', worldPosition: TEMPLE }));
     const result = await writePendingReceipts(sweepOf(database, receipts));
 
-    expect(result).toEqual({ written: 4, failed: 0, stateOnly: 2 });
+    expect(result).toEqual({ written: 4, failed: 0, stateOnly: 1 });
     const rows = await ledgerOf(database, characterId);
-    expect(rows.map((row) => row.seq).sort()).toEqual([1, 3]);
+    expect(rows.map((row) => row.seq).sort()).toEqual([1, 3, 4]);
+    expect(rows.map((row) => row.type).sort()).toEqual(['session-checkpoint', 'session-checkpoint', 'session-manual-exit']);
     expect(rows.reduce((sum, row) => sum + row.delta, 0)).toBe(150);
     // A coluna `gold` é projeção do ledger: 700 do começo + o que ele registra.
     expect((await columnsOf(database, characterId)).gold).toBe(850);
-    // E o estado absoluto é o do último, que não tem linha de ledger.
+    // E o estado absoluto é o do último, o logout.
     expect(await columnsOf(database, characterId)).toMatchObject({
       worldX: TEMPLE.x, worldY: TEMPLE.y, worldZ: TEMPLE.z, durableVersion: 4,
     });
@@ -329,6 +332,136 @@ describe.runIf(ready)('o checkpoint é liquidado como estado absoluto, sem linha
     expect(await leftFor(characterId)).toEqual([]);
   });
 
+  // O `acquired` do emissor (`acquiredBy`, `game/host.ts`) é CUMULATIVO: lista todo item da sessão que
+  // ainda está na mochila, com o mesmo id de loot (`${sessionId}:bag:N`), em TODO checkpoint. O extrato
+  // abaixo tem essa forma — não um `acquired` que só existe no primeiro.
+  const sword = (sessionId: string) => ({ instanceId: `${sessionId}:bag:1`, itemId: 'spike-sword', quantity: 1 });
+  const shield = (sessionId: string) => ({ instanceId: `${sessionId}:bag:2`, itemId: 'plate-shield', quantity: 1 });
+  const itemsOf = async (database: NonNullable<typeof db>, characterId: string) =>
+    (await database.database.db.select({ id: itemInstances.id }).from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId))).map((row) => row.id).sort();
+
+  it('o `acquired` CUMULATIVO não prende o personagem no ledger: a espada de t0 repetida a cada checkpoint não é valor', async () => {
+    // Quem lootou uma vez leva o item em todo checkpoint seguinte. O primeiro, que traz o item NOVO, é
+    // a linha de ledger; os seguintes, que só o repetem, são estado absoluto — senão o teto de 288 mil
+    // linhas por dia seria o caso típico de todo personagem que já pegou alguma coisa.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+
+    await receipts.save(checkpointOf(sessionId, characterId, 1, { acquired: [sword(sessionId)], worldPosition: STREET }));
+    const first = await writePendingReceipts(sweepOf(database, receipts));
+    await receipts.save(checkpointOf(sessionId, characterId, 2, { acquired: [sword(sessionId)], worldPosition: DEPOT }));
+    await receipts.save(checkpointOf(sessionId, characterId, 3, { acquired: [sword(sessionId)], worldPosition: TEMPLE }));
+    const repeated = await writePendingReceipts(sweepOf(database, receipts));
+
+    // O item NOVO é valor: uma linha de ledger (delta zero, mas é o registro de que o item nasceu).
+    expect(first).toEqual({ written: 1, failed: 0 });
+    expect(await itemsOf(database, characterId)).toEqual([`${sessionId}:bag:1`]);
+    // O repetido NÃO: nenhuma linha nova, o estado absoluto do último, e o extrato saiu do Redis.
+    expect(repeated).toEqual({ written: 2, failed: 0, stateOnly: 2 });
+    expect(await ledgerOf(database, characterId)).toHaveLength(1);
+    expect(await columnsOf(database, characterId)).toMatchObject({
+      worldX: TEMPLE.x, worldY: TEMPLE.y, durableVersion: 3, gold: 700,
+    });
+    expect(await itemsOf(database, characterId)).toEqual([`${sessionId}:bag:1`]);
+    expect(await leftFor(characterId)).toEqual([]);
+  });
+
+  it('um item NOVO ao lado do que já existia volta ao ledger, e só o novo é inserido', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+
+    await receipts.save(checkpointOf(sessionId, characterId, 1, { acquired: [sword(sessionId)] }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    await receipts.save(checkpointOf(sessionId, characterId, 2, { acquired: [sword(sessionId), shield(sessionId)] }));
+    const result = await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(result).toEqual({ written: 1, failed: 0 });
+    expect(await ledgerOf(database, characterId)).toHaveLength(2);
+    expect(await itemsOf(database, characterId)).toEqual([`${sessionId}:bag:1`, `${sessionId}:bag:2`]);
+  });
+
+  it('o item de OUTRO dono com o mesmo id não conta como "já tido": o extrato segue o caminho do ledger', async () => {
+    // A conferência é por dono, como o resto do arquivo. (Os ids levam o prefixo da sessão e não se
+    // repetem entre personagens — o caso é a defesa, não o fluxo.)
+    const database = db as NonNullable<typeof db>;
+    const owner = await seedCharacter(database);
+    const other = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await database.database.db.insert(itemInstances).values({
+      id: sword(sessionId).instanceId, itemId: 'spike-sword', ownerCharacterId: owner, quantity: 1, origin: 'loot',
+    });
+
+    await receipts.save(checkpointOf(sessionId, other, 1, { acquired: [sword(sessionId)] }));
+    const result = await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(result).toEqual({ written: 1, failed: 0 });
+    expect(await ledgerOf(database, other)).toHaveLength(1);
+  });
+
+  it('só o CHECKPOINT pula o ledger: o fim de sessão e a saída sem valor ainda têm a linha deles', async () => {
+    // A linha de ledger do extrato final é o que a liquidação de um snapshot irrestaurável encontra
+    // para não aplicar de novo. Mutação que mata: tirar `receipt.reason === CHECKPOINT_REASON`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+
+    await receipts.save(checkpointOf(sessionId, characterId, 1, { reason: 'manual-exit', health: 10 }));
+    await receipts.save(checkpointOf(sessionId, characterId, 2, { reason: 'completed', health: 20 }));
+    const result = await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(result).toEqual({ written: 2, failed: 0 });
+    expect((await ledgerOf(database, characterId)).map((row) => row.type).sort())
+      .toEqual(['session-completed', 'session-manual-exit']);
+    expect(await columnsOf(database, characterId)).toMatchObject({ health: 20, durableVersion: 2 });
+  });
+
+  it('o extrato que o snapshot irrestaurável rederiva NÃO desfaz o final da sessão que já liquidou', async () => {
+    // Uma hunt sem valor termina: o hospedeiro grava o extrato final R1 (seq 4, versão 5) e o `jobs` o
+    // aplica. O `release` seguinte cai, e o snapshot (ledgerSeq 3) sobrevive. No login seguinte ele é
+    // irrestaurável, e `settleSnapshotAsReceipt` reemite o MESMO `seq = ledgerSeq + 1` com uma versão
+    // NOVA e o estado de alguns segundos antes. A chave `(session_id, seq)` do ledger, que o extrato
+    // final deixou, é o que o reconhece. Sem a linha, ele passaria na guarda de versão (6 > 5) e
+    // sobrescreveria a vida e a posição de R1 com as do snapshot.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const snapshot: SessionSnapshot = {
+      formatVersion: 2, contentVersion: 'v-test', id: sessionId, type: 'hunt', createdAtMs: 0, logicalNowMs: 5_000,
+      schedule: { events: [], nextSeq: 0 }, rng: { a: 1, b: 2, c: 3, d: 4 } as never,
+      participants: [{
+        id: characterId, position: { x: 0, y: 0, z: 7 }, health: 40, maxHealth: 100, mana: 5, maxMana: 20,
+        level: 5, xp: totalXpForLevel(5, content.progression), goldDelta: 0, alive: true, cooldowns: {},
+        townId: 'thais', worldPosition: { x: STREET.x, y: STREET.y, z: STREET.z },
+      }],
+      aggregates: NOTHING, notableEvents: [], ledgerSeq: 3, endedReason: null,
+    };
+
+    await receipts.save(checkpointOf(sessionId, characterId, 4, {
+      reason: 'manual-exit', durableVersion: 5, worldPosition: TEMPLE, health: 10, mana: 2,
+    }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    await settleSnapshotAsReceipt(snapshot, {
+      characterId, accountId: 'a1', receipts, durableVersion: 6, openWorld: true,
+    });
+    expect((await receipts.pendingFor(characterId)).map((receipt) => [receipt.seq, receipt.durableVersion])).toEqual([[4, 6]]);
+    const twin = await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(twin).toEqual({ written: 1, failed: 0 });
+    expect(await ledgerOf(database, characterId)).toHaveLength(1);
+    expect(await columnsOf(database, characterId)).toMatchObject({
+      worldX: TEMPLE.x, worldY: TEMPLE.y, health: 10, mana: 2, durableVersion: 5,
+    });
+    expect(await leftFor(characterId)).toEqual([]);
+  });
+
   it('com a flag DESLIGADA nada muda: a linha sem valor ainda grava a linha de ledger', async () => {
     // O default. O resultado é o de antes, sem `stateOnly`, e a linha de ledger tem delta zero.
     const database = db as NonNullable<typeof db>;
@@ -341,7 +474,7 @@ describe.runIf(ready)('o checkpoint é liquidado como estado absoluto, sem linha
     expect(result).toEqual({ written: 1, failed: 0 });
     const rows = await ledgerOf(database, characterId);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ delta: 0, type: 'session-drain', seq: 1 });
+    expect(rows[0]).toMatchObject({ delta: 0, type: 'session-checkpoint', seq: 1 });
     expect(await columnsOf(database, characterId)).toMatchObject({ health: 10, durableVersion: 1, level: 5 });
   });
 
