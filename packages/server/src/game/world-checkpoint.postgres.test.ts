@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, Rng, Session, totalXpForLevel } from '@draconya/sim';
 import type { Point, Ruleset } from '@draconya/sim';
 import { compileItem, itemSchema } from '@draconya/content';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { accounts, characters, ledger } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore } from '../receipts.js';
@@ -11,7 +11,7 @@ import type { SessionReceipt } from '../receipts.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
 import { testContent } from '../testing/content.js';
-import { writePendingReceipts } from '../jobs/ledger.js';
+import { settleCharacterProgress } from '../jobs/ledger.js';
 import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
 import { FakeSocket } from './testing.js';
@@ -21,6 +21,11 @@ import { FakeSocket } from './testing.js';
 // teste que prende o critério da issue — invariante 10 intacto: o que o personagem rendeu entra UMA vez,
 // qualquer que seja a ordem, a falha ou a queda no meio.
 
+// Este arquivo NÃO faz `flushdb` nem varre o Redis inteiro (`writePendingReceipts`): todo personagem e toda
+// sessão daqui nasce com UUID, e a liquidação é POR PERSONAGEM (`settleCharacterProgress`, o mesmo
+// caminho do ticket). O Redis local desta máquina tem 16 bancos e a infra de teste pede 32 — os índices
+// 16 em diante caem no banco 0 em silêncio (ver `testing/redis.ts`) —, e um arquivo que apagasse ou
+// varresse o banco inteiro tiraria o extrato pendente de outro que roda ao lado.
 const logger = createLogger('silent', 'test');
 const { redis, available: redisReady } = await connectTestRedis(28);
 
@@ -38,10 +43,6 @@ if (redisReady && (process.env['DATABASE_TEST_URL'] ?? '') !== '') {
 afterAll(async () => {
   if (redisReady) await redis.quit();
   await db?.cleanup();
-});
-
-beforeEach(async () => {
-  if (redisReady) await redis.flushdb();
 });
 
 const content = testContent();
@@ -134,8 +135,11 @@ const ledgerOf = async (database: NonNullable<typeof db>, characterId: string) =
     .from(ledger).where(eq(ledger.characterId, characterId)).orderBy(asc(ledger.seq));
 
 describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez (#837, OW-16)', () => {
-  const sweep = (database: NonNullable<typeof db>, receipts: ReceiptStore) =>
-    writePendingReceipts({ database: database.database.db, receipts, logger, progression: content.progression });
+  /** O `jobs` liquidando o que ESTE personagem deixou no Redis — o caminho que o ticket usa. */
+  const sweep = (database: NonNullable<typeof db>, receipts: ReceiptStore, characterId: string) =>
+    settleCharacterProgress(characterId, {
+      database: database.database.db, receipts, logger, progression: content.progression,
+    });
 
   it('100 de loot e 50 de venda, dois checkpoints e um logout: o ledger soma exatamente 150', async () => {
     const database = db as NonNullable<typeof db>;
@@ -152,7 +156,7 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     await world.host.checkpointWorlds();
     await world.host.release(ids.characterId, 1000, 'logout');
 
-    expect(await sweep(database, world.receipts)).toEqual({ written: 3, failed: 0 });
+    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 3, failed: 0 });
 
     const rows = await ledgerOf(database, ids.characterId);
     expect(rows.map((row) => row.type)).toEqual(['session-checkpoint', 'session-checkpoint', 'session-manual-exit']);
@@ -178,7 +182,7 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     hero.health = 85;
     await world.host.checkpointWorlds();
 
-    expect(await sweep(database, world.receipts)).toEqual({ written: 2, failed: 0 });
+    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 2, failed: 0 });
     expect(await rowOf(database, ids.characterId)).toMatchObject({
       worldX: ORIGIN.x + 95, worldY: ORIGIN.y + 97, worldZ: 7, townId: 'thais', health: 85, mana: 5, durableVersion: 2,
     });
@@ -220,7 +224,8 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     b.hero.health = 30;
     await world.host.checkpointWorlds();
 
-    expect(await sweep(database, real)).toEqual({ written: 2, failed: 0 });
+    expect(await sweep(database, real, first.characterId)).toEqual({ written: 1, failed: 0 });
+    expect(await sweep(database, real, second.characterId)).toEqual({ written: 1, failed: 0 });
     expect(await rowOf(database, first.characterId)).toMatchObject({
       gold: 100, xp: totalXpForLevel(8, content.progression) + 40, worldX: ORIGIN.x + 96, worldY: ORIGIN.y + 88,
       durableVersion: 1,
@@ -255,7 +260,7 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     await world.host.checkpointWorlds(); // volta: o extrato atrasado vai na frente, o novo atrás
     await world.host.release(ids.characterId, 1000, 'logout');
 
-    expect(await sweep(database, real)).toEqual({ written: 3, failed: 0 });
+    expect(await sweep(database, real, ids.characterId)).toEqual({ written: 3, failed: 0 });
     const rows = await ledgerOf(database, ids.characterId);
     expect(rows.map((row) => row.delta)).toEqual([100, 30, 0]);
     expect(await rowOf(database, ids.characterId)).toMatchObject({ gold: 130 });
@@ -282,7 +287,7 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     await world.host.checkpointWorlds(); // repete o mesmo extrato: a mesma chave, o mesmo `seq`
 
     expect(await real.pendingFor(ids.characterId)).toHaveLength(1);
-    expect(await sweep(database, real)).toEqual({ written: 1, failed: 0 });
+    expect(await sweep(database, real, ids.characterId)).toEqual({ written: 1, failed: 0 });
     expect((await ledgerOf(database, ids.characterId)).map((row) => row.delta)).toEqual([100]);
     expect(await rowOf(database, ids.characterId)).toMatchObject({ gold: 100 });
   });
@@ -297,7 +302,7 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     await world.host.checkpointWorlds();
 
     expect(await world.receipts.pendingFor(ids.characterId)).toEqual([]);
-    expect(await sweep(database, world.receipts)).toEqual({ written: 0, failed: 0 });
+    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 0, failed: 0 });
     expect(await ledgerOf(database, ids.characterId)).toEqual([]);
   });
 });
