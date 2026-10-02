@@ -771,6 +771,57 @@ sessão — OW-20, `member-in-fight`).
 **Efeito no que esta decisão escreveu:** nenhum. As decisões 2, 6 e 13 continuam valendo; esta emenda só registra
 onde mora o teto, o que o grafo não liga, os dois níveis do serviço de Cidade e o que a recusa de subir é e não é.
 
+## Emenda — 2026-10-02 (#840, OW-19): o hospedeiro entrega a intenção e cumpre o evento, e a chegada sem visualizador vale já no login
+
+A decisão 7 manda o hospedeiro entregar ao `sim` `presence-lost` quando o último visualizador se solta ou quando o
+personagem chega sem nenhum, `presence-restored` ao reanexar, e tratar a saída que o `sim` decide: o checkpoint e o
+`release` para o repouso. A OW-19 a implementou no `SessionHost` (`docs/product/open-world.md`, "A presença no
+hospedeiro") e fechou seis detalhes que a decisão deixava em aberto:
+
+- **O hospedeiro não decide nada de gameplay.** Entrega três intenções (`presenceLost`, `presenceRestored`,
+  `requestLogout`), cumpre um evento (`departure-requested`) e repassa a mensagem de outro (`logout-refused`). Não
+  olha tile, luta nem relógio de parede: se o personagem pode sair, quando e de onde, é do `sim`
+  (`canLogout`, o relógio lógico, a janela de luta). Os três métodos são pedidos por forma
+  (`worldPresenceOf`), e a Cidade e a hunt, que não os têm, não recebem presença nenhuma.
+- **Presença é a troca de zero para um visualizador e de um para zero.** A segunda aba não é presença: fechar uma
+  de duas não faz nada. O `release` tira o visualizador do conjunto antes de fechar o socket, e o `detach` que o
+  `close` do servidor chama de volta ignora quem já saiu — quem o servidor solta não perdeu a conexão.
+- **"Chegar ao mundo sem visualizador" vale já no login.** A decisão 6c descreve a corrida entre a desconexão e a
+  chegada de uma instância, e a decisão 7 diz "qualquer chegada com zero visualizadores". No login a chegada É
+  sem visualizador por construção — o ticket é consumido no handshake e o websocket anexa depois —, então todo
+  login entrega `presence-lost` e o primeiro `attach` devolve `presence-restored`, milissegundos depois e sem
+  efeito: os dois são idempotentes. O que isso compra é o login cujo socket nunca abre, que sai aos 60 s em vez
+  de ficar parado e vulnerável para sempre, porque o recolhimento por repouso de 5 minutos é da Cidade, e o
+  mundo, que roda a 10 Hz, nunca é visitado por ele (`#collectResting` só vê `hz <= 0`). A outra chegada é a
+  volta de uma instância cujo visualizador caiu no meio da transição (`#replace`).
+- **A saída vale com ou sem visualizador, e a âncora é a posição do evento.** `departure-requested` é gameplay, e o
+  x-log é o caso em que não há visualizador. O personagem sem dono pode ter andado entre o instante em que o `sim`
+  decidiu e o ciclo que o hospedeiro lê (o medo, um empurrão), e o login seguinte volta ao tile de onde ele saiu:
+  o `release` recebe a posição do evento. O `{0, 0, 0}` do Canary é "sem posição" e cai na posição de agora. A
+  saída é idempotente por personagem, e quem já está numa transição não é solto por ela — o `release` resolve o
+  personagem pela sessão de destino.
+- **O `logout` do mundo é intenção, e a resposta é na hora.** O hospedeiro chama `requestLogout` e drena o evento
+  sem esperar o ciclo seguinte, como o `leave-hunt`. A recusa (`logout-refused`) vai só a quem pediu, a todas as
+  abas dele. Na hunt e na Cidade o `logout` segue como era. Sem veredicto (`requestLogout` devolve `null`: o
+  `sim` não conhece o personagem) o `logout` é o `release` de sempre — sem este ramo seria engolido, porque não
+  há personagem para o `sim` decidir.
+- **A saída que falha é repetida pelo hospedeiro, e a reconexão que a encontra perde.** O `release` que o Redis
+  recusou já tirou o personagem do `sim` (o `departure-requested` é um só) e não o soltou do hospedeiro, e o x-log
+  não tem jogador que peça outra vez: o hospedeiro registra a saída que falhou e a repete no ciclo de checkpoint e
+  no `prepare` de quem reconecta, em vez de deixar o personagem mapeado — com o slot da conta renovado a cada
+  ciclo — até o processo reiniciar. O x-log vence no instante em que o cliente reconecta sozinho: com a saída em
+  voo, o `prepare` espera por ela e recusa o ticket (503), o `attach` recusa quem está saindo, e o `open` do
+  servidor fecha esse socket (1013) em vez de deixar a exceção virar `uncaughtException` — o mundo é um processo
+  só (decisão 2c), e um descuido de reconexão derrubaria todo jogador.
+- **Os quatro motivos de saída são cumpridos desde já.** `logout`, `xlog`, `death` e `idle-kick` entram na união
+  que o `sim` emite desde a OW-14; o hospedeiro traduz `death` em `EndReason` `death` — o ledger registra
+  `session-death`, como na hunt — e os outros três em `manual-exit`, o que o `logout` de antes já gravava. O motivo
+  original fecha o socket (`1000` e o texto). Quem emite `death` e `idle-kick` é a OW-32 e a OW-47.
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 6c e 7 continuam valendo; esta emenda só registra o
+que o hospedeiro entrega e cumpre, que a chegada sem visualizador inclui o login, de onde a âncora de saída sai, e
+quem repete a saída que falhou.
+
 ## Emenda — 2026-10-02 (#842, OW-21): a fila é a `WaitingList` do Canary, em Redis; a hunt idle direta vem do ticket e só com a flag
 
 A decisão 2b manda o mundo cheio responder como a fila do Canary, e a 6b manda a entrada direta numa hunt idle a

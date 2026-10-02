@@ -805,10 +805,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
-    // `logout-refused` (OW-11, #832; OW-23, #846; ADR 0060 d.7): o veredicto do `canLogout`, que o servidor devolve
-    // a quem pediu sair — e a quem pediu uma hunt idle de onde o Tibia não deixaria deslogar (d.6a). O personagem
-    // não mudou. A tela mostra o aviso sobre o mundo (`ExitRefusalNotice`) e o `HuntsModal` mostra o seu; aqui
-    // fica o dado e UMA linha no registro, para o chat acender mesmo fechado, como toda recusa do servidor.
+    // `logout-refused` (OW-11, #832; OW-23, #846; ADR 0060 d.7): o veredicto do `canLogout`. O hospedeiro o emite
+    // desde a OW-19 (#840) a cada `logout` que `canLogout` recusa, a quem pediu — e a quem pediu uma hunt idle de onde
+    // o Tibia não deixaria deslogar (d.6a), quando a OW-20 chegar. O personagem não mudou. A tela mostra o aviso
+    // sobre o mundo (`ExitRefusalNotice`) e o `HuntsModal` mostra o seu; aqui fica o dado e UMA linha no registro,
+    // para o chat acender mesmo fechado, como toda recusa do servidor.
     case 'logout-refused':
       hud.set((state) => ({
         ...state,

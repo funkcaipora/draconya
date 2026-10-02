@@ -27,6 +27,7 @@
 //  17  game/host-directory.test.ts
 //  19  api/party-social.test.ts
 //  25  jobs/world-vitals.postgres.test.ts (#836, OW-15)
+//  26  game/world-presence.postgres.test.ts (#840, OW-19; o 26 que o OW-16 deixou livre abaixo)
 //  27  jobs/checkpoint-settlement.postgres.test.ts (#838, OW-17)
 //  28  game/world-checkpoint.postgres.test.ts (#837, OW-16; 26 fica livre para a issue vizinha)
 //  29  world-queue.test.ts (#842, OW-21)

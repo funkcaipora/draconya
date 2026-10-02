@@ -1,7 +1,7 @@
 import { createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
 import type { Content } from '@draconya/content';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
@@ -151,11 +151,33 @@ describe('o login pelo socket de verdade (#839, OW-18)', () => {
     await until(() => game.host?.viewersOf('a') === 0);
     await new Promise((resolve) => { setTimeout(resolve, 250); });
 
-    // A presença (o x-log aos 60 s, OW-19) ainda não existe: o hospedeiro só garante que fechar o navegador
-    // não encerra nada, e que o mundo não é recolhido como a Cidade (`hz > 0`).
+    // Fechar o navegador não encerra nada: o personagem fica parado no mundo e o mundo não é recolhido como a
+    // Cidade (`hz > 0`). O x-log aos 60 s (OW-19) é do relógio lógico da sessão e tem o teste dele, em
+    // `world-presence.test.ts`: o relógio de parede deste teste não chega lá.
     expect(game.host?.sessionCount).toBe(1);
     expect(game.host?.sessionFor('a')?.ruleset.type).toBe('world');
     expect(game.host?.sessionFor('a')?.currentHz()).toBe(10);
+  });
+
+  it('um `attach` que falha no `open` fecha ESTE socket com 1013 e não derruba o processo (#840, OW-19)', async () => {
+    // O personagem pode deixar de estar no nó entre o `prepare` e o `open` — o x-log venceu, o `logout` passou.
+    // A exceção que escapa de um handler do uWebSockets é um `uncaughtException`, e o `main.ts` a transforma em
+    // `process.exit(1)`: o mundo é um processo só, e uma reconexão azarada derrubaria todo jogador.
+    const { game, port } = await startNode(true);
+    const attach = vi.spyOn(game.host!, 'attach').mockImplementationOnce(() => {
+      throw new Error('session for a was not prepared');
+    });
+
+    const refused = new WebSocket(`ws://127.0.0.1:${String(port)}/?ticket=tk-a`);
+    sockets.push(refused);
+    const closed = await new Promise<CloseEvent>((resolve) => { refused.addEventListener('close', resolve); });
+    expect(closed.code).toBe(1013);
+    expect(attach).toHaveBeenCalledTimes(1);
+
+    // O nó segue de pé: o login seguinte entra, e a sessão do mundo é a de sempre.
+    const b = await connect(port, 'b');
+    expect(await b.waitFor('session-state')).toMatchObject({ sessionType: 'world' });
+    expect(game.host?.viewersOf('b')).toBe(1);
   });
 
   it('com a flag DESLIGADA — o default — o login cai na Cidade, como sempre', async () => {
