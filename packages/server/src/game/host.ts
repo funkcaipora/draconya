@@ -6040,8 +6040,10 @@ export class SessionHost {
    */
   async checkpointWorlds(): Promise<void> {
     // As saídas que falharam vão ANTES dos lotes (#840, OW-19): o extrato de quem sai que não pousou é o
-    // mais velho, e a saída que acaba aqui já leva o lote da sessão junto.
-    await this.#retryDepartures();
+    // mais velho, e a saída que acaba aqui já leva o lote da sessão junto. Sem nenhuma — o caso comum —
+    // nada é esperado: o lote é montado na mesma volta síncrona de sempre, e o que o personagem ganha
+    // depois dela entra no seguinte (`world-checkpoint.test.ts`).
+    if (this.#failedDepartures.size > 0) await this.#retryDepartures();
     for (const hosted of [...this.#sessions.values()]) {
       const state = hosted.checkpoint;
       if (state === null || hosted.session.ended !== null) continue;
