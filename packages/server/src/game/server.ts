@@ -21,6 +21,7 @@ import {
   type SessionRestorer,
 } from './host.js';
 import { GameMetrics } from './metrics.js';
+import { assertSoleGameNode } from './open-world-guard.js';
 import { Viewer } from './viewer.js';
 
 export interface GameDependencies {
@@ -375,6 +376,13 @@ export function createGame(
       logger.warn({ nodeId }, 'Game stopped without draining');
     },
     async start() {
+      // O mundo aberto vive numa sessão num processo só (invariante 9, ADR 0060 d.2c): com a flag
+      // ligada, o nó se recusa a subir se há outro `game` vivo — ANTES de abrir a porta, e antes de
+      // bater o coração, para o `api` nunca emitir ticket para um nó que vai cair. A trava de verdade,
+      // que deixa mais de um nó, é a `world:{id}:owner` da OW-59.
+      if (configuration.OPEN_WORLD && dependencies.directory !== undefined) {
+        await assertSoleGameNode(dependencies.directory, nodeId);
+      }
       await new Promise<void>((resolve, reject) => {
         app.listen('0.0.0.0', configuration.GAME_PORT, (socket) => {
           if (!socket) {
