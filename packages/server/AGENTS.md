@@ -979,8 +979,9 @@ desligada dá a Cidade de sempre e `to: 'world'` devolve `null`; a ligada dá o 
   extratos da anterior (invariante 10) — e com a versão de conteúdo de agora (invariante 7).
 - **O teto vale só na ENTRADA do repouso.** `entry: 'rest'` (o login) recusa o mundo cheio com
   `WorldFullError`; `entry: 'instance'` (quem volta de uma hunt) NUNCA recusa. Quem aplica o teto a toda entrada
-  deixa o personagem sem sessão ao voltar. O erro sobe por `createSession` antes de qualquer registro: o
-  handshake falha, e a fila `world-full` é da OW-21.
+  deixa o personagem sem sessão ao voltar. O erro sobe por `createSession` antes de qualquer registro; quem o
+  converte em fila com posição é a porta do hospedeiro (`WorldEntryGate`, OW-21 — ver "A entrada pelo
+  repouso", adiante), e um nó sem a fila injetada ainda falha o handshake, como a OW-18 o deixou.
 - **`carryRestoredConditions` é do `'rest'`.** O personagem do ticket nasce com as condições no relógio de zero, e
   o mundo que já andou tem outro: sem a tradução `armConditions` as daria por vencidas na entrada. Quem vem de uma
   instância já foi traduzido por `moveToClock`.
@@ -1092,6 +1093,67 @@ conferida):
 **Um ruleset de teste que fale a língua do mundo** (os três métodos) é tratado como mundo, e um que não os
 tenha (o `CITY` de `world-checkpoint.test.ts`) não recebe presença nenhuma: as suítes de checkpoint, que
 montam o mundo à mão, continuam valendo sem tocar nelas.
+
+## A entrada pelo repouso: a fila do mundo cheio e a hunt idle direta (#842, OW-21, ADR 0060 d.2b e d.6b)
+
+Quem está em repouso entra por um de dois caminhos, e o ticket diz qual. Produto:
+`docs/product/open-world.md`, "A entrada pelo repouso".
+
+- **O pedido** (`api/tickets.ts`): `POST /api/tickets { characterId, entry }`, `entry: 'world' | { hunt }`,
+  default `'world'`. O `EntrySchema` é estrito (campo a mais é `invalid-body`). `{ hunt }` é conferido contra
+  `hasHunt` (o `main` passa `content.hunts.has`; ausente recusa) — `400 unknown-hunt`, DEPOIS da posse e ANTES de
+  resolver nó ou liquidar. **Só com `OPEN_WORLD`**: desligada, o `{ hunt }` é ignorado e o ticket sai sem entrada.
+  `TicketService.issue` ganhou o 6º argumento (`entry`), e a rota só o passa quando há entrada: o pedido de hoje
+  chama `issue` com os mesmos quatro argumentos, e o claim sem entrada não tem a chave (teste em `tickets.test.ts`).
+  `parseClaim` recusa um `entry` torto — nunca o trata como "o mundo".
+- **A fábrica** (`game/sessions.ts`): `SessionFactory` ganhou `entry` como 4º argumento. Só `createWorldSessionFactory`
+  o lê (`huntEntryFor`: o `huntFor` da transição, com o bot do ticket compilado pelo `createBotConfigLoader` e a
+  boosted do personagem); `createCitySessionFactory` o ignora — com a flag desligada o primeiro contato é a Cidade.
+  A hunt que não existe lança `HuntEntryUnavailableError` (`game/rest-entry.ts`) e **não cai no mundo**. O ticket de
+  party vence a entrada.
+- **A fila** (`world-queue.ts`, Redis, banco 29 dos testes): `WorldQueue.clientLogin(world, personagem,
+  { vacancies, premium })` é a `WaitingList::clientLogin` do Canary num script Lua só — limpar os vencidos, entrar
+  no fim (ou reencontrar o lugar), decidir se a posição cabe nas vagas. A tabela de espera (5/10/20/60/120 s) e os
+  15 s de folga do prazo moram NO SCRIPT, uma cópia só; o teste de `world-queue.test.ts` a prende nos limites.
+  Premium vai na frente (a parte alta da nota). **O contador de ordem (`…:seq`) tem de viver mais que a fila**
+  (1 h contra 150 s): se expirasse antes, o próximo da fila ganharia uma ordem MENOR que a de quem espera e
+  furaria. E é renovado a CADA chamada que deixa a fila de pé (recusa, ou entrada que deixou gente esperando),
+  não só na chegada de um novo: quem espera volta e mantém a fila viva por horas sem ninguém chegar, e um
+  contador renovado só na chegada expiraria no meio dela.
+- **A porta** (`WorldEntryGate`, `game/rest-entry.ts`): `login(personagem, premium)` e `leave(personagem)`. O
+  `createSessionWiring` a monta (`worldEntry`) com o `WorldShard` (vagas) e a `WorldQueue` (ordem) — **só com a
+  flag E a fila injetada** (o `main` a injeta só com `OPEN_WORLD`). O `main` passa `sessions.worldEntry` ao `game`,
+  que a passa ao `SessionHost` (`worldEntry`).
+- **O hospedeiro** (`#createAndRegisterSession`): o login que cairia no mundo — sem party, sem `hostedParty`, sem
+  retomada de snapshot e sem `entry` — pergunta à porta ANTES da fábrica (`#createInWorld`); a recusa sobe como
+  `WorldFullRefusal` e `prepare` a converte em `{ created: false, refused: 'world-full', worldFull }`. A corrida
+  (a fila admitiu e a fábrica achou o mundo cheio) volta à fila, até `WORLD_ENTRY_ATTEMPTS` (3). O snapshot tem
+  precedência sobre a fila: é a sessão em que o personagem estava (ADR 0010). `entry` só vale para quem não tem
+  sessão — quem reconecta reencontra a sua, e trocar de sessão é transição (invariante 8). A hunt direta tira o
+  personagem da fila (`gate.leave`, depois do registro, sem poder falhar o handshake).
+- **O socket** (`game/server.ts`): `refused: 'world-full'` aceita o upgrade com `SocketData.worldFull`, e o `open`
+  manda `world-full` e fecha com 4001 — sem `attach`, sem visualizador. `huntAvailable` =
+  `acceptingNewSessions && host.offersHunts`. `hunt-unavailable` é `409` no upgrade, sem abrir o socket.
+
+Armadilhas, todas com teste que as mata:
+
+- **A recusa não deixa rastro.** O contador de versão durável nasce ANTES de a fábrica rodar (`#createAndRegister`)
+  e é desfeito quando ela falha; o personagem que a fábrica chegou a pôr no mundo é tirado dele. Um rastro aqui é
+  uma vaga do teto que nunca volta.
+- **O slot de personagem ativo da conta NÃO é devolvido na recusa.** O varredor de tickets o devolve no prazo.
+  Devolver na hora faria o segundo ticket do mesmo personagem (o duplo clique) falhar no `consume` como não
+  autorizado, e o cliente veria 401 em vez do `world-full`.
+- **A conta das vagas é do `WorldShard.vacanciesOf`**, nunca negativa: quem volta de uma instância pode passar do
+  teto, e uma vaga negativa admitiria o contrário do que a fila quer.
+- **Os testes de Redis da OW-21 usam os bancos 29 e 30**, que o Redis local de 16 bancos não tem (`DB index out of
+  range`): lá os arquivos caem no banco 0, que outros arquivos dividem. Por isso eles NÃO fazem `flushdb`: apagam só
+  as chaves da própria fila (`world:{id}:queue*`), e `world-queue.test.ts` usa um mundo de id único por teste. No CI
+  (32 bancos) cada arquivo tem o seu banco.
+
+Testes: `world-queue.test.ts` (a fila, Redis), `game/rest-entry.test.ts` (o hospedeiro com a fila de verdade: o
+terceiro com `capacity: 2` recebe a posição 1 e entra depois que alguém sai; a hunt direta; quem volta de uma
+hunt com o mundo cheio entra), `game/rest-entry-boot.test.ts` (o socket de verdade), `game/world-shard.test.ts`
+(`vacanciesOf` e a fábrica), `api/tickets.test.ts` e `tickets.test.ts` (o pedido e o claim).
 
 ## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
 

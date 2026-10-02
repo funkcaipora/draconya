@@ -31,6 +31,7 @@ import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
 import { PartyStore } from './party-store.js';
+import { WorldQueue } from './world-queue.js';
 import { readCachedBoostedMonsterId, WorldDailyStore } from './world-daily.js';
 import { createLoyaltyBonusResolver } from './loyalty.js';
 import type { Role } from './role.js';
@@ -116,7 +117,11 @@ async function main(): Promise<void> {
   // praças — ou dois mundos — que nunca se veem, e o defeito seria invisível até alguém tentar encontrar
   // um amigo.
   const nowMs = (): number => Date.now();
-  const sessions = createSessionWiring(content, nowMs, { openWorld: configuration.OPEN_WORLD });
+  const sessions = createSessionWiring(content, nowMs, {
+    openWorld: configuration.OPEN_WORLD,
+    // A fila do mundo cheio (OW-21): só com o mundo ligado — sem ele nenhuma consulta ao Redis é feita.
+    ...(configuration.OPEN_WORLD ? { worldQueue: new WorldQueue(redis) } : {}),
+  });
   // O catálogo do que existe (FUN-79, FUN-89), montado UMA vez: a versão de conteúdo é fixada
   // e não muda enquanto o processo vive.
   const catalogue = buildCatalogue(content);
@@ -140,6 +145,8 @@ async function main(): Promise<void> {
             restedSince: (characterId: string) => directory.restedSince(characterId),
           },
         }),
+        // A hunt idle direta do login (OW-21): o `api` confere que a hunt pedida existe, no conteúdo fixado no boot.
+        hasHunt: (huntId: string) => content.hunts.has(huntId),
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}
@@ -223,6 +230,8 @@ async function main(): Promise<void> {
       // O login cai na Cidade, ou no mundo com `OPEN_WORLD` (OW-18). O MESMO conjunto de shards
       // nos dois caminhos: quem entra no jogo e quem volta de uma hunt chegam no mesmo lugar.
       createSession: sessions.createSession,
+      // A fila do mundo cheio (OW-21): o login do repouso pergunta a ela antes de criar a sessão do mundo.
+      ...(sessions.worldEntry === undefined ? {} : { worldEntry: sessions.worldEntry }),
       // O recém-chegado numa hunt em curso (#402): o MESMO `characterFromTicket` do caminho solo.
       createParticipant: createLateJoiner(content, nowMs),
       snapshots,

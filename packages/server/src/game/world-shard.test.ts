@@ -2,16 +2,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
-import { localToAbsolute } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION_V1, localToAbsolute } from '@draconya/content';
 import type { Content } from '@draconya/content';
 import { CharacterRuntime, WorldRuleset, statsForLevel } from '@draconya/sim';
-import type { Session } from '@draconya/sim';
+import type { HuntRuleset, Session } from '@draconya/sim';
 import { testContent } from '../testing/content.js';
 import type { InitialCharacter } from '../tickets.js';
 import {
   CityShard, DEFAULT_WORLD_ID, WorldFullError, WorldShard, characterFromTicket, createCitySessionFactory,
   createSessionBuilder, createSessionWiring, createWorldSessionFactory,
 } from './sessions.js';
+import { HuntEntryUnavailableError } from './rest-entry.js';
 
 // O `WorldShard` (#839, OW-18) sobre o conteúdo REAL — a Thais importada do OTBM e o `main.json` —, pelo
 // mesmo `loadContent` do boot: o templo absoluto (32369, 32241, 7) é o tile local (94, 88, 7), e é nele que
@@ -192,6 +193,30 @@ describe('o teto vale só na entrada do repouso (ADR 0060 d.2b)', () => {
     expect(shard.admit(DEFAULT_WORLD_ID, fromTicket('b'), 'rest').participants.map((p) => p.id)).toEqual(['b']);
   });
 
+  it('`vacanciesOf` é o teto menos quem está no mundo — o número que a fila da OW-21 compara com a posição (#842)', () => {
+    const shard = new WorldShard(real(), undefined, { capacity: 3 });
+    // Mundo sem sessão: o teto inteiro. Mundo que o conteúdo não tem: nenhuma vaga.
+    expect(shard.vacanciesOf(DEFAULT_WORLD_ID)).toBe(3);
+    expect(shard.vacanciesOf('nao-existe')).toBe(0);
+
+    const session = shard.admit(DEFAULT_WORLD_ID, fromTicket('a'), 'rest');
+    shard.admit(DEFAULT_WORLD_ID, fromTicket('b'), 'rest');
+    expect(shard.vacanciesOf(DEFAULT_WORLD_ID)).toBe(1);
+
+    // Quem volta de uma instância passa do teto, e a conta não fica negativa: o mundo cheio tem ZERO vaga,
+    // não menos um — a fila compara posição com vaga, e uma vaga negativa admitiria o contrário.
+    shard.admit(DEFAULT_WORLD_ID, hero('c'), 'instance');
+    shard.admit(DEFAULT_WORLD_ID, hero('d'), 'instance');
+    expect(shard.populationOf(DEFAULT_WORLD_ID)).toBe(4);
+    expect(shard.vacanciesOf(DEFAULT_WORLD_ID)).toBe(0);
+
+    // E sai ao ritmo de quem sai: abaixo do teto a vaga reaparece.
+    session.leave('a', 'manual-exit');
+    session.leave('b', 'manual-exit');
+    session.leave('c', 'manual-exit');
+    expect(shard.vacanciesOf(DEFAULT_WORLD_ID)).toBe(2);
+  });
+
   it('um teto que não é inteiro positivo é recusado na construção', () => {
     for (const capacity of [0, -1, 1.5, Number.NaN]) {
       expect(() => new WorldShard(real(), undefined, { capacity })).toThrow(/capacity/);
@@ -319,5 +344,95 @@ describe('as fábricas soltas seguem como sempre, sem o shard do mundo', () => {
   it('createWorldSessionFactory leva o mundo pedido: um `world_id` que não existe é recusado', () => {
     const factory = createWorldSessionFactory(real(), () => 0, new WorldShard(real()), 'inexistente');
     expect(() => factory('a', { level: 1, xp: 0 })).toThrow(/unknown world/);
+  });
+});
+
+describe('a hunt idle como PRIMEIRA sessão do personagem (#842, OW-21, ADR 0060 d.6b)', () => {
+  const ENTRY = { hunt: 'rat-cellars' } as const;
+  const login = { level: 1, xp: 0, townId: 'thais' } as const;
+  const huntRuleset = (session: Session) => session.ruleset as HuntRuleset;
+
+  it('com `OPEN_WORLD` o `entry: { hunt }` cria a HUNT como primeira sessão — e o mundo nem nasce', () => {
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true });
+
+    const session = wiring.createSession('a', login, undefined, ENTRY);
+
+    // Criação, não transição (invariante 8): o personagem está em exatamente uma sessão, a hunt, sem ter
+    // passado por sessão nenhuma antes. Mutação que mata: criar o mundo e transicionar para a hunt.
+    expect(session.ruleset.type).toBe('hunt');
+    expect(huntRuleset(session).huntId).toBe('rat-cellars');
+    expect(session.participants.map((participant) => participant.id)).toEqual(['a']);
+    expect(wiring.worldShard?.worlds).toBe(0);
+    expect(wiring.cityShard.population).toBe(0);
+  });
+
+  it('o mundo CHEIO não alcança quem vai direto para a hunt: é o que mantém a base econômica acessível', () => {
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true, worldShard: { capacity: 1 } });
+    wiring.createSession('a', login);
+    expect(() => wiring.createSession('b', login)).toThrow(WorldFullError);
+
+    const hunt = wiring.createSession('b', login, undefined, ENTRY);
+
+    expect(hunt.ruleset.type).toBe('hunt');
+    expect(wiring.worldShard?.populationOf(DEFAULT_WORLD_ID)).toBe(1);
+  });
+
+  it('a âncora do mundo atravessa a hunt: o personagem volta ao tile onde saiu, não ao templo', () => {
+    const map = real().maps.get('thais');
+    if (map === undefined) throw new Error('sem thais');
+    const anchor = localToAbsolute(map, { x: 94, y: 97, z: 7 });
+    if (anchor === undefined) throw new Error('fora do recorte');
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true });
+
+    const session = wiring.createSession('a', { ...login, worldPosition: anchor }, undefined, ENTRY);
+
+    // `worldPosition` é o que o extrato leva de volta ao banco (OW-15) e o que a volta ao mundo usa (OW-20):
+    // a hunt não a toca, e quem entrou nela do login sai dela no mesmo lugar em que deslogou.
+    expect(session.participants[0]?.worldPosition).toEqual(anchor);
+  });
+
+  it('o bot do ticket entra COMPILADO na hunt, e um que o vocabulário recusa não derruba a entrada', () => {
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true });
+    const valid = { version: BOT_VOCABULARY_VERSION_V1, heal: [], potion: [], attack: [], rune: [], support: [] };
+
+    const withBot = wiring.createSession('a', { ...login, botConfig: valid }, undefined, ENTRY);
+    const withTornBot = wiring.createSession('b', { ...login, botConfig: { version: 999 } }, undefined, ENTRY);
+
+    // Mutação que mata: criar a hunt sem a configuração do ticket — as regras de saída e a barra de ações
+    // do personagem sairiam da mesma configuração, e a hunt direta rodaria sem elas.
+    expect(huntRuleset(withBot).getState().runners?.['a']?.botConfig).toBeDefined();
+    expect(huntRuleset(withTornBot).getState().runners?.['b']?.botConfig).toBeUndefined();
+    expect(withTornBot.ruleset.type).toBe('hunt');
+  });
+
+  it('uma hunt que não existe é recusada com `HuntEntryUnavailableError`, sem cair no mundo no lugar dela', () => {
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true });
+
+    expect(() => wiring.createSession('a', login, undefined, { hunt: 'nao-existe' }))
+      .toThrow(HuntEntryUnavailableError);
+    // Quem pediu a hunt idle e recebe o mundo cheio de gente sem ter pedido é pior que uma recusa que se explica.
+    expect(wiring.worldShard?.worlds).toBe(0);
+  });
+
+  it('o ticket de PARTY vence a entrada: a party é uma instância, e a hunt dela já é a primeira sessão', () => {
+    const wiring = createSessionWiring(real(), () => 0, { openWorld: true });
+    const session = wiring.createSession('a', login, {
+      sessionId: 's-party', leaderId: 'a', shareCosts: true, splitLoot: true,
+      huntId: 'rat-cellars', difficulty: 'cautious',
+      members: [
+        { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 1, xp: 0 } },
+        { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 1, xp: 0 } },
+      ],
+    }, { hunt: 'rat-cellars' });
+    expect(session.id).toBe('s-party');
+  });
+
+  it('com a flag DESLIGADA a fábrica da Cidade IGNORA a entrada: o repouso é a Cidade, e a hunt se escolhe no menu', () => {
+    // O portão do plano: sem `OPEN_WORLD` o jogo é o de hoje, byte a byte. Mutação que mata: honrar `entry`
+    // na fábrica da Cidade.
+    const wiring = createSessionWiring(real(), () => 0);
+    const session = wiring.createSession('a', { level: 1, xp: 0 }, undefined, ENTRY);
+    expect(session.ruleset.type).toBe('city');
+    expect(wiring.worldEntry).toBeUndefined();
   });
 });

@@ -783,3 +783,98 @@ describe('POST /api/tickets: o gasto do banco de offline training (#631, ADR 005
     expect(s.writes).toEqual([]);
   });
 });
+
+describe('a entrada pelo repouso no pedido de ticket (#842, OW-21, ADR 0060 d.6b)', () => {
+  const hasHunt = (huntId: string): boolean => huntId === 'rat-cellars';
+
+  /** O que a rota entregou a `TicketService.issue`, e a resposta HTTP. */
+  const requested = async (
+    body: Record<string, unknown>,
+    overrides: Partial<TicketRouteDependencies> = {},
+  ) => {
+    const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+    const response = await post(build({ tickets: { issue } as never, ...overrides }), body);
+    return { response, issue, entry: issue.mock.calls[0]?.[5] as unknown };
+  };
+
+  it('sem `entry` — o pedido de sempre — o ticket sai sem entrada: o mundo (ou a Cidade) é o default', async () => {
+    const { response, issue, entry } = await requested({ characterId: 'p1' }, { openWorld: true, hasHunt });
+    expect(response.statusCode).toBe(200);
+    expect(issue).toHaveBeenCalledTimes(1);
+    expect(entry).toBeUndefined();
+  });
+
+  it('`entry: "world"` é o mesmo que omitir', async () => {
+    const { response, entry } = await requested(
+      { characterId: 'p1', entry: 'world' }, { openWorld: true, hasHunt },
+    );
+    expect(response.statusCode).toBe(200);
+    expect(entry).toBeUndefined();
+  });
+
+  it('`entry: { hunt }` com a flag LIGADA leva a hunt no ticket, sem passar pelo mundo', async () => {
+    const { response, entry } = await requested(
+      { characterId: 'p1', entry: { hunt: 'rat-cellars' } }, { openWorld: true, hasHunt },
+    );
+    expect(response.statusCode).toBe(200);
+    expect(entry).toEqual({ hunt: 'rat-cellars' });
+  });
+
+  it('`entry: { hunt }` com a flag DESLIGADA é ignorado: o ticket sai sem entrada e o login cai na Cidade', async () => {
+    // O portão do plano: a flag desligada é o jogo de hoje. Mutação que mata: honrar `entry` sem olhar a
+    // flag. E é IGNORADO, e não recusado — um cliente do mundo aberto contra um servidor que desligou a flag
+    // entra do mesmo jeito, na Cidade, em vez de ficar sem login.
+    for (const openWorld of [undefined, false]) {
+      const { response, entry } = await requested(
+        { characterId: 'p1', entry: { hunt: 'rat-cellars' } },
+        { ...(openWorld === undefined ? {} : { openWorld }), hasHunt },
+      );
+      expect(response.statusCode).toBe(200);
+      expect(entry).toBeUndefined();
+    }
+  });
+
+  it('uma hunt que o conteúdo não tem é recusada com 400, ANTES de resolver nó ou liquidar nada', async () => {
+    const resolveNode = vi.fn(async () => ({ ok: true as const, node: NODE }));
+    const settleProgress = vi.fn(async () => ({ written: 0, failed: 0 }));
+    const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+    const response = await post(build({
+      openWorld: true, hasHunt, settleProgress, tickets: { issue, resolveNode } as never,
+    }), { characterId: 'p1', entry: { hunt: 'nao-existe' } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'unknown-hunt' });
+    expect(resolveNode).not.toHaveBeenCalled();
+    expect(settleProgress).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('um `api` montado sem conteúdo (sem `hasHunt`) recusa o pedido de hunt: nunca aceita às cegas', async () => {
+    const { response, issue } = await requested(
+      { characterId: 'p1', entry: { hunt: 'rat-cellars' } }, { openWorld: true },
+    );
+    expect(response.statusCode).toBe(400);
+    expect(issue).not.toHaveBeenCalled();
+  });
+
+  it('a posse vem antes: quem não é dono do personagem recebe 404, e a hunt nem é conferida', async () => {
+    const probe = vi.fn((_huntId: string) => true);
+    const response = await post(
+      build({ openWorld: true, hasHunt: probe, ownsCharacter: async () => false }),
+      { characterId: 'de-outra-conta', entry: { hunt: 'rat-cellars' } },
+    );
+    expect(response.statusCode).toBe(404);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('um `entry` torto é pedido inválido: formato desconhecido, campo a mais ou hunt vazia', async () => {
+    for (const entry of ['hunt', 7, null, {}, { hunt: '' }, { hunt: 'rat-cellars', extra: 1 }, { world: 'main' }]) {
+      const { response, issue } = await requested(
+        { characterId: 'p1', entry }, { openWorld: true, hasHunt },
+      );
+      expect(response.statusCode, JSON.stringify(entry)).toBe(400);
+      expect(response.json()).toEqual({ error: 'invalid-body' });
+      expect(issue).not.toHaveBeenCalled();
+    }
+  });
+});

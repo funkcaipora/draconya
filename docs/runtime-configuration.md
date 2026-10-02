@@ -55,8 +55,9 @@ a repassa como `OPEN_WORLD` (default `0`).
 **Tem de ser a MESMA no `api` e no `game`.** Um `game` ligado com o `api` desligado recebe tickets sem o
 mundo, e por isso o extrato só leva o mundo de quem o ticket trouxe (a `townId` é a marca) — ligar
 metade do par não apaga a posição de ninguém, mas também não persiste nada. Ligar em produção é
-operação à parte: a volta da hunt ao mundo (OW-20) e a entrada pelo repouso com a fila de mundo cheio
-(OW-21) ainda não existem, e o `bench:world` (OW-35) é o portão da flag em produção.
+operação à parte: a volta da hunt ao mundo (OW-20) ainda não existe, e o `bench:world` (OW-35) é o portão da
+flag em produção. A entrada pelo repouso (OW-21) existe: o mundo cheio vira fila com posição, e o ticket pode
+pedir uma hunt idle direta — sem a flag, o pedido de hunt direta é ignorado e o login cai na Cidade.
 
 Desligar depois de ligada é seguro: nenhuma coluna é apagada, e quem voltar a ligar encontra o último
 estado salvo — a vida e a posição de antes, não as de agora.
@@ -96,7 +97,8 @@ operação:
 
 O teto de gente (`capacity`) vem de `data/worlds/<id>.json` (`main.json`: 200) e vale **só na entrada vinda do
 repouso**: quem volta de uma instância é sempre admitido (ADR 0060 d.2b). O mundo cheio recusa o login com
-`WorldFullError`; a fila com posição (`world-full`) e a hunt idle direta são da OW-21.
+`WorldFullError`, que o hospedeiro converte em fila com posição (`world-full`, em Redis: `world:{id}:queue`) e a
+hunt idle direta, que não passa pelo mundo (OW-21, #842).
 
 ### O checkpoint do mundo: `WORLD_CHECKPOINT_MS` (#837, OW-16)
 

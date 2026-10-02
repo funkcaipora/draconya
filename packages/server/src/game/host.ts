@@ -49,8 +49,10 @@ import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptReason, ReceiptStore } from '../receipts.js';
 import type { BoxedItem } from '../loot-box.js';
 import type { Logger } from '../log.js';
-import type { InitialCharacter, PartyTicket } from '../tickets.js';
+import type { InitialCharacter, PartyTicket, TicketEntry } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
+import { HuntEntryUnavailableError, WorldFullError, WorldFullRefusal } from './rest-entry.js';
+import type { WorldEntryGate } from './rest-entry.js';
 import { EncodeCache, Viewer, type EncodeStats, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { ViewerSet } from './viewer-set.js';
 import { findPersonText } from './find-text.js';
@@ -67,9 +69,12 @@ import type { PendingLine } from './world-checkpoint.js';
 import { endReasonOf, worldPresenceOf } from './world-presence.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
-/** Cria a sessão de um personagem que ainda não tem uma. */
+/**
+ * Cria a sessão de um personagem que ainda não tem uma. `entry` (OW-21) diz onde a PRIMEIRA sessão nasce:
+ * ausente é o repouso do nó — o mundo, ou a Cidade sem a flag —, e `{ hunt }` é uma hunt idle direta.
+ */
 export type SessionFactory = (
-  characterId: string, initialCharacter?: InitialCharacter, party?: PartyTicket,
+  characterId: string, initialCharacter?: InitialCharacter, party?: PartyTicket, entry?: TicketEntry,
 ) => Session;
 
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
@@ -293,6 +298,13 @@ export interface SessionHostOptions {
    * default — é o extrato de antes, byte a byte: o `game` nunca escreve as colunas novas.
    */
   readonly openWorld?: boolean;
+  /**
+   * A porta do mundo para quem vem do repouso (#842, OW-21, ADR 0060 d.2b): a fila do mundo cheio. Com ela, o
+   * login que cairia no mundo pergunta primeiro se cabe — e, não cabendo, o handshake é recusado com a posição
+   * e a espera (`PrepareResult.worldFull`). Ausente — a flag desligada, o host de teste —, o mundo cheio recusa
+   * com `WorldFullError` como a OW-18 o deixou, e a Cidade nunca consulta nada.
+   */
+  readonly worldEntry?: WorldEntryGate;
   /**
    * A cadência do checkpoint do mundo, em milissegundos (#837, OW-16, ADR 0060 d.10d): de quanto em
    * quanto tempo o hospedeiro grava o lote com o extrato de todo personagem sujo de uma sessão
@@ -1314,7 +1326,14 @@ export interface PrepareResult {
    * `logout` passou — no instante em que o ticket chegou: a saída vence, o ticket é recusado com um
    * 503 e a reconexão do cliente pede outro, que já encontra o personagem em repouso.
    */
-  readonly refused?: 'party-full' | 'content-version' | 'session-not-here' | 'leaving';
+  readonly refused?:
+    | 'party-full' | 'content-version' | 'session-not-here' | 'leaving' | 'world-full' | 'hunt-unavailable';
+  /**
+   * Só com `refused: 'world-full'` (OW-21): o lugar do personagem na fila do mundo (de 1 em diante) e quanto
+   * esperar antes de tentar de novo — uma duração, medida agora. O `game` os leva ao cliente na mensagem
+   * `world-full`, em vez de um handshake que falha mudo.
+   */
+  readonly worldFull?: { readonly position: number; readonly retryAfterMs: number };
 }
 
 /**
@@ -1322,6 +1341,11 @@ export interface PrepareResult {
  * presença de visualizador é do próprio ruleset (ADR 0003) e é lida a cada ciclo.
  */
 const CYCLE_MS = 100;
+/**
+ * Quantas vezes o login do repouso tenta o mundo antes de desistir (OW-21): a primeira, e mais duas se a
+ * fila admitiu e a vaga já tinha dono (`#createInWorld`).
+ */
+const WORLD_ENTRY_ATTEMPTS = 3;
 /** Um terço do lease do diretório, pela mesma razão do batimento. */
 const RENEW_INTERVAL_MS = 10_000;
 /**
@@ -1586,10 +1610,24 @@ export class SessionHost {
     initialCharacter?: InitialCharacter,
     accountId?: string,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<PrepareResult> {
     const startedAt = performance.now();
     try {
-      return await this.#prepare(characterId, initialCharacter, accountId, party);
+      return await this.#prepare(characterId, initialCharacter, accountId, party, entry);
+    } catch (error) {
+      // As duas recusas ESPERADAS da entrada pelo repouso (OW-21): o mundo cheio — que acontece todo dia, e a
+      // resposta é a posição na fila — e a hunt direta que não existe mais. Nenhuma deixa rastro: a recusa
+      // sobe de dentro de `#createAndRegister`, que já desfez o contador de versão e tirou o personagem da
+      // sessão compartilhada.
+      if (error instanceof WorldFullRefusal) {
+        return {
+          created: false, refused: 'world-full',
+          worldFull: { position: error.position, retryAfterMs: error.retryAfterMs },
+        };
+      }
+      if (error instanceof HuntEntryUnavailableError) return { created: false, refused: 'hunt-unavailable' };
+      throw error;
     } finally {
       // O que o jogador espera ao reconectar: resolver o diretório, carregar o snapshot e
       // hospedar. É o número que o teste de carga cobra, e ele NÃO inclui o tempo de rede —
@@ -1603,6 +1641,7 @@ export class SessionHost {
     initialCharacter?: InitialCharacter,
     accountId?: string,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<PrepareResult> {
     // Quem está SAINDO do mundo não é reanexado nem recriado por um ticket que chegou no meio (#840,
     // OW-19): o x-log vence 60 s depois de o navegador fechar, justo quando o cliente reconecta sozinho.
@@ -1614,6 +1653,9 @@ export class SessionHost {
       if (await this.#awaitDeparture(characterId)) return { created: false, refused: 'leaving' };
     }
 
+    // `entry` só vale para quem NÃO tem sessão aqui (OW-21): quem reconecta reencontra a sua — o mundo, a hunt
+    // em que estava —, e o pedido de outra coisa é ignorado, porque o personagem está em exatamente uma sessão
+    // (invariante 8) e trocar de sessão é transição, com `canLogout`, não handshake.
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
       // O ticket é de PARTY e pede uma sessão diferente da que o personagem já ocupa aqui
@@ -1658,7 +1700,7 @@ export class SessionHost {
       return { created: false };
     }
 
-    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId, party);
+    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId, party, entry);
     this.#preparations.set(characterId, preparation);
     try {
       await preparation;
@@ -6714,6 +6756,7 @@ export class SessionHost {
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<void> {
     const born: string[] = [];
     if (this.#adoptDurableVersion(characterId, initialCharacter)) born.push(characterId);
@@ -6724,7 +6767,7 @@ export class SessionHost {
       if (this.#adoptDurableVersion(member.characterId, member.initialCharacter)) born.push(member.characterId);
     }
     try {
-      await this.#createAndRegisterSession(characterId, initialCharacter, accountId, party);
+      await this.#createAndRegisterSession(characterId, initialCharacter, accountId, party, entry);
     } catch (error) {
       for (const id of born) this.#durableVersionByCharacter.delete(id);
       throw error;
@@ -6736,6 +6779,7 @@ export class SessionHost {
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
     party?: PartyTicket,
+    entry?: TicketEntry,
   ): Promise<void> {
     // A party (#195): a sessão pode JÁ estar hospedada — outro membro chegou primeiro — e aí
     // este só entra nela. Senão, o primeiro ticket cria a hunt com todos.
@@ -6751,9 +6795,17 @@ export class SessionHost {
     const resumed = (party === undefined && hostedParty === undefined)
       ? await this.#resume(characterId, accountId)
       : null;
+    // O login do repouso que cairia no MUNDO (OW-21): nem party, nem retomada de snapshot — o snapshot é a sessão
+    // em que o personagem estava, e tem precedência —, nem hunt direta. É o único que o teto alcança, e a fila é
+    // consultada ANTES da fábrica: quem chega com gente esperando entra no fim dela, mesmo que haja vaga.
+    const gate = this.#options.worldEntry;
+    const toWorld = gate !== undefined
+      && party === undefined && hostedParty === undefined && resumed === null && entry === undefined;
     const session = hostedParty?.session
       ?? resumed?.session
-      ?? this.#options.createSession(characterId, initialCharacter, party);
+      ?? (toWorld
+        ? await this.#createInWorld(gate, characterId, initialCharacter)
+        : this.#options.createSession(characterId, initialCharacter, party, entry));
     try {
       await this.#register(characterId, session, accountId);
     } catch (error) {
@@ -6766,6 +6818,14 @@ export class SessionHost {
         session.leave(characterId, 'manual-exit');
       }
       throw error;
+    }
+    // Quem entrou numa hunt direta largou a fila do mundo (OW-21): a vaga que ele guardava não é mais dele, e
+    // sem isto ela ficaria ocupada até o prazo, com gente atrás esperando uma vaga que ninguém vai usar. Depois
+    // do registro, e sem poder falhar o handshake: o prazo da fila é a rede de segurança.
+    if (gate !== undefined && entry !== undefined && party === undefined) {
+      await gate.leave(characterId).catch((error: unknown) => {
+        this.#logger.warn({ err: error, characterId }, 'Could not take the character off the world queue');
+      });
     }
     // Uma sessão retomada com MAIS de um dono (#194, ADR 0027) traz os outros membros da party
     // dentro: eles precisam do lease e do mapa deste nó antes de qualquer coisa local existir,
@@ -6829,6 +6889,40 @@ export class SessionHost {
         'Session resumed from snapshot',
       );
     }
+  }
+
+  /**
+   * O login do repouso no mundo, com a fila na frente (OW-21, ADR 0060 d.2b): pergunta à porta se cabe e, só
+   * então, cria a sessão. A fábrica ainda pode recusar — `WorldFullError` — numa corrida: dois logins veem a
+   * mesma vaga, a fila admite os dois e o segundo a encontra ocupada. Aí o personagem volta para a fila, que
+   * agora o recusa na posição de verdade; e, se uma vaga abriu nesse meio tempo, tenta de novo. Poucas vezes,
+   * porque a corrida é entre dois logins simultâneos e cada volta perde uma vaga para outro.
+   *
+   * `WorldFullRefusal` é o que sai quando não cabe: `prepare` a converte em `refused: 'world-full'`.
+   */
+  async #createInWorld(
+    gate: WorldEntryGate, characterId: string, initialCharacter: InitialCharacter | undefined,
+  ): Promise<Session> {
+    const premium = initialCharacter?.premium ?? false;
+    for (let attempt = 1; ; attempt += 1) {
+      const verdict = await gate.login(characterId, premium);
+      if (!verdict.admitted) throw new WorldFullRefusal(verdict.position, verdict.retryAfterMs);
+      try {
+        return this.#options.createSession(characterId, initialCharacter);
+      } catch (error) {
+        if (!(error instanceof WorldFullError) || attempt >= WORLD_ENTRY_ATTEMPTS) throw error;
+      }
+    }
+  }
+
+  /**
+   * A hunt idle está ao alcance de quem não coube no mundo? (`huntAvailable` do `world-full`, ADR 0060 d.6b.)
+   * Sim enquanto o catálogo tiver hunt: a hunt idle não é o mundo, não tem teto e não passa pela fila. Um nó
+   * montado sem catálogo (o host de teste) não tem o que dizer, e diz que sim.
+   */
+  get offersHunts(): boolean {
+    const catalogue = this.#options.catalogue;
+    return catalogue === undefined || catalogue().hunts.length > 0;
   }
 
   /**
