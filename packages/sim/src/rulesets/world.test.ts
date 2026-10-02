@@ -23,6 +23,7 @@ import {
 import type { Content, Progression, RawContent, Tilemap, World } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import type { InventoryState } from '../inventory.js';
 import type { DomainEvent } from '../session.js';
 import { MAX_PENDING_DOMAIN_EVENTS, progressOf } from '../session.js';
 import { statsForLevel } from '../progression.js';
@@ -99,14 +100,18 @@ const member = (
   id: string,
   over: Partial<{
     health: number; mana: number; alive: boolean; worldPosition: { x: number; y: number; z: number };
+    fedMs: number; level: number; xp: number; vocationId: string; inventory: InventoryState;
   }> = {},
 ) => new CharacterRuntime({
   id, position: { x: 0, y: 0, z: 7 },
   health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
-  mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+  mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana, level: over.level ?? 1, xp: over.xp ?? 0,
+  vocationId: over.vocationId ?? null,
   staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
   gold: 0, goldDelta: 0, alive: over.alive ?? true, cooldowns: {}, capacity: 1_000,
   ...(over.worldPosition === undefined ? {} : { worldPosition: over.worldPosition }),
+  ...(over.fedMs === undefined ? {} : { fedMs: over.fedMs }),
+  ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
 });
 
 const newWorld = (id = 'world-1', seed = 'seed') => createWorldSession({
@@ -634,5 +639,295 @@ describe('worldTopology (OW-13): cada pergunta da costura, ao contrário da inst
     expect(instanceTopology.namesOwnerInEvents(session)).toBe(false);
     session.enter(member('b'));
     expect(topology.namesOwnerInEvents(session)).toBe(true);
+  });
+});
+
+describe('o mesmo id volta ao mundo que não acaba (OW-13, revisão)', () => {
+  // A regeneração da vida é de 3 por segundo, com o primeiro pulso 1 s DEPOIS da entrada: quem tem
+  // uma cadeia só ganha 3 × pulsos, e uma cadeia a mais aparece como um múltiplo exato.
+  const relog = (quick: number) => {
+    const session = newWorld();
+    session.enter(member('a', { health: 10 }));
+    session.advanceBy(400);
+    for (let i = 0; i < quick; i++) {
+      session.leave('a');
+      session.advanceBy(10);
+      session.enter(member('a', { health: 10 }));
+    }
+    return session;
+  };
+
+  it('um relogue rápido NÃO ressuscita a cadeia de regeneração que ficou na fila', () => {
+    // O passo, a vida e a mana de quem saiu ainda estavam agendados: sem `cancelEvents` na entrada,
+    // o `CharacterRuntime` novo era achado POR ID por eles, que aplicavam um pulso e se reagendavam.
+    const session = newWorld();
+    session.enter(member('a', { health: 10 }));
+    session.advanceBy(400);
+    session.leave('a');
+    session.advanceBy(100);
+    const back = member('a', { health: 10 });
+    session.enter(back);
+    session.advanceBy(10_000);
+
+    // O controle nunca saiu: entrou no mesmo instante lógico (t = 500) e viveu os mesmos 10 s.
+    const control = newWorld();
+    control.advanceBy(500);
+    const never = member('a', { health: 10 });
+    control.enter(never);
+    control.advanceBy(10_000);
+
+    expect(never.health).toBe(10 + 3 * 10);
+    expect(back.health).toBe(never.health);
+    expect(back.mana).toBe(never.mana);
+  });
+
+  it('a fila de quem volta é a de quem entra: o mesmo número de eventos', () => {
+    const control = newWorld();
+    control.enter(member('a'));
+    // Sair e voltar NO MESMO instante lógico deixava 6 eventos contra 3: passo, vida e mana em dobro.
+    const session = newWorld();
+    session.enter(member('a'));
+    session.leave('a');
+    session.enter(member('a'));
+    expect(session.pendingEvents).toBe(control.pendingEvents);
+  });
+
+  it('dez relogues rápidos não empilham dez cadeias: a regeneração é a de um personagem só', () => {
+    const session = relog(10);
+    const back = session.participants.find((p) => p.id === 'a');
+    // O que está na fila é o de UM personagem: passo, vida e mana — não trinta e tantos.
+    const alone = newWorld();
+    alone.enter(member('a', { health: 10 }));
+    expect(session.pendingEvents).toBe(alone.pendingEvents);
+    session.advanceBy(10_000);
+    // Pulsos em 1,01 s, 2,01 s … depois da última entrada: dez em 10 s, a 3 cada.
+    expect(back?.health).toBe(10 + 3 * 10);
+  });
+
+  it('outro personagem presente não perde a fila quando o id de quem saiu volta', () => {
+    const session = newWorld();
+    session.enter(member('a', { health: 10 }));
+    const other = member('b', { health: 10 });
+    session.enter(other);
+    session.advanceBy(400);
+    session.leave('a');
+    session.enter(member('a', { health: 10 }));
+    session.advanceBy(10_000);
+    // O `cancelEvents` é do subject `a`: a regeneração de `b` seguiu intacta, de 1 s em 1 s.
+    expect(other.health).toBe(10 + 3 * 10);
+  });
+});
+
+describe('o mundo vazio não cobra a comida de quem chega depois (OW-13, revisão)', () => {
+  const FED = 1_200_000; // o teto da comida: 20 minutos
+
+  /** A comida do primeiro a entrar num mundo que andou `emptyMs` sem ninguém, depois de `awakeMs`. */
+  const fedAfter = (emptyMs: number, awakeMs: number): number => {
+    const session = newWorld();
+    if (emptyMs > 0) {
+      session.enter(member('x'));
+      session.advanceBy(1_000);
+      session.leave('x');
+      session.advanceBy(emptyMs);
+    }
+    const fed = member('a', { fedMs: FED });
+    session.enter(fed);
+    session.advanceBy(awakeMs);
+    return fed.fedMs;
+  };
+
+  it('uma hora de mundo vazio não zera a refeição do primeiro a entrar', () => {
+    // A âncora do tempo cobrado ficava no último evento de quem saiu, e o primeiro evento do
+    // entrante cobrava a hora inteira em que ele nem estava no jogo.
+    const control = fedAfter(0, 5_000);
+    expect(control).toBeGreaterThan(0);
+    expect(fedAfter(3_600_000, 5_000)).toBe(control);
+  });
+
+  it('a comida continua drenando enquanto se está no mundo (só o intervalo vazio não conta)', () => {
+    // 20 s de jogo gastam 20 s de comida, com ou sem uma hora vazia antes.
+    expect(fedAfter(3_600_000, 20_000)).toBe(FED - 20_000);
+    expect(fedAfter(0, 20_000)).toBe(FED - 20_000);
+  });
+
+  it('quem já estava paga o intervalo até a chegada do outro, e quem chega não paga o que não viveu', () => {
+    const session = newWorld();
+    const first = member('a', { fedMs: FED });
+    session.enter(first);
+    session.advanceBy(7_000);
+    const second = member('b', { fedMs: FED });
+    session.enter(second);
+    session.advanceBy(3_000);
+    // `a` viveu 10 s; `b`, 3 s.
+    expect(first.fedMs).toBe(FED - 10_000);
+    expect(second.fedMs).toBe(FED - 3_000);
+  });
+});
+
+describe('o extrato de cada um leva só o que aconteceu com ele (OW-13, revisão)', () => {
+  // Nível 30 com a XP do nível: a morte tira XP e nível, e os dois entram na lista de eventos.
+  const veteran = (id: string) => member(id, { level: 30, xp: 18_000, vocationId: 'knight' });
+  const withKnight = buildContent(raw({
+    vocations: [{
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      spellSkill: 'melee',
+    }] as unknown as NonNullable<RawContent['vocations']>,
+  }));
+  const crowdedWorld = () => {
+    const session = createWorldSession({
+      id: 'world-1', map: withKnight.maps.get('vila') as Tilemap, world: withKnight.worlds.get('main') as World,
+      content: withKnight, seed: 'seed', createdAtMs: 0,
+    });
+    const [a, b] = [veteran('a'), veteran('b')];
+    session.enter(a);
+    session.enter(b);
+    session.advanceBy(1_000);
+    return { session, a, b };
+  };
+
+  it('a morte e a perda de XP e de nível de um NÃO aparecem no extrato do outro', () => {
+    const { session, a } = crowdedWorld();
+    session.kill(a);
+    // A lista da sessão é uma só, e a perda de A está nela — com o dono.
+    const lost = session.notableEvents.filter((event) => event.type === 'xp-penalty' || event.type === 'level-down');
+    expect(lost.map((event) => event.type)).toEqual(['xp-penalty', 'level-down']);
+    expect(lost.every((event) => event.characterId === 'a')).toBe(true);
+
+    const checkpoint = session.checkpoint('b', 'manual-exit');
+    // B vê a própria entrada e nada mais: nem a morte, nem a XP, nem o nível de A.
+    expect(checkpoint?.notableEvents).toEqual([
+      expect.objectContaining({ type: 'entered-world', detail: 'b', characterId: 'b' }),
+    ]);
+    // E o extrato de A, o que sai com ele, leva o que foi dele.
+    const left = session.drainEvents().find((event) => event.kind === 'member-left');
+    if (left?.kind !== 'member-left') throw new Error('sem member-left');
+    expect(left.departure.receipt.notableEvents.map((event) => event.type))
+      .toEqual(['entered-world', 'death', 'xp-penalty', 'level-down']);
+  });
+
+  it('o analisador de cada um (`notableEventsFor`) lê o mesmo filtro, a partir da posição pedida', () => {
+    const { session, a } = crowdedWorld();
+    session.kill(a);
+    expect(session.notableEventsFor('b').map((event) => event.type)).toEqual(['entered-world']);
+    // `from` é a posição na lista da sessão, a mesma do "já mandei até aqui" do hospedeiro.
+    expect(session.notableEventsFor('b', session.notableEvents.length)).toEqual([]);
+    // Quem não é dono de nada vê só o que não tem dono: o evento da sessão.
+    session.record('advance-truncated', '1');
+    expect(session.notableEventsFor('ninguem').map((event) => event.type)).toEqual(['advance-truncated']);
+  });
+
+  it('o evento SEM dono (da sessão) é de todos, e a instância nunca grava dono', () => {
+    const { session } = crowdedWorld();
+    session.record('advance-truncated', '1');
+    const receipt = session.checkpoint('a', 'manual-exit');
+    expect(receipt?.notableEvents.map((event) => event.type)).toEqual(['entered-world', 'advance-truncated']);
+
+    const hunt = createHuntSession({
+      id: 'hunt', content: buildContent(raw({
+        hunts: [{ id: 'sala', name: 'Sala', recommendedLevel: 1, mapId: 'sala', routeId: 'sala-loop' }],
+        maps: [vila, { id: 'sala', z: 7, grid: ['####', '#..#', '#..#', '####'] }],
+        routes: [{
+          id: 'sala-loop', mapId: 'sala',
+          tiles: [{ x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 }],
+          spawnPoints: [],
+        }],
+      })),
+      huntId: 'sala', difficulty: 'bold', createdAtMs: 0,
+    });
+    const hero = member('hero');
+    hunt.enter(hero);
+    hunt.kill(hero);
+    // A lista da instância é a de sempre: `{ atMs, type, detail }`, sem a chave `characterId`.
+    expect(hunt.ruleset.scopesEventsToOwner).toBe(false);
+    expect(hunt.notableEvents.length).toBeGreaterThan(0);
+    expect(hunt.notableEvents.every((event) => !('characterId' in event))).toBe(true);
+  });
+});
+
+describe('o id de item novo é único no mundo (OW-13, revisão)', () => {
+  // A morte entrega uma bolsa de reposição (`#newInstanceId`), o mesmo ponto que cunha o id do loot
+  // de cadáver e do baú de quest. Com `lootSeq` 0 em todo ticket, o id sem dono é `world-1:0` para
+  // todos — e o `item_instance` (chave primária, `ON CONFLICT DO NOTHING`) guardaria só o primeiro.
+  const lossItems = [
+    { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', initialSlots: 20, weight: 18, value: 5 },
+    { id: 'bag', name: 'Bag', kind: 'container', slot: 'back', initialSlots: 8, weight: 8, value: 1 },
+    { id: 'gem', name: 'Gem', kind: 'other', weight: 1, value: 10, stackable: true },
+  ];
+  const lossContent = buildContent(raw({
+    items: lossItems as unknown as NonNullable<RawContent['items']>,
+    vocations: [{
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      spellSkill: 'melee',
+    }] as unknown as NonNullable<RawContent['vocations']>,
+    progression: [{
+      ...progression,
+      deathPenalty: {
+        ...progression.deathPenalty,
+        itemLoss: {
+          enabled: true, lossPercentByBlessings: [100, 70, 45, 25, 10, 0, 0, 0],
+          nonContainerDivisor: 1, replacementContainerId: 'bag',
+        },
+      },
+    }] as unknown as NonNullable<RawContent['progression']>,
+  }));
+  const lossWorld = () => createWorldSession({
+    id: 'world-1', map: lossContent.maps.get('vila') as Tilemap,
+    world: lossContent.worlds.get('main') as World, content: lossContent, seed: 'seed', createdAtMs: 0,
+  });
+  const equipped = (id: string) => member(id, {
+    vocationId: 'knight',
+    inventory: {
+      backpack: [{ instanceId: `i:${id}:gems`, itemId: 'gem', quantity: 12 }],
+      equipped: { back: { instanceId: `i:${id}:backpack`, itemId: 'backpack', quantity: 1 } },
+    },
+  });
+  const replacementOf = (hero: CharacterRuntime): string | undefined =>
+    hero.inventory.equippedAt('back')?.instanceId;
+
+  it('dois personagens que cunham o primeiro id da sessão NÃO cunham o mesmo', () => {
+    const session = lossWorld();
+    const [a, b] = [equipped('a'), equipped('b')];
+    session.enter(a);
+    session.enter(b);
+    session.kill(a);
+    session.kill(b);
+    expect(a.inventory.equippedAt('back')).toMatchObject({ itemId: 'bag', origin: 'death-replacement' });
+    // O dono vai no meio, como numa party: `world-1:0` seria o mesmo id nos dois.
+    expect(replacementOf(a)).toBe('world-1:a:0');
+    expect(replacementOf(b)).toBe('world-1:b:0');
+  });
+
+  it('o MESMO personagem, num novo login na mesma sessão, continua o `lootSeq` de onde parou', () => {
+    const session = lossWorld();
+    const first = equipped('a');
+    session.enter(first);
+    session.kill(first);
+    expect(replacementOf(first)).toBe('world-1:a:0');
+    // O ticket novo traz `lootSeq` 0 (o servidor nunca o restaura): sem a continuidade, a segunda
+    // bolsa seria `world-1:a:0` outra vez.
+    const second = equipped('a');
+    expect(second.lootSeq).toBe(0);
+    session.enter(second);
+    expect(second.lootSeq).toBe(1);
+    session.kill(second);
+    expect(replacementOf(second)).toBe('world-1:a:1');
+  });
+
+  it('a continuidade nunca recua o `lootSeq` de quem já traz um maior', () => {
+    const session = lossWorld();
+    const first = equipped('a');
+    session.enter(first);
+    session.kill(first);
+    const second = equipped('a');
+    second.lootSeq = 40;
+    session.enter(second);
+    expect(second.lootSeq).toBe(40);
+  });
+
+  it('a instância solo continua com o id de sempre: a chave da topologia é o que a separa do mundo', () => {
+    // O formato da hunt solo é contrato (os ids que já estão no banco): a cobertura completa é a
+    // suíte da hunt (`session-1:0`); aqui, que a chave da topologia é a que a separa do mundo.
+    expect(instanceTopology.namesOwnerInItemIds).toBe(false);
+    expect(worldTopology({ map, temple: TEMPLE }).namesOwnerInItemIds).toBe(true);
   });
 });

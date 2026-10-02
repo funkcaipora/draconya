@@ -491,6 +491,24 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   é pedida**: `createWorldSession` é o lugar, e o #827 ainda não pousou. Os tetos da sessão
   (`WORLD_SESSION_LIMITS`) são ponto de partida; o `bench:world` (OW-35) os fixa. O `id` da sessão é
   o da ENCARNAÇÃO: o ledger é `UNIQUE (session_id, seq)` e o `seq` recomeça em zero.
+  **O mundo é a primeira sessão em que o mesmo id VOLTA e em que estranhos dividem uma lista**, e
+  isso trouxe mais quatro armadilhas (revisão da OW-13). (9) **`onEnter` faz
+  `cancelEvents(character.id)` antes de agendar**: `onLeave` deixa a fila de quem saiu morrer
+  sozinha ("não encontram o personagem"), e isso só é verdade até o mesmo id voltar — o passo, a
+  regeneração e o bot achariam o `CharacterRuntime` novo e empilhariam uma cadeia por relogue. Um
+  no-op na instância (o id de quem entra nunca esteve na fila). Subject por personagem NOVO que o
+  `onEnter` não cancele é a mesma regressão. (10) **A âncora do tempo cobrado só anda com evento**:
+  o mundo vazio não tem evento, e `onEnter` do mundo cobra os que já estavam e leva
+  `#staminaAnchorMs` para agora — senão o primeiro a entrar paga a comida do intervalo vazio. (11)
+  **O id de item novo nasce em `#newInstanceId` e só lá**: o critério é `partyOptions` OU
+  `topology.namesOwnerInItemIds`, e o `lootSeq` de quem saiu fica guardado por id
+  (`#lootSeqOfDeparted`) para o mesmo personagem não cunhar `world-1:a:0` duas vezes. Um quarto
+  ponto que cunhe `${session.id}:…` por conta própria reabre a colisão em `item_instance`. (12)
+  **Evento notável de personagem passa o DONO** — `session.record(tipo, detalhe, character.id)` —,
+  e `Session.record` só o grava onde `Ruleset.scopesEventsToOwner` é `true` (o mundo): a lista da
+  instância continua `{ atMs, type, detail }` byte a byte, que é o que a party e a hunt solo leem.
+  Quem lê por personagem usa `Receipt`, `Session.notableEventsFor` ou `isNotableEventVisibleTo`, nunca
+  `notableEvents` crua; evento novo de personagem sem o dono vaza o extrato de um estranho no outro.
 - **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
   acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile
