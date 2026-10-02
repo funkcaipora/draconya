@@ -1099,7 +1099,10 @@ novo sozinho**:
 - Cada tentativa traz a posição de agora e **substitui** a fila; o `session-state` — a sessão começou — a zera, e o
   `Shell` volta.
 - **"Caçar agora"** (só com `huntAvailable` e com hunts a oferecer) refaz a conexão com `entry: { hunt }`: a hunt
-  idle não tem fila nem teto. **"Sair da fila"** volta à escolha de personagem; o lugar dele expira sozinho, no
+  idle não tem fila nem teto. O `entry` vai no ticket **só até o primeiro `session-state`** da conexão: depois dele
+  a volta de uma queda pede o mundo — o servidor honra o `entry` de quem não tem sessão, e quem a teve e a perdeu
+  (a hunt acabou; a Cidade foi recolhida depois de 5 min sem visualizador) também não tem uma, então repeti-lo
+  recriaria uma caçada que o jogador não pediu. **"Sair da fila"** volta à escolha de personagem; o lugar dele expira sozinho, no
   prazo da fila.
 
 ### Parâmetros
