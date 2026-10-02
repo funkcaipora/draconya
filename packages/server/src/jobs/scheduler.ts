@@ -75,6 +75,9 @@ export function createJobsCycle(
   const { metrics } = dependencies;
   const now = dependencies.now ?? Date.now;
   let running = false;
+  // Quantas varreduras seguidas cada extrato falhou (#823): o que deixa o ledger desistir de
+  // esperar por um extrato que não liquida. Vive entre os ciclos, e o ledger o poda.
+  const receiptFailures = new Map<string, number>();
 
   async function run(): Promise<void> {
     if (running) {
@@ -127,6 +130,7 @@ export function createJobsCycle(
           database: dependencies.database,
           receipts: dependencies.receipts,
           logger,
+          failures: receiptFailures,
           ...(dependencies.progression === undefined
             ? {}
             : { progression: dependencies.progression }),

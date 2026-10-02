@@ -41,6 +41,8 @@ export interface PartyRouteDependencies {
   readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
   /** A Boosted Creature do dia (#615). Ver `TicketRouteDependencies.currentBoostedMonsterId`. */
   readonly currentBoostedMonsterId?: () => Promise<string | undefined>;
+  /** A maior versão durável ainda pendente de cada membro (#823). Ver `TicketRouteDependencies`. */
+  readonly pendingDurableVersion?: (characterId: string) => Promise<number>;
   /** O bônus de Loyalty de cada CONTA (#628). Ver `TicketRouteDependencies.loyaltyBonusPercentOf`. */
   readonly loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
   readonly settleProgress: (characterId: string) => Promise<SettlementResult>;
@@ -310,6 +312,8 @@ async function joinRunningParty(
         // O Loyalty é da CONTA de quem entra (#628), e fica fixado no ticket dele — o membro que
         // chega depois carrega o bônus dele, não o do líder.
         await deps.loyaltyBonusPercentOf?.(me.accountId),
+        // A versão durável (#823): lida DEPOIS do `settleProgress` logo acima.
+        await deps.pendingDurableVersion?.(me.characterId) ?? 0,
       ),
     }],
   };
@@ -855,6 +859,8 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
           boostedMonsterId,
           // Uma conta por membro (#628): cada um carrega o bônus da PRÓPRIA idade de conta.
           await deps.loyaltyBonusPercentOf?.(accountId),
+          // A versão durável de CADA membro (#823): lida DEPOIS do `settleProgress` do laço acima.
+          await deps.pendingDurableVersion?.(characterId) ?? 0,
         ),
       });
     }

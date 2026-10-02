@@ -78,6 +78,14 @@ export interface TicketRouteDependencies {
    */
   readonly listCharacterStorages?: GameRepository['listCharacterStorages'];
   /**
+   * A MAIOR versão durável ainda pendente no Redis para o personagem (#823, OW-02), lida DEPOIS
+   * de liquidar (`ReceiptStore.highestPendingVersion`). O ticket leva
+   * `max(characters.durable_version, isto)` como piso do contador do hospedeiro: a sessão nova
+   * grava versões MAIORES que as de qualquer extrato que ainda espere liquidação. Ausente é
+   * `api` montado sem Redis de extratos: o ticket leva só a coluna.
+   */
+  readonly pendingDurableVersion?: (characterId: string) => Promise<number>;
+  /**
    * O gasto do banco de offline training na emissão do ticket (#631, ADR 0059 d.3, ADR 0052 d.5).
    *
    * Vive AQUI, e não no `game`, pela razão do ADR 0052 d.5: é um cálculo que precisa saber que
@@ -189,6 +197,9 @@ export function createTicketHandler(
     // sai da trava, como a resolução de nó (FUN-53): uma lentidão do Redis aqui não segura a
     // linha do personagem.
     const boostedMonsterId = await deps.currentBoostedMonsterId?.();
+    // A versão durável que ainda espera liquidação (#823), lida DEPOIS do `settleProgress` — o que
+    // sobrou pendente (um teto de 50 estourado, por exemplo) é o que a coluna ainda não viu.
+    const pendingDurableVersion = await deps.pendingDurableVersion?.(body.data.characterId) ?? 0;
     // Desde quando o personagem está em repouso (#631) — só quando o diretório o viu SEM sessão, e
     // FORA da trava de linha pela mesma razão: é uma ida ao Redis. Ausente o carimbo, não há gasto.
     const restedSince = resolution.resting === true
@@ -220,6 +231,7 @@ export function createTicketHandler(
             await deps.listCharacterStorages?.(character.id) ?? [],
             boostedMonsterId,
             loyaltyBonusPercent,
+            pendingDurableVersion,
           ),
           resolution.node,
         );
@@ -314,6 +326,8 @@ export function initialCharacterOf(
   boostedMonsterId?: string,
   /** O bônus de Loyalty da conta (#628), já calculado pela `api`. Ver `TicketRouteDependencies`. */
   loyaltyBonusPercent?: number,
+  /** A maior versão durável ainda pendente no Redis (#823). Ver `TicketRouteDependencies`. */
+  pendingDurableVersion = 0,
 ): InitialCharacter {
   return {
     level: character.level,
@@ -325,6 +339,11 @@ export function initialCharacterOf(
     // O Loyalty (#628): fixado no ticket como a boosted, e ausente quando não há degrau — o
     // ticket do caso comum (conta com menos de 360 dias) continua idêntico ao de antes.
     ...(loyaltyBonusPercent === undefined ? {} : { loyaltyBonusPercent }),
+    // A versão durável (#823, OW-02): o piso do contador do hospedeiro. Sai SEMPRE, inclusive
+    // `0` — ausente significaria "o `api` não sabe", e o `game` passaria a gravar extratos sem
+    // versão. `max` porque os pendentes que o teto de liquidação deixou para trás ainda não
+    // subiram a coluna.
+    durableVersion: Math.max(character.durableVersion, pendingDurableVersion),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),

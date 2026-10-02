@@ -12,7 +12,7 @@ const CHARACTER: CharacterRecord = {
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, hazard: null, bosstiary: null, learnedSpells: null,
   familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  createdAt: new Date(),
+  durableVersion: 0, createdAt: new Date(),
 };
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
@@ -173,6 +173,39 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('outfitColors');
     expect(await issuedWith({ head: 133, body: 69, legs: 58, feet: 76 }))
       .not.toHaveProperty('outfitColors');
+  });
+
+  it('a versão durável do ticket é max(coluna, maior versão pendente), lida DEPOIS de liquidar (#823)', async () => {
+    // A sessão nova grava versões MAIORES que as de qualquer extrato que ainda espere
+    // liquidação. Mutação que mata: levar só a coluna, ou ler a pendência antes da liquidação
+    // (o que sobrou é o que a coluna ainda não viu).
+    const order: string[] = [];
+    const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+    const issuedWith = async (column: number, pending: number | undefined) => {
+      order.length = 0;
+      issue.mockClear();
+      const response = await post(build({
+        tickets: { issue } as never,
+        settleProgress: async () => { order.push('settle'); return { written: 1, failed: 0 }; },
+        ...(pending === undefined ? {} : {
+          pendingDurableVersion: async () => { order.push('pending'); return pending; },
+        }),
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, durableVersion: column })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return (issue.mock.calls[0]?.[2] as { durableVersion?: number } | undefined)?.durableVersion;
+    };
+
+    expect(await issuedWith(3, 9)).toBe(9);
+    expect(order).toEqual(['settle', 'pending']);
+    expect(await issuedWith(12, 9)).toBe(12);
+    // Sem Redis de extratos ligado, é a coluna — e `0` é versão, não ausência.
+    expect(await issuedWith(4, undefined)).toBe(4);
+    expect(await issuedWith(0, undefined)).toBe(0);
   });
 
   it('a postura de luta da linha entra no ticket; um valor fora dos três modos fica de fora (#550)', async () => {

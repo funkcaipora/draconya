@@ -286,6 +286,16 @@ export interface InitialCharacter {
    * rolagem: a sessão vale o nível BASE de toda skill.
    */
   readonly loyaltyBonusPercent?: number;
+  /**
+   * A versão durável do personagem (#823, OW-02, ADR 0060 decisão 10e), o PISO do contador do
+   * hospedeiro: `max(characters.durable_version, maior versão ainda pendente no Redis)`, lida
+   * pelo `api` DEPOIS de liquidar (`initialCharacterOf`). O `game` a adota como ponto de partida
+   * e grava `durableVersion = contador + 1` em cada extrato — sempre maior que qualquer um que
+   * ainda espere liquidação, então o ledger nunca descarta como atrasado um extrato desta sessão.
+   * Ausente é ticket de um `api` anterior (deploy em rolagem): o `game` não versiona os extratos
+   * dele, e o ledger os trata pela regra de antes.
+   */
+  readonly durableVersion?: number;
 }
 
 export interface IssuedTicket {
@@ -794,6 +804,12 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
       && Number.isInteger(initial['loyaltyBonusPercent'])
       && initial['loyaltyBonusPercent'] > 0 && initial['loyaltyBonusPercent'] <= 65_535
       ? { loyaltyBonusPercent: initial['loyaltyBonusPercent'] }
+      : {}),
+    // A versão durável (#823): inteiro seguro não negativo, ou AUSENTE, nunca ticket recusado —
+    // a mesma régua da vocação. Ausente faz o `game` gravar extratos SEM versão: o lado seguro.
+    ...(typeof initial['durableVersion'] === 'number' && Number.isSafeInteger(initial['durableVersion'])
+      && initial['durableVersion'] >= 0
+      ? { durableVersion: initial['durableVersion'] }
       : {}),
   };
 }
