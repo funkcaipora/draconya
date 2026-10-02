@@ -1353,7 +1353,7 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   o `RETURNVALUE_NOTPOSSIBLE` dos dois scripts. Toda condição `outfit` aplicada fora dessas portas
   (um teste que faz `conditions.apply` direto) não emite o evento — use a magia ou a ability.
 - **Zona por tile e `canLogout` são `zones.ts` (OW-10, #831, ADR 0060 d.6 e d.7) — funções puras que
-  só LÊEM, e hoje ninguém as chama.** `zoneAt(map, point)` devolve o tipo com a precedência de
+  só LÊEM; quem as chama é a saída do mundo (`WorldRuleset#requestLogout` e o x-log, OW-14).** `zoneAt(map, point)` devolve o tipo com a precedência de
   `Tile::getZoneType` (PZ, no-pvp, arena, no-logout, normal), `hasZoneFlag` lê um bit, e
   `canLogout(character, map, nowMs)` devolve `{ ok: true }` ou `{ ok: false, reason: 'no-logout-tile'
   | 'in-fight' }`. Quatro armadilhas. (1) **Decidir saída pelo TIPO reabre o logout num tile `P`
@@ -1373,3 +1373,42 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   `ZoneKind` do protocolo tem hífen: quem emite `player-stats.zone` traduz. Os motivos de recusa do
   `canLogout` são os de `LogoutRefusedReason` (OW-11), com um teste de compilação que prende a
   igualdade — o `sim` não importa o protocolo para isso.
+- **A saída do Tibia no mundo é `WorldRuleset#requestLogout`, `#presenceLost` e `#presenceRestored`
+  (OW-14, #835, ADR 0060 d.7), e o `sim` só DECIDE e EMITE.** O `logout` passa por `canLogout` e
+  resulta em UM de dois eventos de domínio (`world-exit.ts`): `departure-requested { characterId,
+  reason, worldPosition }` ou `logout-refused { characterId, reason }`. `presence-lost` e
+  `presence-restored` são **intenções de SERVIDOR**: o protocolo não tem opcode para elas e o cliente
+  nunca as manda (invariante 4). Seis armadilhas. (1) **`departure-requested` é um PEDIDO**: o
+  personagem continua na sessão até o hospedeiro gravar o checkpoint e chamar `Session.leave` — o
+  `sim` não faz I/O, e o checkpoint precisa do extrato inteiro antes de ele sair. É GAMEPLAY, não
+  apresentação: o hospedeiro o lê SEM visualizador (o x-log é justamente esse caso), como o
+  `member-left`. `worldPosition` é a coordenada ABSOLUTA de agora (a âncora do próximo login) e é lida
+  no instante da decisão; `{ 0, 0, 0 }` é o "sem posição" do Canary. (2) **`presence-lost` deixa o
+  personagem SÓ, não o tira**: solta o alvo, suspende o bot, as automações da barra, a caminhada
+  manual, o follow e a postura, e agenda `xlog-attempt` em +60 s (`XLOG_DELAY_MS`, o `noPongTime` do
+  Canary). A suspensão mora em `HuntRuleset#suspendAutomation`/`resumeAutomation` (protegidos) e em
+  sete guardas `#isSuspended` — `#attackTarget` (sem ele o herói bateria no melhor ao alcance pela
+  política, que é o bot escolhendo), `#autoSelectTarget`, `#armBot`/`#onBot`, `#armAutomations`/
+  `#onAutomation` e `#playerStep` —, todas um `Set.size` num conjunto vazio na instância, que continua
+  byte a byte. Código novo que faça o personagem AGIR sem o jogador (um tipo novo de automação, uma
+  nova eleição de alvo) tem de passar por `#isSuspended`, ou o personagem sem conexão passa a agir.
+  (3) **Nada é cancelado na fila ao suspender**: o golpe e os grupos já agendados vencem, encontram o
+  personagem sem dono e não fazem nada, e `#onAutomation` suspenso NÃO se reagenda (um ciclo por
+  segundo para quem não tem dono seria polling). `resumeAutomation` reelege o alvo e rearma o que
+  ficou engatilhado — o caminho de `configureBot`. (4) **A tentativa decide pelo estado de AGORA**:
+  `canLogout` passa → `departure-requested` com motivo `'xlog'`; em luta → reagenda para
+  `lastCombatActionAtMs + IN_FIGHT_WINDOW_MS` (o primeiro instante em que `isInFight` deixa de
+  valer), e um golpe novo nesse meio tempo empurra o carimbo e a tentativa seguinte reagenda de novo —
+  um evento, nunca uma varredura. **Tile de no-logout desiste e não reagenda** (o Canary faz
+  `shouldForceLogout = false`, `player.cpp:2335-2337`): sem dono o personagem não anda, então o tile
+  não muda, e o teto é o idle kick (OW-47). Nenhum dos dois desenhos (Canary: tenta uma vez; TFS:
+  derruba em luta) vale sozinho — ADR 0060 d.7. (5) **`presence-lost` é idempotente e NÃO reinicia a
+  contagem** (a suspensão já existe → `false`); `presence-restored` cancela a tentativa
+  (`cancelEvent('xlog-attempt', id)`) e devolve o controle. O mesmo id que relogou dentro dos 60 s não
+  herda a queda: `onEnter` faz `cancelEvents(character.id)` e limpa a suspensão, e `onLeave` também a
+  limpa. A suspensão não entra no snapshot (o mundo não tem snapshot, ADR 0060 d.10a): quem chega ao
+  mundo sem visualizador recebe `presence-lost` na chegada. (6) **O motivo de saída é um vocabulário
+  próprio** (`WorldDepartureReason`: `'logout' | 'xlog' | 'death' | 'idle-kick'`), não o `EndReason`
+  da sessão — o hospedeiro traduz no do checkpoint. `'death'` é da OW-32 e `'idle-kick'` da OW-47;
+  a união os traz desde já para o hospedeiro tratar os quatro. Saída do mundo tira o personagem da
+  party de mundo quando ela existir (OW-43): é o `onLeave`.
