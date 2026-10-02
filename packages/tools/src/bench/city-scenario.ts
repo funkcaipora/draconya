@@ -7,8 +7,9 @@
 // ## O que passa pelo caminho de produção
 //
 // `SessionHost` + `CityShard` + `Viewer` de verdade, e o codec real: cada mensagem de saída é
-// codificada por destinatário em `Viewer.flush` (`encodeS2C` + `packBatch`), e o socket aqui só
-// CONTA os bytes do frame que sairia no fio. O uWS roda sem permessage-deflate (`server.ts` não
+// codificada pelo cache do ciclo (`EncodeCache`, OW-22: uma vez por objeto de mensagem, e não mais
+// uma por destinatário) e o lote de cada visualizador é montado em `Viewer.flush` (`packBatch`); o
+// socket aqui só CONTA os bytes do frame que sairia no fio. O uWS roda sem permessage-deflate (`server.ts` não
 // configura `compression`), então o frame é o fio, mais 2 a 10 bytes de cabeçalho do WebSocket por
 // quadro. Os `walk` entram por `host.handle`, como no socket.
 //
@@ -81,6 +82,11 @@ export interface RunOptions {
   readonly aoi: boolean;
   /** O conteúdo real, carregado uma vez pelo chamador. Sem ele, cada cenário carrega o seu. */
   readonly content?: Content;
+  /**
+   * `true` (padrão): o que o jogo faz — a mesma mensagem para N visualizadores é codificada uma vez
+   * por ciclo (OW-22). `false`: o grupo de controle, cada visualizador codifica a sua cópia.
+   */
+  readonly encodeOnce?: boolean;
   /** O teto de fila do visualizador. Padrão: o do jogo. Só o teste o baixa, para provocar queda. */
   readonly maxQueued?: number;
   /** Cada frame que saiu no fio na janela medida. Para o teste decodificar o que foi contado. */
@@ -102,8 +108,19 @@ export interface CityRun {
   readonly cpuToWall: number;
   /** O teto de fila do visualizador, para comparar com `summary.queue.max`. */
   readonly queueLimit: number;
-  /** Totais em bruto da janela medida, de que as taxas por visualizador saem. */
-  readonly totals: { readonly bytes: number; readonly messages: number; readonly frames: number };
+  /**
+   * Totais em bruto da janela medida, de que as taxas por visualizador saem. `encodedBytes` é o que
+   * o hospedeiro SERIALIZOU (o cache de codificação do OW-22); `encoded` e `reused` contam as
+   * mensagens que o cache codificou e as entregas que ele serviu sem codificar.
+   */
+  readonly totals: {
+    readonly bytes: number;
+    readonly messages: number;
+    readonly frames: number;
+    readonly encodedBytes: number;
+    readonly encoded: number;
+    readonly reused: number;
+  };
 }
 
 /** O conteúdo de verdade, com a Thais importada (FUN-120). Roda a partir de `packages/tools`. */
@@ -243,7 +260,9 @@ export function runCityScenario(scenario: CityScenario, options: RunOptions): Ci
   // visualizador; bytes e quadros, do socket — são duas leituras do mesmo envio, e o teste
   // confere que fecham.
   let recording = false;
-  const totals = { bytes: 0, messages: 0, frames: 0 };
+  const totals = {
+    bytes: 0, messages: 0, frames: 0, encodedBytes: 0, encoded: 0, reused: 0,
+  };
   const onWrite = (characterId: string, frame: Uint8Array): void => {
     if (!recording) return;
     totals.bytes += frame.byteLength;
@@ -269,6 +288,8 @@ export function runCityScenario(scenario: CityScenario, options: RunOptions): Ci
     },
     // Desligar a AOI é o cenário ANTERIOR ao FUN-33: cada passo para todos da sessão.
     ...(options.aoi ? {} : { areaOfInterest: false }),
+    // E desligar a codificação única é o ANTERIOR ao OW-22: cada visualizador codifica a sua cópia.
+    ...(options.encodeOnce === false ? { encodeOnce: false } : {}),
   });
 
   // --- a chegada ---------------------------------------------------------------------------
@@ -532,8 +553,14 @@ export function runCityScenario(scenario: CityScenario, options: RunOptions): Ci
   const cyclesFor = (steps: number): number => Math.max(1, Math.round((steps * stepMs) / CYCLE_MS));
   for (let cycle = 0; cycle < cyclesFor(options.warmupSteps ?? 30); cycle++) measuredCycle(false);
   recording = true;
+  // O que o hospedeiro serializou na janela é a diferença dos contadores dele, que só sobem.
+  const encodedBefore = host.encodeStats;
   for (let cycle = 0; cycle < cyclesFor(options.steps); cycle++) measuredCycle(true);
   recording = false;
+  const encodedAfter = host.encodeStats;
+  totals.encodedBytes = encodedAfter.encodedBytes - encodedBefore.encodedBytes;
+  totals.encoded = encodedAfter.encoded - encodedBefore.encoded;
+  totals.reused = encodedAfter.reused - encodedBefore.reused;
 
   const neighbours = walkers.reduce(
     (total, walker) => total + (options.aoi ? host.interestOf(walker.id).length : players - 1), 0,
@@ -544,7 +571,8 @@ export function runCityScenario(scenario: CityScenario, options: RunOptions): Ci
     aoi: options.aoi,
     summary: summarize({
       samples, viewers: players, cycleMs: CYCLE_MS,
-      bytes: totals.bytes, messages: totals.messages, frames: totals.frames, drops: dropped.size,
+      bytes: totals.bytes, encodedBytes: totals.encodedBytes, messages: totals.messages,
+      frames: totals.frames, drops: dropped.size,
     }),
     neighbours,
     attempts,

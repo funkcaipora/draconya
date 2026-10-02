@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodeS2C } from '@draconya/protocol';
 import { DEFAULT_MAX_QUEUED } from '@draconya/server';
 import { CYCLE_MS, realContent, runCityScenario } from './city-scenario.js';
@@ -74,6 +75,66 @@ describe('o bench:city em modo curto', () => {
     expect(run.totals.messages).toBeGreaterThan(0);
   });
 
+  it('a mesma mensagem para N visualizadores é serializada uma vez (OW-22)', () => {
+    // O que o fio levou é o que cada um recebeu; o que a CPU serializou é uma cópia por mensagem
+    // por ciclo. Com vizinhos, o segundo tem de ficar abaixo do primeiro — e cada entrega
+    // reaproveitada é uma codificação que não aconteceu. Mutação que mata: tirar o cache do flush
+    // (as duas contagens voltam a ser iguais).
+    expect(run.neighbours).toBeGreaterThan(1);
+    expect(run.totals.encoded).toBeGreaterThan(0);
+    expect(run.totals.reused).toBeGreaterThan(0);
+    expect(run.totals.encodedBytes).toBeLessThan(run.totals.bytes);
+    expect(run.summary.encodedBytesPerViewerPerSecond)
+      .toBeLessThan(run.summary.bytesPerViewerPerSecond);
+    // Toda mensagem que saiu no fio ou foi codificada nesta janela ou veio do cache.
+    expect(run.totals.encoded + run.totals.reused).toBe(run.totals.messages);
+  });
+
+  describe('o grupo de controle: cada visualizador codifica a sua cópia (OW-22)', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    /** O hash de tudo que cada personagem recebeu no fio, na ordem, com a chave de ofuscação fixa. */
+    const wire = (encodeOnce: boolean): { run: CityRun; sha: string } => {
+      // A chave de cada frame sai de `Math.random`; fixa, a saída é função só do conteúdo, e
+      // "o fio é o mesmo" vira uma igualdade de bytes, e não de mensagens decodificadas.
+      vi.spyOn(Math, 'random').mockReturnValue(0.3141592653);
+      const perCharacter = new Map<string, ReturnType<typeof createHash>>();
+      const result = runCityScenario(SQUARE, {
+        steps: 20, warmupSteps: 4, aoi: true, encodeOnce,
+        tap: (id, frame) => {
+          const hash = perCharacter.get(id) ?? createHash('sha256');
+          perCharacter.set(id, hash);
+          hash.update(frame);
+        },
+      });
+      const whole = createHash('sha256');
+      for (const id of [...perCharacter.keys()].sort()) {
+        whole.update(id).update(perCharacter.get(id)?.digest('hex') ?? '');
+      }
+      return { run: result, sha: whole.digest('hex') };
+    };
+
+    it('o fio é o mesmo byte a byte com e sem a codificação única', () => {
+      const once = wire(true);
+      const each = wire(false);
+
+      expect(once.run.totals.frames).toBeGreaterThan(0);
+      expect(once.run.totals.bytes).toBe(each.run.totals.bytes);
+      expect(once.run.totals.messages).toBe(each.run.totals.messages);
+      expect(once.sha).toBe(each.sha);
+    });
+
+    it('sem ela, toda entrega é uma codificação; com ela, só a primeira de cada mensagem', () => {
+      const each = runCityScenario(SQUARE, { steps: 20, warmupSteps: 4, aoi: true, encodeOnce: false });
+      expect(each.totals.reused).toBe(0);
+      expect(each.totals.encoded).toBe(each.totals.messages);
+      // O que a CPU serializou no controle é o que foi ao fio, menos o envelope de lote.
+      expect(each.totals.encodedBytes).toBeLessThanOrEqual(each.totals.bytes);
+      expect(each.totals.encodedBytes).toBeGreaterThan(each.totals.bytes * 0.8);
+      expect(run.totals.encodedBytes).toBeLessThan(each.totals.encodedBytes);
+    });
+  });
+
   it('só vai para o fio, na janela medida, o que é de um visualizador que olha', () => {
     expect(new Set(tapped.map(({ id }) => id)).size).toBeLessThanOrEqual(SQUARE.players);
     expect(run.summary.bytesPerViewerPerSecond).toBeGreaterThan(0);
@@ -109,7 +170,7 @@ describe('o bench:city em modo curto', () => {
     expect(starved.queueLimit).toBe(5);
     expect(starved.summary.drops).toBeGreaterThan(0);
     expect(starved.summary.drops).toBeLessThanOrEqual(SQUARE.players);
-    expect(reportRows([starved])[0]?.[10]).toBe(String(starved.summary.drops));
+    expect(reportRows([starved])[0]?.[11]).toBe(String(starved.summary.drops));
     expect(run.summary.drops).toBe(0);
   });
 
@@ -118,12 +179,13 @@ describe('o bench:city em modo curto', () => {
     expect(text).toHaveLength(3);
     expect(text[0]).toContain('CPU p99 µs');
     expect(text[0]).toContain('B/vis/s');
+    expect(text[0]).toContain('B cod/vis/s');
     expect(text[0]).toContain('fila máx');
     const markdown = reportTable([run], 'markdown');
     expect(markdown[0]?.startsWith('| jogadores')).toBe(true);
     expect(markdown).toHaveLength(3);
     const [row] = reportRows([run]);
-    expect(row).toHaveLength(11);
+    expect(row).toHaveLength(12);
     expect(row?.[0]).toBe('24');
     expect(readingGuide(run.queueLimit).join('\n')).toContain(`o teto é ${run.queueLimit}`);
   });

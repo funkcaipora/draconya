@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   encodeC2S, encodeS2C, decodeC2S, decodeS2C, packBatch,
 } from './codec.js';
@@ -81,6 +81,68 @@ describe('batch', () => {
 
   it('returns an empty list for an empty batch', () => {
     expect(decodeS2C(packBatch([]))).toEqual([]);
+  });
+
+  describe('wire format (OW-22: one allocation, same bytes)', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    /**
+     * O formato escrito à mão, independente do `packBatch`: `[chave uint32 LE][flags 2][ [tamanho
+     * uint32 LE][frame] ... ]`, com tudo a partir do byte 4 passado pelo xorshift da chave. É o que o
+     * `packBatch` produzia quando montava o corpo num buffer à parte e o copiava para o frame.
+     */
+    const reference = (frames: readonly Uint8Array[], key: number): Uint8Array => {
+      const bytes: number[] = [key & 255, (key >>> 8) & 255, (key >>> 16) & 255, (key >>> 24) & 255, 2];
+      for (const frame of frames) {
+        bytes.push(frame.length & 255, (frame.length >>> 8) & 255, (frame.length >>> 16) & 255, (frame.length >>> 24) & 255);
+        for (const byte of frame) bytes.push(byte);
+      }
+      let r = (key ^ 0x4853_5254) >>> 0;
+      if (r === 0) r = 0x4853_5254;
+      for (let i = 4; i < bytes.length; i++) {
+        if (((i - 4) & 3) === 0) {
+          r ^= r << 13; r >>>= 0;
+          r ^= r >>> 17;
+          r ^= r << 5; r >>>= 0;
+        }
+        bytes[i] = (bytes[i] as number) ^ ((r >>> (((i - 4) & 3) << 3)) & 255);
+      }
+      return Uint8Array.from(bytes);
+    };
+
+    it.each([
+      ['no frames', 0],
+      ['one frame', 1],
+      ['fifty frames', 50],
+    ])('is byte-identical to the documented format with %s', (_, count) => {
+      const random = 0.6180339887;
+      vi.spyOn(Math, 'random').mockReturnValue(random);
+      const frames = Array.from({ length: count }, (_unused, i) => encodeS2C({
+        type: 'creature-health', id: i, health: 100 - i, maxHealth: 100,
+      }));
+
+      const packed = packBatch(frames);
+
+      expect(packed).toEqual(reference(frames, (random * 0x1_0000_0000) >>> 0));
+    });
+
+    it('is byte-identical for frames larger than 64 KiB, where the length prefix needs three bytes', () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.25);
+      const big = new Uint8Array(70_000).map((_unused, i) => (i * 31) & 255);
+      expect(packBatch([big, new Uint8Array([1, 2, 3])]))
+        .toEqual(reference([big, new Uint8Array([1, 2, 3])], (0.25 * 0x1_0000_0000) >>> 0));
+    });
+
+    it('does not modify the frames it joins', () => {
+      // Os pedaços podem ser o MESMO `Uint8Array` para vários visualizadores (o cache de codificação
+      // do hospedeiro): juntar um lote não pode embaralhá-los no lugar.
+      const piece = encodeS2C(step);
+      const before = piece.slice();
+      packBatch([piece, piece]);
+      packBatch([piece]);
+      expect(piece).toEqual(before);
+      expect(decodeS2C(packBatch([piece, piece]))).toEqual([step, step]);
+    });
   });
 });
 
