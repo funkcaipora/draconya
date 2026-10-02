@@ -122,6 +122,12 @@ function acquiredByState(inventory: InventoryState, sessionId: string): BoxedIte
  * sobreviveu a uma liquidação parcial anterior não credita de novo por isto ser chamado outra
  * vez — é create ou não-cria, nunca soma.
  *
+ * **Isso só vale porque o extrato final de uma sessão com snapshot deixa a linha de ledger, com ou sem
+ * valor** (#838, OW-17): é ela que reconhece o extrato rederivado aqui, que chega com a MESMA chave e uma
+ * versão durável NOVA — e a versão sozinha o deixaria passar e sobrescrever o estado final com o do
+ * snapshot. O `jobs` só aplica sem linha o CHECKPOINT do mundo (`reason: 'checkpoint'`), e a sessão do
+ * mundo não tem snapshot (ADR 0060 d.10.a): este extrato nunca é o gêmeo de um que passou sem linha.
+ *
  * Lança se `receipts.save` falhar — quem chama decide o que fazer com o snapshot (o `game`
  * mantém o snapshot de pé para a próxima tentativa; o `--reset` também não apaga na falha).
  */

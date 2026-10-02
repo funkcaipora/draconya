@@ -658,3 +658,41 @@ A decisão 10.f manda persistir vida, mana e condições (`characters.health/man
 O `upgrade-existing-schema.sql` não ganha as colunas, como não ganhou a `durable_version` (#823): é o upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a migração `0029` falhar ao rodar depois dele.
 
 **Efeito no que esta decisão escreveu:** nenhum. A decisão 10.f continua valendo; esta emenda só registra o formato das condições, onde a flag nasce e as duas regras de segurança do extrato.
+
+## Emenda — 2026-10-02 (#838, OW-17): o checkpoint sem valor movido é estado sob versão, e a flag chega ao `jobs`
+
+A decisão 10.d diz que a linha sem valor movido não cria linha de ledger e leva só estado absoluto, idempotente
+pela versão (10.e). A OW-17 a implementou em `packages/server/src/jobs/ledger.ts` e fechou seis detalhes que a
+decisão deixava abertos (`docs/product/open-world.md`, "A liquidação do checkpoint no `jobs`"):
+
+- **"Sem valor" tem definição fechada** (`movesValue`): `xpGained`, `goldGained`, `goldSpent`, `kills` e `deaths`
+  iguais a zero, `removedInstances` vazio e nenhum item NOVO em `acquired`. A XP negativa da penalidade de morte
+  e o gold que entra e sai na mesma sessão contam como valor. Os campos monotônicos (Bestiário, Bosstiary,
+  magias, vocação, promoção) não contam — já são idempotentes por si — e entram em todo extrato, também no
+  atrasado.
+- **`acquired` é cumulativo, então só o item novo é valor.** O emissor lista todo item com o prefixo da sessão
+  que ainda está na mochila, e o id de loot não muda: a espada de t0 está em todo checkpoint seguinte. Contar a
+  lista não vazia como valor prenderia no ledger todo personagem que já lootou uma vez, e os 288 mil por dia
+  seriam o caso típico. O `jobs` pergunta ao banco, sob a trava da linha, quais ids o dono já tem em
+  `item_instance`; se todos, o extrato é estado puro.
+- **Só o extrato VERSIONADO pula o ledger.** Sem versão não há a guarda que torna a aplicação idempotente, e a
+  chave `(session_id, seq)` é a única idempotência dele: o extrato de um nó anterior (deploy em rolagem) segue
+  com linha de ledger mesmo sem valor.
+- **Só o CHECKPOINT pula o ledger (`reason: 'checkpoint'`); o fim de sessão e a saída, não.** A liquidação de um
+  snapshot irrestaurável reemite o mesmo `seq = ledgerSeq + 1` do extrato final com uma versão NOVA, e a linha de
+  ledger do final é o que a reconhece: sem ela a versão maior a deixaria sobrescrever o estado final com o de
+  alguns segundos antes. A sessão do mundo, a única que faz checkpoint, não tem snapshot (10.a), então não há
+  gêmeo a reconhecer. A saída sem valor custa uma linha por logout, que vem dos logins e não do relógio.
+- **A flag `OPEN_WORLD` chega ao `jobs` e à liquidação do ticket.** A emenda da OW-15 dizia que o `jobs` não a
+  lê; agora a lê para uma coisa só, o pulo do ledger. Com ela desligada — o default — todo extrato grava a linha,
+  como antes. Uma divergência de flag entre `jobs` e `api` é inofensiva: o mesmo extrato dá o mesmo estado, com
+  uma linha de ledger a mais ou a menos.
+- **O estado aplicado sem ledger não toca em `xp`, `gold` nem `level`, nem insere `item_instance`.**
+  `characters.gold` segue sendo a projeção do ledger.
+
+**Efeito no que esta decisão escreveu:** estreita a 10.d num ponto. A frase "linha sem valor movido não cria linha
+de ledger" vale para a linha PERIÓDICA do lote (`'checkpoint'`); a linha de saída, que a 10.d também chama de
+linha do lote, leva a de ledger de delta zero, pelo snapshot acima. O invariante 10 fica intacto, porque ele fala
+de movimentação de valor e o checkpoint sem valor não move nenhum. Os números do custo (3,3 transações/s e até 288
+mil linhas de ledger por dia por mundo com 200 personagens a 60 s) seguem os da decisão 10.d, agora com o teto
+explicado: o teto é o de todo checkpoint ter valor, e o `acquired` cumulativo não o faz o caso típico.

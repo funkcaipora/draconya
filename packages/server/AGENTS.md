@@ -17,7 +17,10 @@ Persistência, diretório de sessão e roteamento.
   resolvida, loot, XP ou resultado de transação. Se uma mensagem de entrada carrega resultado, é
   bug de protocolo, não recurso.
 - **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único (invariante 10).
-  Retry nunca duplica. Ver ADR 0006.
+  Retry nunca duplica. Ver ADR 0006. O CHECKPOINT que NÃO move valor (o do mundo, só posição e
+  vitais) é aplicado como estado absoluto sob `durable_version`, sem linha de ledger (#838, OW-17, com
+  `OPEN_WORLD`): a definição de "valor" é `movesValue` em `jobs/ledger.ts`. O fim de sessão e a saída
+  seguem com a linha, com ou sem valor.
   **A guarda de stamina compara DOIS RELÓGIOS** (FUN-101). `characters.stamina_updated_at`
   nasce de `defaultNow()` — relógio do Postgres; `receipt.staminaUpdatedAtMs` sai de
   `Date.now()` do nó `game`. A guarda só vale enquanto o skew for menor que o tempo entre duas
@@ -964,8 +967,13 @@ as duas formas que o código garante.
 
 **Tudo atrás de `OPEN_WORLD`** (`config.ts`; `1`/`true`, default desligado). Com a flag desligada o
 `api` não lê as colunas, o ticket é o de antes byte a byte, o extrato não leva os campos e o repouso
-é `'city'`. O `api` (ticket, lista de personagens) e o `game` (extrato) precisam da MESMA flag; o
-`jobs` não a lê — escreve o que o extrato trouxer. As colunas existem sempre, com ou sem a flag.
+é `'city'`. O `api` (ticket, lista de personagens) e o `game` (extrato) precisam da MESMA flag. O `jobs`
+escreve o que o extrato trouxer e **lê a flag para uma coisa só**, desde a OW-17: pular a linha de ledger
+do CHECKPOINT que não move valor (`LedgerSweepOptions.openWorld`, `JobsDependencies.openWorld`). Quem
+monta o `jobs` ou a liquidação do ticket por outra porta — um runner de desenvolvimento, um segundo
+`api`, o hospedeiro da OW-18 — tem de repassá-la: sem ela nada falha, e o ledger volta, em silêncio, a uma
+linha por checkpoint (ver "A liquidação do checkpoint", abaixo). As colunas existem sempre, com ou sem a
+flag.
 
 O dado atravessa cinco fronteiras e a forma é conferida num arquivo só, `world-state.ts`. A regra é a
 de todo campo do ticket: **torto vira ausente, nunca recusa** (cheio, no templo, sem condição).
@@ -1028,11 +1036,85 @@ do invariante 8 é o personagem deslogado. O `select` consulta o diretório ante
 upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a `0029` falhar ao rodar
 depois dele (`ADD COLUMN` sem `IF NOT EXISTS`). O banco legado entra pela migração.
 
-**O que NÃO existe ainda.** Nada ESCREVE a âncora no mundo (a saída e o checkpoint são OW-16/OW-20), o
-`jobs` ainda grava uma linha de ledger por extrato mesmo sem valor movido (OW-17), e nenhuma sessão de
-mundo é hospedada (OW-18): hoje o login cai na Cidade, que CURA ao entrar (`city.ts:126-130`), então
-a vida do ticket só sobrevive numa hunt idle ou no mundo, nunca na praça. O que existe é o contrato —
-coluna, ticket, sessão, extrato — com teste de ponta a ponta (`jobs/world-vitals.postgres.test.ts`).
+**O que NÃO existe ainda.** Nada ESCREVE a âncora no mundo (a saída e o checkpoint são OW-16/OW-20), e
+nenhuma sessão de mundo é hospedada (OW-18): hoje o login cai na Cidade, que CURA ao entrar
+(`city.ts:126-130`), então a vida do ticket só sobrevive numa hunt idle ou no mundo, nunca na praça. O
+que existe é o contrato — coluna, ticket, sessão, extrato — com teste de ponta a ponta
+(`jobs/world-vitals.postgres.test.ts`). A liquidação do checkpoint sem linha de ledger é a OW-17 (abaixo).
+
+## A liquidação do checkpoint: o checkpoint sem valor movido não cria linha de ledger (#838, OW-17, ADR 0060 d.10.d-e)
+
+O checkpoint do mundo (OW-16) grava um extrato por personagem sujo a cada 60 s, quase todos só de
+posição e vitais. O `jobs` (`writeReceipts`, `jobs/ledger.ts`) separa o que o extrato carrega:
+
+- **CHECKPOINT (`reason: 'checkpoint'`), versionado, SEM valor movido, com `OPEN_WORLD`** →
+  `applyProgression(tx, receipt, progression, false)`: só os campos absolutos, guardados por
+  `durable_version`, **sem inserir em `ledger`**, sem tocar em `xp`, `gold` nem `level` e sem inserir
+  `item_instance`. Conta em `LedgerSweepResult.stateOnly`.
+- **Com valor, fim de sessão ou saída (qualquer outro `reason`), sem versão, ou com a flag desligada** →
+  o caminho de sempre (linha de ledger e progressão na mesma transação, `UNIQUE (session_id, seq)`).
+
+**"Sem valor" é `movesValue`** (`jobs/ledger.ts`): `xpGained`, `goldGained`, `goldSpent`, `kills` e
+`deaths` iguais a zero, `removedInstances` vazio e nenhum item NOVO em `acquired`. Nove armadilhas:
+
+- **`acquired` é CUMULATIVO, e só o item novo é valor.** `acquiredBy` (`game/host.ts`) lista todo item
+  com o prefixo da sessão que ainda está na mochila, na satchel ou no corpo — o id de loot
+  (`${sessionId}:bag:N`) não muda —, então a espada de t0 está em TODO checkpoint seguinte. Tratar a lista
+  não vazia como valor deixa todo personagem que já lootou uma vez no ledger para sempre (os 288 mil por
+  dia viram o caso típico). `ownedAcquired` pergunta ao banco, dentro da transação e depois da trava da
+  linha, quais ids o DONO já tem em `item_instance`: se todos, é estado puro (e o `INSERT` nulo nem
+  roda); se algum é novo, é a linha de ledger que registra o nascimento. Se o emissor passar a mandar
+  `acquired` como DELTA, nada aqui quebra (a pergunta só encontra "nenhum tem" no primeiro). O teste com o
+  mesmo `acquired` em dois checkpoints seguidos (`checkpoint-settlement.postgres.test.ts`) é o que prende
+  a premissa: um `movesValue` sem o conjunto dos já tidos prenderia o personagem no ledger.
+- **SÓ o CHECKPOINT pula a linha — não todo extrato sem valor — por causa do snapshot.**
+  `settleSnapshotAsReceipt` (um snapshot irrestaurável, `#creditUnrestorable`) reemite o MESMO
+  `seq = ledgerSeq + 1` do extrato final com uma versão durável NOVA, e o que o reconhece é a linha de
+  ledger do final (`UNIQUE (session_id, seq)`): sem ela a versão maior o deixa passar e ele sobrescreve o
+  estado final com o de alguns segundos antes. A sessão do mundo, a única que faz checkpoint, não tem
+  snapshot (ADR 0060 d.10.a). **Se um dia outra sessão passar a fazer checkpoint E a ter snapshot, este
+  portão (`CHECKPOINT_REASON` em `appliesAsStateOnly`) deixa de bastar**, e é preciso um marcador do
+  `(session_id, seq)` aplicado sem linha.
+
+- **Campo novo que MOVE VALOR tem de entrar em `movesValue`.** Um extrato que mexe em gold ou item por um
+  campo que ela não conhece vira "só estado" e perde a linha de ledger — em silêncio, porque o estado
+  aplica normal. É o invariante 10 que ela guarda. `ledger-value.test.ts` tem um caso por coluna da
+  definição; o Market (E13) e a transação entre personagens vão precisar de caso próprio.
+- **A idempotência desse caminho é SÓ a versão.** Sem a linha de ledger não há `UNIQUE (session_id, seq)`:
+  reprocessar o mesmo extrato, ou um mais velho, encontra `durable_version` igual ou maior, e `absolute`
+  é `false`. Tirar a guarda — ou aplicar um sem versão por este caminho — reescreve a posição com a de
+  ontem. Por isso `appliesAsStateOnly` exige `durableVersion !== undefined`: o extrato de um nó anterior
+  (sem versão) segue com ledger, mesmo sem valor. A versão basta para o checkpoint repetido, atrasado ou
+  reprocessado, e **só para ele**: o extrato rederivado de um snapshot tem versão nova e a mesma chave (a
+  armadilha acima).
+- **O monotônico entra SEMPRE, também no extrato atrasado** (Bestiário, Bosstiary e magias pela fusão,
+  vocação por `coalesce`, promoção por `OR`): aplicar de novo é inofensivo, e descartar seria a única
+  diferença entre os dois caminhos. O que o extrato atrasado não escreve é absoluto; se ele também não
+  traz monotônico nenhum, `applyProgression` **retorna antes do `UPDATE`** — um `set({})` o drizzle
+  recusa. Campo monotônico novo no `parseReceipt` precisa entrar nessa condição de retorno.
+- **A flag chega por opção, nos DOIS caminhos** (`LedgerSweepOptions.openWorld`): o `jobs`
+  (`JobsDependencies.openWorld`, `main.ts`) e a liquidação do ticket (`settleProgress`, `main.ts`). Uma
+  divergência entre eles é inofensiva — o mesmo extrato dá o mesmo estado, com uma linha de ledger a mais
+  ou a menos —, mas o `api` e o `game` seguem tendo de concordar na flag (ver o fim de "O mundo e os
+  vitais em repouso").
+- **`stateOnly` só existe no resultado quando é maior que zero** (`character-state.ts` o repassa do mesmo
+  jeito): dezenas de testes comparam o resultado com `toEqual({ written, failed })`. `written` conta o
+  extrato sem ledger também — quem lê `written > 0` pergunta "a linha do personagem pode ter mudado?".
+- **A trava de linha CONTINUA** (`select ... for update`): é ela, e não a chave única, que serializa o
+  `jobs` e a liquidação do ticket neste caminho. `checkpoint-settlement.postgres.test.ts` cruza os dois.
+- **O extrato sem ledger de um personagem que NÃO existe é REMOVIDO do Redis** (`current === undefined` →
+  `applyProgression` retorna, e `writeReceipts` apaga e conta): o com ledger falhava na FK e ficava até o
+  TTL. Sem valor, não há o que perder, então o descarte é o certo — mas a varredura varre o keyspace
+  INTEIRO, e teste que a use num Redis compartilhado apaga o extrato do vizinho. O Redis local de
+  desenvolvimento tem 16 bancos (o CI, 32): todo índice de `testing/redis.ts` a partir de 16 cai no banco 0,
+  que vira de vários arquivos. Por isso `checkpoint-settlement.postgres.test.ts` não faz `flushdb` e passa
+  à varredura só os próprios personagens (`onlyMine`).
+
+O ticket liquida pelo mesmo `writeReceipts`, então encontra as linhas do lote em ordem de versão
+(`pendingFor`, os 50 mais antigos — a 1 extrato por minuto, ~50 min de `jobs` parado; passado isso o
+ticket entra com a posição do 50º e o resto sai no ciclo seguinte, em ordem). Os números do custo
+(200 personagens, 3,3 transações/s, até 288 mil linhas/dia, ≈ 497 B por linha de ledger) e o que
+ainda não foi medido estão em `docs/product/open-world.md`.
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 

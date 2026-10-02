@@ -39,6 +39,11 @@ export interface JobsDependencies {
   readonly botConfigs?: BotConfigStore;
   /** Curva de XP, para o `jobs` derivar o level ao creditar a progressão (FUN-54). */
   readonly progression?: Progression;
+  /**
+   * A flag `OPEN_WORLD` (#838, OW-17): ligada, o checkpoint versionado sem valor movido é aplicado só
+   * como estado absoluto, sem linha de ledger (ver `LedgerSweepOptions.openWorld`). Ausente é desligada.
+   */
+  readonly openWorld?: boolean;
   /** Onde o ciclo conta o que fez (FUN-59). Ausente: o `jobs` roda igual, só não expõe nada. */
   readonly metrics?: JobsMetrics;
   /** Relógio de parede, para o carimbo de último sucesso. Injetável para teste. */
@@ -113,6 +118,7 @@ export function createJobsCycle(
     let slotsReleased = 0;
     let receiptsWritten = 0;
     let receiptsFailed = 0;
+    let receiptsStateOnly = 0;
     try {
       // FUN-12: devolver o slot de ticket que passou do prazo sem virar sessão.
       if (dependencies.tickets !== undefined) {
@@ -126,7 +132,7 @@ export function createJobsCycle(
       // de órfãs: uma sessão que acabou de ser drenada tem crédito esperando, e creditar é
       // mais urgente que arrumar índice.
       if (dependencies.receipts !== undefined && dependencies.database !== undefined) {
-        const { written, failed } = await writePendingReceipts({
+        const { written, failed, stateOnly = 0 } = await writePendingReceipts({
           database: dependencies.database,
           receipts: dependencies.receipts,
           logger,
@@ -134,10 +140,14 @@ export function createJobsCycle(
           ...(dependencies.progression === undefined
             ? {}
             : { progression: dependencies.progression }),
+          ...(dependencies.openWorld === true ? { openWorld: true } : {}),
         });
         receiptsWritten = written;
         receiptsFailed = failed;
-        if (written > 0 || failed > 0) logger.info({ written, failed }, 'Wrote session receipts');
+        receiptsStateOnly = stateOnly;
+        if (written > 0 || failed > 0) {
+          logger.info({ written, failed, ...(stateOnly > 0 ? { stateOnly } : {}) }, 'Wrote session receipts');
+        }
       }
 
       if (dependencies.botConfigs !== undefined && dependencies.database !== undefined) {
@@ -181,7 +191,7 @@ export function createJobsCycle(
 
       metrics?.observeCycle(
         (now() - startedAt) / 1000,
-        { slotsReleased, receiptsWritten, receiptsFailed },
+        { slotsReleased, receiptsWritten, receiptsFailed, receiptsStateOnly },
         now(),
       );
     } catch (error) {

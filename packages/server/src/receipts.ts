@@ -41,6 +41,17 @@ import { readReceiptWorldState } from './world-state.js';
 import type { WorldState } from './world-state.js';
 
 /**
+ * Por que o extrato foi emitido: o `EndReason` do `sim` — a sessão acabou, ou o personagem saiu — e,
+ * só para o hospedeiro, `'checkpoint'`: o extrato PARCIAL que o mundo grava a cada
+ * `WORLD_CHECKPOINT_MS` sem que ninguém tenha saído (#837, OW-16, ADR 0060 d.10d). O `sim` não o
+ * conhece de propósito — `Session.checkpoint` pede um `EndReason` porque devolve um `Receipt` do
+ * mesmo formato, mas o checkpoint não termina nada, e é o hospedeiro quem rotula a linha que grava.
+ * Vira o `type` (`session-checkpoint`) da linha de ledger, que é como se distingue um crédito
+ * periódico de uma saída ao ler o ledger.
+ */
+export type ReceiptReason = EndReason | 'checkpoint';
+
+/**
  * **O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f) vêm de `WorldState`:** `worldPosition`,
  * `townId`, `health`, `mana` e `conditions` — o estado de um personagem em REPOUSO, que faz deslogar a
  * 10 HP voltar com 10 HP. São todos ABSOLUTOS e última-escrita-vence, como `ammo`/`blessings`: o `jobs`
@@ -54,7 +65,7 @@ export interface SessionReceipt extends WorldState {
   readonly sessionId: string;
   readonly characterId: string;
   readonly accountId: string;
-  readonly reason: EndReason;
+  readonly reason: ReceiptReason;
   /** Sequência dentro da sessão. É metade da chave de idempotência do ledger. */
   readonly seq: number;
   /**
@@ -537,7 +548,7 @@ function parseReceipt(raw: string): SessionReceipt | null {
     sessionId: value['sessionId'],
     characterId: value['characterId'],
     accountId: value['accountId'],
-    reason: value['reason'] as EndReason,
+    reason: value['reason'] as ReceiptReason,
     seq: value['seq'],
     // A versão durável (#823): lista de PERMISSÃO, pela razão das skills — sem esta linha o campo
     // some no caminho de volta e o ledger trata todo extrato como sem versão, em silêncio.
