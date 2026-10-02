@@ -770,3 +770,52 @@ sessão — OW-20, `member-in-fight`).
 
 **Efeito no que esta decisão escreveu:** nenhum. As decisões 2, 6 e 13 continuam valendo; esta emenda só registra
 onde mora o teto, o que o grafo não liga, os dois níveis do serviço de Cidade e o que a recusa de subir é e não é.
+
+## Emenda — 2026-10-02 (#842, OW-21): a fila é a `WaitingList` do Canary, em Redis; a hunt idle direta vem do ticket e só com a flag
+
+A decisão 2b manda o mundo cheio responder como a fila do Canary, e a 6b manda a entrada direta numa hunt idle a
+partir do repouso. A OW-21 as implementou (`docs/product/open-world.md`, "A entrada pelo repouso") e fechou oito
+detalhes que as decisões deixavam em aberto:
+
+- **A fila é a `WaitingList` do Canary inteira, e não só a posição.** Quem chega com o mundo cheio entra no fim e
+  recebe a posição e a espera; mas a regra que importa é a de `clientLogin` (`canary/src/creatures/players/
+  management/waitlist.cpp:69-93`): **com fila, mesmo havendo vaga, o recém-chegado vai para o fim** e só entra se a
+  posição dele couber nas vagas. É o que impede furar a fila quando uma vaga abre e o primeiro ainda não voltou. A
+  espera segue `getTime` (5 s até a posição 4, 10 s até a 9, 20 s até a 19, 60 s até a 49, 120 s dali) e o prazo
+  para voltar é a espera mais 15 s (`TIMEOUT_EXTRA`); quem não volta sai da fila sozinho. **Premium vai na frente**
+  dos comuns, como a lista de prioridade do Canary (`waitlist.cpp:95-115`) — a decisão não dizia, e "tudo como
+  Canary" a trouxe.
+- **A fila mora em Redis** (`world:{id}:queue`, `…:until`, `…:seq`, todas com TTL), num script Lua só: limpar,
+  entrar e decidir são uma operação. O mundo vive num processo (invariante 9) e a fila poderia ser um `Map` dele;
+  fica no Redis porque o processo cai, e porque a trava `world:{id}:owner` (OW-59) troca o dono do mundo de nó sem
+  a fila precisar andar junto. É estado de apresentação, não quente: perdê-lo custa um lugar na fila, nunca um
+  resultado (invariante 3).
+- **Quem conta as vagas é o `WorldShard`**, no instante da chamada ao Redis. A corrida entre a fila e a entrada
+  (dois logins veem a mesma vaga) volta à fila, até três vezes. O teto continua sendo da ENTRADA do repouso (2b):
+  quem volta de uma instância nunca passa pela fila, e `vacanciesOf` nunca é negativo, porque quem volta pode
+  passar do teto.
+- **O mundo cheio abre o socket só para entregar a mensagem.** O handshake é aceito, o `game` manda `world-full`
+  e fecha com o código 4001; nenhum visualizador, nenhuma sessão, nenhum registro. Um `409` cru no upgrade não
+  carregaria a posição. `huntAvailable` é verdade enquanto o nó aceita sessões novas e o catálogo tem hunt.
+- **O slot de personagem ativo da conta não é devolvido na recusa.** O varredor de tickets o devolve no prazo,
+  como a todo ticket que não virou sessão; devolvê-lo na hora faria o segundo ticket do mesmo personagem ser
+  recusado como não autorizado em vez de receber o `world-full`.
+- **A hunt idle direta é `entry: { hunt }` no pedido de ticket**, conferida pelo `api` contra o conteúdo e levada
+  no claim, assinada como o resto (invariante 4). O `game` a cria como PRIMEIRA sessão — criação, não transição —
+  pela mesma construção da transição do menu, com o bot do ticket compilado na criação. Não cai no mundo se a hunt
+  sumiu: recusa o handshake (`409`), porque quem pediu a hunt idle e recebe uma multidão sem ter pedido é uma
+  surpresa pior que uma recusa que se explica.
+- **A hunt direta só vale com `OPEN_WORLD` e só para quem não tem sessão.** Com a flag desligada o `{ hunt }` é
+  IGNORADO — o repouso é a Cidade e a hunt se escolhe no menu, o jogo de hoje —, e ignorado, não recusado, para o
+  cliente do mundo aberto contra um servidor que desligou a flag entrar do mesmo jeito. Quem já tem sessão a
+  reencontra, e o snapshot de uma sessão interrompida (ADR 0010) tem precedência sobre as duas entradas: o
+  personagem está nela, não no repouso.
+- **Quem entra numa hunt direta sai da fila**, para a vaga que guardava não ficar ocupada até o prazo.
+
+**O que a OW-21 deixa, com dono:** o fim da hunt que começou do repouso ainda volta à Cidade (OW-20 decide mundo
+com alguém olhando, repouso sem); o cliente ainda ignora o `world-full` e reconecta pelo recuo de sempre, que
+pode passar do prazo da fila (OW-23); o ticket ainda não leva `world_id`, e a fila é a do `main` (OW-50).
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 2b e 6b continuam valendo; esta emenda só registra
+que a fila é a do Canary por inteiro (premium e a regra de não furar, inclusive), onde ela mora, e o que o
+`entry` do ticket é e não é.

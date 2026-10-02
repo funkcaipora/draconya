@@ -7,7 +7,8 @@
 // vida do processo. Quem hospeda sessão e visualizador é o `SessionHost`.
 
 import uWS from 'uWebSockets.js';
-import { decodeC2S } from '@draconya/protocol';
+import { decodeC2S, encodeS2C } from '@draconya/protocol';
+import type { S2CProps } from '@draconya/protocol';
 import type { Configuration } from '../config.js';
 import type { Session, SessionSnapshot } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
@@ -17,7 +18,7 @@ import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
 import {
-  SessionHost, type SessionBuilder, type SessionFactory, type SessionHostOptions,
+  SessionHost, type PrepareResult, type SessionBuilder, type SessionFactory, type SessionHostOptions,
   type SessionRestorer,
 } from './host.js';
 import { GameMetrics } from './metrics.js';
@@ -82,6 +83,11 @@ export interface GameDependencies {
   readonly catalogue?: SessionHostOptions['catalogue'];
   /** O catálogo de skills (#340, SV-04). */
   readonly skillCatalog?: SessionHostOptions['skillCatalog'];
+  /**
+   * A porta do mundo para quem vem do repouso (#842, OW-21): a fila do mundo cheio. Só existe com `OPEN_WORLD`
+   * ligado (`createSessionWiring`). Ver `SessionHostOptions.worldEntry`.
+   */
+  readonly worldEntry?: SessionHostOptions['worldEntry'];
 }
 
 /**
@@ -111,7 +117,19 @@ interface SocketData {
   accountId: string;
   characterId: string;
   viewer: Viewer | null;
+  /**
+   * O handshake foi aceito só para entregar a recusa do mundo cheio (OW-21): o socket abre, manda `world-full`
+   * e fecha — nenhum visualizador é criado e nenhuma sessão é tocada. Ausente é o socket de sempre.
+   */
+  worldFull?: S2CProps<'world-full'>;
 }
+
+/**
+ * O código com que o socket fecha depois do `world-full` (OW-21). Faixa de aplicação (4000–4999): o
+ * cliente que só olha o código sabe que NÃO foi uma queda — a fila já tem o lugar dele, e quem cuida de
+ * voltar é o tempo da mensagem, não o recuo de reconexão.
+ */
+const WORLD_FULL_CLOSE_CODE = 4001;
 
 export function createGame(
   configuration: Configuration,
@@ -194,6 +212,8 @@ export function createGame(
       ...(dependencies.skillCatalog === undefined
         ? {}
         : { skillCatalog: dependencies.skillCatalog }),
+      // A fila do mundo cheio (#842, OW-21): só com a flag ligada.
+      ...(dependencies.worldEntry === undefined ? {} : { worldEntry: dependencies.worldEntry }),
       // O mundo aberto (#836, OW-15): com a flag ligada todo extrato leva a posição, a cidade, a
       // vida, a mana e as condições do personagem.
       openWorld: configuration.OPEN_WORLD,
@@ -267,13 +287,15 @@ export function createGame(
         try {
           const claim = await tickets.consume(ticket, nodeId);
           let created = false;
-          let refused: 'party-full' | 'content-version' | 'session-not-here' | undefined;
+          let refused: PrepareResult['refused'];
+          let worldFull: PrepareResult['worldFull'];
           if (claim !== null) {
             const prepared = await host.prepare(
-              claim.characterId, claim.initialCharacter, claim.accountId, claim.party,
+              claim.characterId, claim.initialCharacter, claim.accountId, claim.party, claim.entry,
             );
             created = prepared.created;
             refused = prepared.refused;
+            worldFull = prepared.worldFull;
           }
           // Cliente desistiu enquanto Redis/diretório respondiam. Tocar em `response`
           // depois do abort derruba o processo inteiro.
@@ -292,6 +314,26 @@ export function createGame(
               response.writeStatus('401 Unauthorized').end();
               return;
             }
+            // O mundo cheio (OW-21, ADR 0060 d.2b): o socket ABRE — o cliente precisa da mensagem, e um
+            // `409` cru não leva a posição na fila — só para receber `world-full` e fechar. A hunt idle está ao
+            // alcance enquanto este nó aceita sessões novas e o catálogo tem hunt.
+            if (refused === 'world-full' && worldFull !== undefined) {
+              response.upgrade<SocketData>(
+                {
+                  accountId: claim.accountId, characterId: claim.characterId, viewer: null,
+                  worldFull: {
+                    position: worldFull.position,
+                    retryAfterMs: worldFull.retryAfterMs,
+                    huntAvailable: acceptingNewSessions && host.offersHunts,
+                  },
+                },
+                key,
+                protocol,
+                extensions,
+                context,
+              );
+              return;
+            }
             // A recusa da admissão em curso (#402): fecha com o motivo, sem `upgrade`. É o
             // mesmo desfecho do `onEnter` do #397, e o cliente tenta de novo pelo `/join`.
             if (refused !== undefined) {
@@ -299,6 +341,12 @@ export function createGame(
                 'party-full': '409 Conflict',
                 'content-version': '409 Conflict',
                 'session-not-here': '503 Service Unavailable',
+                // A hunt direta que o ticket pediu não existe mais neste nó (OW-21): o pedido é que está
+                // errado, e tentar de novo com o MESMO ticket — já queimado — não adianta.
+                'hunt-unavailable': '409 Conflict',
+                // `world-full` sem a posição não acontece (o hospedeiro sempre a leva); se acontecer, o
+                // cliente vê o nó indisponível e tenta de novo, que é o que a fila quer dele.
+                'world-full': '503 Service Unavailable',
               }[refused];
               response.writeStatus(status).end(refused);
               return;
@@ -326,6 +374,13 @@ export function createGame(
     open: (socket) => {
       if (host === null) return;
       const data = socket.getUserData();
+      // O mundo cheio (OW-21): entrega a posição na fila e fecha. Sem visualizador, sem sessão — o personagem
+      // não está em lugar nenhum, e `close` abaixo não tem o que desanexar.
+      if (data.worldFull !== undefined) {
+        socket.send(encodeS2C({ type: 'world-full', ...data.worldFull }), true);
+        socket.end(WORLD_FULL_CLOSE_CODE, 'world-full');
+        return;
+      }
       data.viewer = host.attach(socket, data.characterId);
     },
 

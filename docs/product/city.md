@@ -98,9 +98,10 @@ um campo para as duas perguntas. O ADR 0060 torna a Cidade o primeiro mundo — 
 
 ### O mundo no protocolo (OW-11, ADR 0060 d.2b, d.7 e d.8)
 
-O protocolo ganha os contratos de que o mundo precisa. **Nenhum servidor os emite ainda** — quem
-os produz são o `canLogout` e a saída no `sim` (OW-10, OW-14), a entrada pelo repouso (OW-21), o
-portão no-pvp (OW-27) e o cliente que os mostra (OW-23). Os quatro contratos são opcionais ou
+O protocolo ganha os contratos de que o mundo precisa. **Só o `world-full` é emitido por um servidor** — o
+`game` o manda no handshake do mundo cheio (OW-21, #842, [Mundo aberto](open-world.md#a-entrada-pelo-repouso-ow-21-842)).
+Quem produz os outros são o `canLogout` e a saída no `sim` (OW-10, OW-14), o portão no-pvp (OW-27) e o cliente
+que os mostra (OW-23). Os quatro contratos são opcionais ou
 novos, para o deploy em ondas: um nó `game` anterior continua falando com um cliente novo, e o
 inverso também.
 

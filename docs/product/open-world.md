@@ -10,9 +10,10 @@ ticket e o extrato que as levam), o **checkpoint do mundo** no hospedeiro (OW-16
 60 s e em toda saída, num `MULTI` só), a **liquidação do checkpoint no `jobs`** (OW-17, #838: o checkpoint
 sem valor movido vira só estado absoluto, sem linha de ledger) e o **mundo hospedado** (OW-18, #839: o
 `WorldShard`, o login que cai no mundo atrás de `OPEN_WORLD`, o grafo com `world` no centro, o serviço
-de Cidade só em PZ, a party e os amigos). A presença no hospedeiro (OW-19), a volta da hunt ao mundo
-(OW-20), a entrada pelo repouso com a fila (OW-21) e a apresentação do cliente (OW-23) ainda não
-saíram do papel.
+de Cidade só em PZ, a party e os amigos) e a **entrada pelo repouso** (OW-21, #842: o mundo cheio vira uma
+fila com posição, e a hunt idle é a primeira sessão de quem a pede, sem passar pelo mundo). A presença no
+hospedeiro (OW-19), a volta da hunt ao mundo (OW-20) e a apresentação do cliente (OW-23) ainda não saíram do
+papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -23,12 +24,13 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem sete: o que o mundo **é** como dado, a regra de
+cada peça do plano que sai do papel; hoje existem nove: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
 topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
 que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) —, o
 checkpoint, que leva o que o mundo rendeu ao Redis (OW-16), a liquidação do checkpoint, que decide o que
-do extrato vira linha de ledger (OW-17), e o mundo hospedado, que põe o personagem dentro dele (OW-18).
+do extrato vira linha de ledger (OW-17), o mundo hospedado, que põe o personagem dentro dele (OW-18), e a
+entrada pelo repouso, que decide por onde ele entra e o que acontece quando o mundo está cheio (OW-21).
 
 ## O personagem em repouso (OW-15, #836)
 
@@ -685,7 +687,7 @@ identidade: a Cidade é uma praça que enche e abre outra cópia; o mundo é **u
 |---|---|
 | Uma sessão por `world_id` no processo | `admit('main', personagem, entrada)` cria o mundo na primeira chegada e devolve a MESMA sessão nas seguintes — dois logins são duas pessoas na mesma sessão, nunca "Thais 2" |
 | O mundo vazio é esquecido | Quando o último sai, o hospedeiro larga a sessão e a próxima chegada cria outra, com `session_id` novo e a versão de conteúdo de agora (invariante 7): o `seq` do ledger recomeça em zero, e reusar o id colidiria com os extratos da anterior (invariante 10) |
-| O teto vale só na entrada do repouso | `entry: 'rest'` — o login — recusa o mundo cheio com `WorldFullError`; `entry: 'instance'` — quem volta de uma hunt — **nunca recusa**: já estava no mundo, e barrá-lo o deixaria numa sessão encerrada. O teto é o `capacity` do conteúdo (200); a fila com posição (`world-full`) e a hunt idle direta são da OW-21 |
+| O teto vale só na entrada do repouso | `entry: 'rest'` — o login — recusa o mundo cheio com `WorldFullError`; `entry: 'instance'` — quem volta de uma hunt — **nunca recusa**: já estava no mundo, e barrá-lo o deixaria numa sessão encerrada. O teto é o `capacity` do conteúdo (200); a fila com posição (`world-full`) e a hunt idle direta são a OW-21, abaixo |
 | O personagem do ticket traz as condições no relógio de zero | `carryRestoredConditions` as leva para o relógio do mundo, que já andou — sem isso `armConditions` as daria por vencidas na entrada (ver "O personagem em repouso") |
 | O mundo padrão é `main` | `characters.world_id` nasce `'main'` e o ticket ainda não o leva: a escolha do mundo é da OW-50. Conteúdo sem `worlds/main.json` com `OPEN_WORLD` ligado **não sobe** (recusa na construção, não no primeiro ticket) |
 
@@ -799,14 +801,102 @@ OW-59.
   `logout-refused` do `sim` ainda não são lidos; fechar o navegador não dispara o x-log.
 - **Mundo ↔ hunt idle** (OW-20): o fim, a morte e a drenagem de uma hunt ainda levam à Cidade (que cura), assistidos
   ou não; a entrada numa instância a partir do mundo não consulta `canLogout`; a volta só com alguém olhando.
-- **A entrada pelo repouso** (OW-21): o mundo cheio recusa o login com `WorldFullError` (o socket falha); a fila
-  `world-full` e a hunt idle direta do login não existem.
 - **A stamina** (OW-46): o tempo no mundo conta como recuperação na próxima transição e no próximo login — o
   `materializeStamina` da fronteira e o marco do extrato ainda tratam o mundo como "offline" (ADR 0060 d.14b).
 - **O `player-stats.zone` e o `inFight`** (OW-11): o protocolo os tem, e nenhum servidor os emite. O cliente
   da OW-23 depende deles para os ícones de PZ e de luta.
 - **A morte no mundo** (OW-32): sem monstro (OW-25) não há como morrer, e o dia em que houver, a saída por
   `member-left` leva o personagem à Cidade — a tela de relogin e o repouso no templo são da OW-32.
+
+## A entrada pelo repouso (OW-21, #842)
+
+Quem está em repouso — sem sessão, só a linha de `characters` — entra no jogo por **um de dois caminhos**,
+e é o ticket que diz qual (ADR 0060 d.6b). O mundo cheio não recusa mais o login: põe o personagem numa fila,
+como o Tibia, e oferece a hunt idle, que não tem teto.
+
+### O pedido: `POST /api/tickets { characterId, entry }`
+
+| `entry` | Primeira sessão |
+|---|---|
+| ausente, ou `"world"` | O mundo — a Cidade, com a flag desligada. É o pedido de sempre, e o ticket sai **byte a byte** como saía |
+| `{ "hunt": "<huntId>" }` | Uma hunt idle, **sem passar pelo mundo**: é criação, não transição (invariante 8) |
+
+- O `api` confere que a hunt existe no conteúdo fixado no boot (`hasHunt`) e recusa com `400 unknown-hunt`
+  — **antes** de resolver nó ou liquidar nada, e depois da posse. Um `entry` malformado (campo a mais, hunt
+  vazia, formato desconhecido) é `400 invalid-body`.
+- **Atrás de `OPEN_WORLD`.** Com a flag desligada o `{ hunt }` é **ignorado**, e não recusado: o repouso é a
+  Cidade, o primeiro contato sempre cria a dela e a hunt se escolhe no menu, como hoje. Um cliente do mundo
+  aberto contra um servidor que desligou a flag entra do mesmo jeito, na Cidade, em vez de ficar sem login.
+- O ticket carrega `entry` no claim (`TicketClaim.entry`), assinado como o resto (invariante 4): o cliente só
+  pede, e quem cria a sessão é o `game`. Um `entry` torto no claim é ticket recusado — nunca "o mundo".
+- **Só vale para quem não tem sessão.** Quem reconecta reencontra a sua — o mundo, a hunt em que estava —, e o
+  pedido de outra coisa é ignorado: trocar de sessão é transição, com `canLogout`, não handshake. O snapshot
+  de uma sessão interrompida (ADR 0010) também tem precedência: o personagem está nela, não no repouso.
+
+### A hunt idle direta
+
+O `game` cria a hunt como a PRIMEIRA sessão do personagem, pela mesma construção da transição do menu
+(`huntFor`): o personagem do ticket entra nela como entraria vindo da praça, com a boosted do dia que o ticket
+fixou e o bot do ticket **compilado na criação** — o ruleset tira as regras de saída da mesma configuração.
+O mundo nem nasce, e o mundo **cheio não a alcança**: é o que mantém a base econômica acessível com o mundo
+cheio, fora do ar ou atrás da flag.
+
+- A hunt que sumiu do conteúdo entre a emissão e a chegada (um deploy em rolagem) recusa o handshake com
+  `409 hunt-unavailable`. **Não cai no mundo no lugar dela**: quem pediu a hunt idle e recebe uma multidão sem
+  ter pedido é uma surpresa pior que uma recusa que se explica.
+- Quem estava na fila do mundo e entra numa hunt direta **sai da fila** (`WorldEntryGate.leave`): a vaga que
+  ele guardava não é mais dele, e sem isto ela ficaria ocupada até o prazo, com gente atrás esperando.
+- A âncora do mundo — onde o personagem deslogou — atravessa a hunt em `CharacterRuntime.worldPosition` e
+  volta ao banco no extrato dela (OW-15). A volta ao mundo e o repouso ao fim da hunt são da OW-20.
+
+### A fila do mundo cheio
+
+`WorldQueue` (`packages/server/src/world-queue.ts`) é a `WaitingList` do Canary
+(`canary/src/creatures/players/management/waitlist.cpp`), em Redis: uma fila por mundo (`world:{id}:queue`),
+os prazos (`…:until`) e o contador que dá a ordem de chegada (`…:seq`), tudo com TTL.
+
+| Regra | O que faz |
+|---|---|
+| Sem fila e com vaga | O personagem entra **sem tocar em nada**: nenhuma chave nasce no Redis |
+| Mundo cheio | Entra no fim da fila e recebe `world-full { position, retryAfterMs, huntAvailable }`; o socket abre só para isso e **fecha** com o código 4001 |
+| Com fila, mesmo havendo vaga | O recém-chegado vai para o **fim** e só entra se a posição dele couber nas vagas (`players online + slot <= maxPlayers`, `waitlist.cpp:69-93`). Sem isso, uma vaga que abre iria para o mais rápido, e o primeiro da fila — que ainda não voltou — a perderia |
+| Quem volta | Mantém a posição e renova o prazo |
+| Quem não volta | Sai da fila no prazo — a espera da posição mais 15 s —, e quem estava atrás sobe. Não há varredura: quem limpa é a próxima chamada |
+| Premium | Vai na frente dos comuns, como a lista de prioridade do Canary (`waitlist.cpp:95-115`); entre premiums, a ordem de chegada |
+| Quem volta de uma instância | **Nunca passa por aqui**: já estava no mundo, e o teto vale só na entrada (OW-18) |
+
+Limpar, entrar na fila e decidir são **uma operação só** (script Lua): duas tentativas simultâneas lendo a
+mesma fila deixariam as duas acharem que são a primeira.
+
+**Quem conta as vagas é o `WorldShard`** (`vacanciesOf`: o teto menos quem está no mundo, nunca negativo — quem
+volta de uma instância pode passá-lo), e a conta é feita **no instante da chamada** ao Redis. Ainda assim há uma
+corrida: dois logins veem a mesma vaga, a fila admite os dois e o segundo encontra o mundo cheio ao criar a
+sessão (`WorldFullError`). O hospedeiro então volta a perguntar à fila — que agora o recusa na posição de verdade,
+ou o admite se uma vaga abriu nesse meio tempo —, até três vezes (`#createInWorld`).
+
+`huntAvailable` é verdade enquanto o nó aceita sessões novas e o catálogo tem hunt (`SessionHost.offersHunts`):
+a hunt idle não é o mundo, não tem teto e não passa pela fila.
+
+### O que o hospedeiro faz com a recusa
+
+`SessionHost.prepare` devolve `{ created: false, refused: 'world-full', worldFull: { position, retryAfterMs } }`,
+e o `game` (`server.ts`) aceita o handshake **só para entregar a mensagem**: nenhum visualizador, nenhuma
+sessão, nenhum registro no diretório. A recusa **não deixa rastro** — o contador de versão durável que o ticket
+trouxe é desfeito, e o personagem que a fábrica chegou a pôr no mundo é tirado dele. O slot de personagem ativo
+da conta que o ticket reservou **não é devolvido na hora**: o varredor de tickets o devolve no prazo, como a todo
+ticket que não virou sessão, e devolver antes faria um segundo ticket do mesmo personagem — o duplo clique — ser
+recusado como não autorizado em vez de receber o `world-full`.
+
+Um nó montado **sem a fila** (o host de teste, um nó sem Redis) recusa o mundo cheio com `WorldFullError` e o
+handshake falha, como a OW-18 o deixou.
+
+### O que ainda não existe
+
+- **O cliente** (OW-23): mostra a posição, respeita o `retryAfterMs` e oferece a hunt idle.
+- **O fim da hunt que começou do repouso** (OW-20): volta ao mundo com alguém olhando, ao repouso sem. Até lá,
+  como toda hunt, volta à Cidade.
+- **A escolha do mundo** (OW-50): a porta é a do `main`; o ticket ainda não leva `world_id`.
+- **Uma métrica da fila**: o tamanho dela é `WorldQueue.size`, e nenhum painel o lê ainda.
 
 ## Parâmetros de balanceamento
 
@@ -824,6 +914,10 @@ OW-59.
 | A flag do mundo aberto | desligada (`OPEN_WORLD=0`) | `packages/server/src/config.ts`, `OPEN_WORLD`; [`docs/runtime-configuration.md`](../runtime-configuration.md) |
 | Mundo e cidade de quem existia antes da migração 0029 | `'main'` e `'thais'`, cheio, sem posição nem condição | `packages/server/migrations/0029_836-world-vitals.sql` |
 | Teto de condições por personagem na linha | 64 | `packages/server/src/world-state.ts`, `MAX_CONDITIONS` |
+| Espera de quem está na fila do mundo cheio | 5 s até a posição 4, 10 s até a 9, 20 s até a 19, 60 s até a 49 e 120 s dali em diante; o prazo para voltar é a espera mais 15 s | `packages/server/src/world-queue.ts` (a tabela do script `CLIENT_LOGIN`; no Canary, `waitlist.cpp:20-24, 49-67`) |
+| Vida das chaves da fila no Redis | 150 s sem uso; o contador de ordem vive 1 h desde a última chamada que deixou a fila de pé | `packages/server/src/world-queue.ts`, `KEY_TTL_MS`, `SEQUENCE_TTL_MS` |
+| Tentativas do login contra a corrida da fila | 3 | `packages/server/src/game/host.ts`, `WORLD_ENTRY_ATTEMPTS` |
+| Código com que o socket fecha depois do `world-full` | 4001 (faixa de aplicação) | `packages/server/src/game/server.ts`, `WORLD_FULL_CLOSE_CODE` |
 | Cadência do checkpoint do mundo | 60 000 ms (entre 1 s e 1 h) | `packages/server/src/config.ts`, `WORLD_CHECKPOINT_MS`; `packages/server/src/game/world-checkpoint.ts`, `WORLD_CHECKPOINT_MS`; [`docs/runtime-configuration.md`](../runtime-configuration.md) |
 
 ## Em aberto
@@ -839,6 +933,12 @@ OW-59.
 - O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
   sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
+- **O fim da hunt que começou do repouso** segue a regra de hoje — a Cidade — até a OW-20, que decide mundo
+  (com alguém olhando) ou repouso (sem). A âncora que a OW-20 vai ler já está no personagem: a hunt direta a
+  leva do ticket até o extrato.
+- **O cliente da fila** (OW-23) ainda não existe: o cliente de hoje ignora o `world-full` e reconecta pelo
+  recuo de sempre, que pode passar do prazo da fila (espera mais 15 s) e devolvê-lo ao fim dela. A OW-23 passa a
+  respeitar o `retryAfterMs` e a oferecer a hunt idle (`huntAvailable`).
 - O leque de saída barato (OW-22) saiu: codificar uma vez, visualizadores por personagem e AOI com
   andar — ver [Cidade](city.md#o-leque-barato-ow-22-845). Falta a AOI v2 para criaturas (OW-33) e
   para combate, efeitos, campos, cadáveres e tiles (OW-34): hoje a AOI só conhece jogador.
