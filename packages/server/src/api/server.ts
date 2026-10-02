@@ -135,6 +135,8 @@ export function buildApi(
         ? {}
         : { defaultBotConfig: dependencies.defaultBotConfig }),
       ...(dependencies.startingKit === undefined ? {} : { startingKit: dependencies.startingKit }),
+      // Com a flag ligada o repouso é `'offline'` na lista de personagens (#836, OW-15).
+      openWorld: configuration.OPEN_WORLD,
     });
   }
 
@@ -143,6 +145,9 @@ export function buildApi(
     app.post('/api/tickets', createTicketHandler({
       ...dependencies,
       tickets,
+      // A flag do mundo aberto (#836, OW-15): lida UMA vez do ambiente, nunca da dependência — o
+      // `main` não a passa, e um teste que a queira muda a configuração.
+      openWorld: configuration.OPEN_WORLD,
       ...(auth === undefined ? {} : { authenticate: auth.authenticate.bind(auth) }),
       ...(repository === undefined ? {} : {
         withOwnedCharacter: repository.withOwnedCharacter.bind(repository),
@@ -185,6 +190,8 @@ export function buildApi(
       ...(dependencies.pendingDurableVersion === undefined
         ? {}
         : { pendingDurableVersion: dependencies.pendingDurableVersion }),
+      // A flag do mundo aberto (#836, OW-15): o ticket de cada membro da party leva os vitais.
+      openWorld: configuration.OPEN_WORLD,
       ...(dependencies.loyaltyBonusPercentOf === undefined
         ? {}
         : { loyaltyBonusPercentOf: dependencies.loyaltyBonusPercentOf }),

@@ -37,8 +37,20 @@ import type {
   FightMode, HazardState, ItemInstanceOverlay, LearnedSpellsState, NotableEvent, OfflineTrainingState, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
+import { readReceiptWorldState } from './world-state.js';
+import type { WorldState } from './world-state.js';
 
-export interface SessionReceipt {
+/**
+ * **O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f) vêm de `WorldState`:** `worldPosition`,
+ * `townId`, `health`, `mana` e `conditions` — o estado de um personagem em REPOUSO, que faz deslogar a
+ * 10 HP voltar com 10 HP. São todos ABSOLUTOS e última-escrita-vence, como `ammo`/`blessings`: o `jobs`
+ * só os escreve quando `durableVersion > characters.durable_version`. O hospedeiro SÓ os leva com
+ * `OPEN_WORLD` ligado — com a flag desligada o extrato é o de antes, e o ledger não toca nas colunas.
+ * AUSENTE é "não toque"; `worldPosition: null` é "volta ao templo" e `conditions: []` é "nenhuma"
+ * (ver `WorldState`). Quem emite o extrato de quem morreu leva a vida e a mana CHEIAS, a posição nula
+ * e nenhuma condição: a morte do Tibia manda ao templo, de volta ao máximo (`player.cpp:4226-4252`).
+ */
+export interface SessionReceipt extends WorldState {
   readonly sessionId: string;
   readonly characterId: string;
   readonly accountId: string;
@@ -630,5 +642,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(Array.isArray(value['removedInstances'])
       ? { removedInstances: value['removedInstances'] as string[] }
       : {}),
+    // O mundo e os vitais (#836, OW-15): lista de PERMISSÃO, pela razão das skills — e conferidos
+    // campo a campo pela MESMA leitura que o ticket usa, porque o ledger os grava direto nas colunas
+    // e uma coordenada fora do mapa, uma vida negativa ou uma condição com prazo `NaN` não pode
+    // chegar lá. Torto vira ausente, e a coluna fica como estava.
+    ...readReceiptWorldState(value),
   };
 }

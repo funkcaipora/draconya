@@ -28,7 +28,9 @@ const character = (id: string, accountId: string, over: Partial<Pick<CharacterRe
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, hazard: null, bosstiary: null, learnedSpells: null,
   familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  durableVersion: 0, createdAt: new Date(),
+  durableVersion: 0,
+  worldId: 'main', worldPosition: null, townId: 'thais', health: null, mana: null, conditions: null,
+  createdAt: new Date(),
 });
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };

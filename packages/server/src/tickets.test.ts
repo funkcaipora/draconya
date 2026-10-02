@@ -576,6 +576,34 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the world and the vitals of the character, and drops each field it cannot trust (#836, OW-15)', async () => {
+    // O que faz deslogar a 10 HP voltar com 10 HP: o ticket leva a posição absoluta, a cidade, a
+    // vida, a mana e as condições que faltavam. Cada campo é conferido sozinho — torto vira AUSENTE
+    // (cheio, no templo, sem condição), nunca ticket recusado, e um campo ruim não derruba os outros.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const poison = { key: 'poison', expiresAtMs: 4_000, tick: { amount: 3, intervalMs: 1_000, kind: 'damage' as const } };
+    const world = {
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 0, conditions: [poison],
+    };
+    const issued = await tickets.issue('a1', 'p1', { level: 1, xp: 0, ...world });
+    if (!issued.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0, ...world },
+    });
+    await tickets.revoke(issued.value.ticket, 'a1', 'p1');
+
+    const torto = await tickets.issue('a1', 'p1', {
+      level: 1, xp: 0, worldPosition: { x: 1, y: 2 }, townId: '', health: 0, mana: 7,
+      conditions: [{ key: 'haste', expiresAtMs: -1 }],
+    } as unknown as InitialCharacter);
+    if (!torto.ok) throw new Error('expected a ticket');
+    // Vida zero é um morto, e o morto entra cheio: o campo some. A mana boa sobrevive ao resto.
+    expect(await tickets.consume(torto.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0, mana: 7 },
+    });
+  });
+
   it('carries the offline training record, and drops one it cannot trust (#631, ADR 0059 d.3)', async () => {
     // O banco e a skill do livro entram na sessão: o banco CRESCE com o tempo de hunt, e sem o
     // registro de entrada a primeira hunt do dia sobrescreveria a linha com um banco zerado. A

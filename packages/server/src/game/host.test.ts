@@ -8731,3 +8731,243 @@ describe('a versão durável dos extratos (#823, OW-02)', () => {
       .toEqual([8, 8]);
   });
 });
+
+describe('o mundo e os vitais nos extratos (#836, OW-15, ADR 0060 d.10.f)', () => {
+  type Saved = Record<string, unknown>;
+  const recorder = () => {
+    const saved: Saved[] = [];
+    const receipts = { save: async (r: Saved) => { saved.push(r); } } as unknown as ReceiptStore;
+    return { saved, receipts };
+  };
+  const directory = {
+    register: async () => true, succeed: async () => true, release: async () => {}, releaseSlot: async () => {},
+    renew: async () => {},
+  } as unknown as SessionDirectory;
+  const cityRuleset: Ruleset = {
+    type: 'city', shared: true, hz: () => 0, onEnter: () => {}, onEvent: () => {},
+    onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const huntRuleset: Ruleset = {
+    type: 'hunt', hz: () => 1, onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const TEMPLE = { x: 32369, y: 32241, z: 7 };
+  const haste = { key: 'haste', expiresAtMs: 9_500, speedPercent: 30 };
+  const poison = {
+    key: 'poison', expiresAtMs: 4_000, nextTickAtMs: 3_100,
+    tick: { amount: 3, intervalMs: 1_000, kind: 'damage' as const },
+  };
+  /** O personagem que saiu a 10 HP, com a âncora do mundo, a cidade e duas condições. */
+  const wounded = (
+    id: string, over: Partial<ConstructorParameters<typeof CharacterRuntime>[0]> = {},
+    anchor: typeof TEMPLE | null = TEMPLE,
+  ) => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 }, health: 10, maxHealth: 100, mana: 3, maxMana: 40,
+    level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+    townId: 'thais', ...(anchor === null ? {} : { worldPosition: anchor }), conditions: [haste, poison],
+    ...over,
+  });
+
+  /** Uma Cidade nova a cada `createSession`, com o dono que o teste quiser. */
+  const cityHost = (
+    options: { receipts: ReceiptStore; openWorld?: boolean; owner: (id: string) => CharacterRuntime; advanceMs?: number },
+  ) => new SessionHost({
+    nodeId: 'n1', contentVersion: 'v-test', logger, directory, receipts: options.receipts,
+    ...(options.openWorld === undefined ? {} : { openWorld: options.openWorld }),
+    createSession: (characterId) => {
+      const city = new Session({
+        id: 'city-1', contentVersion: 'v-test', ruleset: cityRuleset, rng: Rng.fromSeed('city'), createdAtMs: 0,
+      });
+      city.enter(options.owner(characterId));
+      if (options.advanceMs !== undefined) city.advanceBy(options.advanceMs);
+      return city;
+    },
+  });
+  /** Mexe na postura na Cidade: é o que a marca como suja, e sai um extrato de estado ao soltar. */
+  const touch = (host: SessionHost, characterId: string) => {
+    const viewer = host.attach(new FakeSocket(), characterId);
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+  };
+
+  it('COM a flag, o extrato de estado da Cidade leva a âncora, a cidade, a vida, a mana e as condições', async () => {
+    // O que faz deslogar a 10 HP voltar com 10 HP. Mutação que mata: tirar `#worldStateOf` do
+    // `#saveDurableReceipt` — o ledger descarta o extrato mais velho por inteiro, e um de estado sem
+    // os vitais desfaria os da hunt anterior ao chegar na frente.
+    const { saved, receipts } = recorder();
+    const host = cityHost({ receipts, openWorld: true, owner: (id) => wounded(id) });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+    touch(host, 'p1');
+
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      worldPosition: TEMPLE, townId: 'thais', health: 10, mana: 3, conditions: [haste, poison],
+    });
+  });
+
+  it('SEM a flag — o default — o extrato é o de antes: nenhum campo novo, mesmo com cidade e vitais no personagem', async () => {
+    // O portão do plano: com a flag desligada tudo funciona como hoje, byte a byte.
+    for (const openWorld of [undefined, false]) {
+      const { saved, receipts } = recorder();
+      const host = cityHost({ receipts, ...(openWorld === undefined ? {} : { openWorld }), owner: (id) => wounded(id) });
+      await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+      touch(host, 'p1');
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+        expect(saved[0]).not.toHaveProperty(field);
+      }
+    }
+  });
+
+  it('personagem sem cidade — o ticket não trouxe o mundo — NÃO leva nada, mesmo com a flag: não apaga o que a linha guarda', async () => {
+    // Um `api` anterior (ou com a flag desligada) emite o ticket sem o mundo. Gravar
+    // `worldPosition: null` apagaria a posição da linha, e a vida cheia desfaria a que ela guarda.
+    const { saved, receipts } = recorder();
+    const host = cityHost({
+      receipts, openWorld: true, owner: (id) => new CharacterRuntime({
+        id, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+        level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+      }),
+    });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+    touch(host, 'p1');
+    await host.release('p1', 1000, 'logout');
+
+    for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+      expect(saved[0]).not.toHaveProperty(field);
+    }
+  });
+
+  it('as condições saem como PRAZO RESTANTE no relógio da sessão em que o dono está — não o instante da sessão', async () => {
+    // A Cidade andou 3 s: a haste vence em 9 500 ms do relógio dela, e faltam 6 500 ms. O veneno
+    // tiquetava em 3 100 ms (faltam 100) e vence em 4 000 (faltam 1 000).
+    const { saved, receipts } = recorder();
+    const host = cityHost({
+      receipts, openWorld: true, advanceMs: 3_000,
+      // O dono entra com os instantes que traz (relógio zero, como o do ticket) e a Cidade anda 3 s:
+      // o que falta é o prazo menos o relógio dela.
+      owner: (id) => wounded(id),
+    });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+    touch(host, 'p1');
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved[0]?.['conditions']).toEqual([
+      { ...haste, expiresAtMs: 6_500 },
+      { ...poison, expiresAtMs: 1_000, nextTickAtMs: 100 },
+    ]);
+  });
+
+  it('a condição que já venceu não vai para a linha, e sem nenhuma o extrato leva `conditions: []` — "nenhuma"', async () => {
+    const { saved, receipts } = recorder();
+    const host = cityHost({
+      receipts, openWorld: true, advanceMs: 20_000, owner: (id) => wounded(id),
+    });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+    touch(host, 'p1');
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved[0]?.['conditions']).toEqual([]);
+  });
+
+  it('quem nunca esteve no mundo leva a posição `null` — o templo —, e não a ausência', async () => {
+    const { saved, receipts } = recorder();
+    const host = cityHost({
+      receipts, openWorld: true, owner: (id) => wounded(id, {}, null),
+    });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+    touch(host, 'p1');
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved[0]).toHaveProperty('worldPosition', null);
+  });
+
+  it('o extrato de fim de uma hunt leva o mundo e os vitais do dono, como o de estado', async () => {
+    // `#persistReceipt`, o caminho da hunt idle — o outro dos dois extratos do estado absoluto.
+    // Mutação que mata: esquecer o campo em `#persistReceipt`.
+    const { saved, receipts } = recorder();
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory, receipts, openWorld: true,
+      createSession: (characterId) => {
+        const session = new Session({
+          id: 'hunt-1', contentVersion: 'v-test', ruleset: huntRuleset, rng: Rng.fromSeed('h'), createdAtMs: 0,
+        });
+        session.enter(wounded(characterId));
+        return session;
+      },
+    });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+
+    await host.drainAll('drain');
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      worldPosition: TEMPLE, townId: 'thais', health: 10, mana: 3, conditions: [haste, poison],
+    });
+  });
+
+  it('quem morreu volta ao templo de vida e mana cheias, sem condição — o extrato nunca grava a vida zero', async () => {
+    const { saved, receipts } = recorder();
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory, receipts, openWorld: true,
+      createSession: (characterId) => {
+        const session = new Session({
+          id: 'hunt-1', contentVersion: 'v-test', ruleset: huntRuleset, rng: Rng.fromSeed('h'), createdAtMs: 0,
+        });
+        session.enter(wounded(characterId, { health: 0, mana: 0, alive: false }));
+        return session;
+      },
+    });
+    await host.prepare('p1', { level: 8, xp: 0 }, 'a1');
+
+    await host.drainAll('drain');
+
+    expect(saved[0]).toMatchObject({ worldPosition: null, townId: 'thais', health: 100, mana: 40, conditions: [] });
+  });
+
+  it('o recém-chegado de uma hunt em curso recebe as condições do ticket no relógio DELA — não as vê vencidas na entrada', async () => {
+    // Elas vêm da linha como prazo restante (relógio zero), e `Session.enter` não traduz quem nunca
+    // esteve numa sessão: sem `carryRestoredConditions` a hunt, que já anda há 60 s, as veria
+    // vencidas e o `armConditions` as apagaria. Mutação que mata: tirar a chamada de `#admitLateJoiner`.
+    let newcomer: CharacterRuntime | undefined;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory,
+      createSession: (characterId, _initial, ticket) => {
+        const session = new Session({
+          id: ticket?.sessionId ?? 's', contentVersion: 'v-test', ruleset: huntRuleset, rng: Rng.fromSeed('p'),
+          createdAtMs: 0,
+        });
+        for (const member of ticket?.members ?? [{ characterId }]) session.enter(wounded(member.characterId, { conditions: [] }));
+        session.advanceBy(60_000);
+        return session;
+      },
+      createParticipant: (characterId, initial) => {
+        newcomer = wounded(characterId, { conditions: initial.conditions ?? [] });
+        return newcomer;
+      },
+    });
+    const base = {
+      sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    };
+    await host.prepare('a', { level: 8, xp: 0 }, 'acc-a', {
+      ...base, members: [{ characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0 } }],
+    });
+    const joiner = {
+      ...base, join: true as const,
+      members: [{
+        characterId: 'c', accountId: 'acc-c', initialCharacter: { level: 8, xp: 0, conditions: [haste, poison] },
+      }],
+    };
+
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+
+    expect(result).toEqual({ created: true });
+    expect(newcomer?.conditions.getState()).toEqual([
+      { ...haste, expiresAtMs: 69_500 },
+      { ...poison, expiresAtMs: 64_000, nextTickAtMs: 63_100 },
+    ]);
+  });
+});

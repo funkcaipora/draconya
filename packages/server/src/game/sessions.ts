@@ -22,6 +22,7 @@ import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
 import type { InitialCharacter, PartyTicket } from '../tickets.js';
+import { carryRestoredConditions } from '../world-state.js';
 
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
@@ -130,13 +131,17 @@ export class CityShard {
    * deploys continuaria rodando a versão do primeiro. Vazia, ela não custa nada a ninguém para
    * ser refeita — e o hospedeiro já a esqueceu quando o último saiu.
    */
-  admit(character: CharacterRuntime): Session {
+  admit(character: CharacterRuntime, fromTicket = false): Session {
     this.#copies = this.#copies.filter(
       (copy) => copy.ended === null && copy.participants.length > 0,
     );
     const room = this.#copies.find((copy) => copy.participants.length < this.#capacity);
     const session = room ?? this.#create();
     if (room === undefined) this.#copies.push(session);
+    // O personagem que NASCE do ticket traz as condições como prazo restante (relógio zero, #836):
+    // a cópia que já andou tem outro relógio, e `Session.enter` não traduz quem nunca esteve numa
+    // sessão. Quem volta de uma hunt (`fromTicket` falso) já foi traduzido por `moveToClock`.
+    if (fromTicket) carryRestoredConditions(character, session);
     session.enter(character);
     return session;
   }
@@ -178,7 +183,7 @@ export function createCitySessionFactory(
     if (party !== undefined) return partyHuntFor(content, party, now);
     const character = characterFromTicket(content, characterId, initialCharacter, now);
     // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
-    return shard.admit(character);
+    return shard.admit(character, true);
   };
 }
 
@@ -263,8 +268,18 @@ export function characterFromTicket(
       // Promovido (#566, ADR 0042 decisão 1): vem do ticket, como a vocação. Ausente é `false`
       // no construtor de `CharacterRuntime` — o normal de quem nunca promoveu.
       ...(initialCharacter.promoted === true ? { promoted: true } : {}),
-      health: stats.maxHealth, maxHealth: stats.maxHealth,
-      mana: stats.maxMana, maxMana: stats.maxMana,
+      // A vida e a mana vêm do ticket quando ele as traz (#836, OW-15, ADR 0060 d.10.f): deslogar a
+      // 10 HP volta com 10 HP, e é isto que faz o repouso não curar ninguém. LIMITADAS pelo máximo do
+      // level — um level novo, uma vocação promovida ou conteúdo que mudou não deixam a vida acima do
+      // teto —, e a vida nunca abaixo de 1: zero seria um morto no tile de entrada. Ausentes (a flag
+      // `OPEN_WORLD` desligada, personagem que nunca saiu do mundo) o personagem nasce CHEIO, como
+      // sempre nasceu.
+      health: initialCharacter.health === undefined
+        ? stats.maxHealth : Math.min(Math.max(1, initialCharacter.health), stats.maxHealth),
+      maxHealth: stats.maxHealth,
+      mana: initialCharacter.mana === undefined
+        ? stats.maxMana : Math.min(Math.max(0, initialCharacter.mana), stats.maxMana),
+      maxMana: stats.maxMana,
       capacity: stats.capacity,
       // O saldo de entrada vem do TICKET (invariante 4). Ausente é zero, e zero recusa gasto —
       // é o lado seguro do erro: não gastar o que não se sabe ter.
@@ -332,6 +347,17 @@ export function characterFromTicket(
       ...(initialCharacter.boostedMonsterId === undefined
         ? {}
         : { boostedMonsterId: initialCharacter.boostedMonsterId }),
+      // O mundo (#836, OW-15, ADR 0060 d.3.b e d.6): a âncora absoluta onde ele saiu — o mundo o
+      // coloca ali, e cai no templo se o tile não existe mais (`placeOnEnter`) —, e a cidade, que o
+      // dono da sessão devolve no extrato. Ausentes, o personagem nunca esteve no mundo: o templo.
+      ...(initialCharacter.worldPosition === undefined ? {} : { worldPosition: initialCharacter.worldPosition }),
+      ...(initialCharacter.townId === undefined ? {} : { townId: initialCharacter.townId }),
+      // As condições que faltavam (#836, OW-15), como PRAZO RESTANTE: relógio zero, que
+      // `carryRestoredConditions` leva para o da sessão que o recebe. O ruleset as rearma como
+      // eventos no `onEnter` (`HuntRuleset#armConditions`) — a haste e o veneno que faltavam correm
+      // outra vez, e a que não tinha mais prazo nem chegou ao ticket.
+      ...(initialCharacter.conditions === undefined || initialCharacter.conditions.length === 0
+        ? {} : { conditions: initialCharacter.conditions }),
       // O bônus de Loyalty (#628, ADR 0052 decisão 5): calculado pela `api` na emissão e fixado
       // AGORA, como a boosted — a sessão nunca relê conta nem relógio, e o valor atravessa toda
       // transição Cidade↔hunt e toda retomada de snapshot (vive no `CharacterState`).

@@ -359,6 +359,52 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 4)).not.toHaveProperty('fightMode');
   });
 
+  it('carries the world and the vitals through Redis and back, and a receipt without them stays without (#836, OW-15)', async () => {
+    // A mesma lista de PERMISSÃO. Posição, cidade, vida, mana e condições voltam inteiras; o extrato
+    // sem os campos não ganha chave nenhuma (o ledger não toca as colunas); e `worldPosition: null`
+    // e `conditions: []` são EXPLÍCITOS — "volta ao templo" e "nenhuma" — e atravessam, ao contrário
+    // da ausência. Mutação que mata: esquecer o `...readReceiptWorldState` de `parseReceipt`.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const poison = { key: 'poison', expiresAtMs: 4_000, tick: { amount: 3, intervalMs: 1_000, kind: 'damage' as const } };
+    await store.save(receiptOf(randomUUID(), characterId, {
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 0, conditions: [poison],
+    }));
+    await store.save(receiptOf(randomUUID(), characterId, {
+      seq: 2, worldPosition: null, townId: 'thais', health: 150, mana: 40, conditions: [],
+    }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3 }));
+
+    const found = await store.pendingFor(characterId);
+    const bySeq = (seq: number) => found.find((receipt) => receipt.seq === seq);
+
+    expect(bySeq(1)).toMatchObject({
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 0, conditions: [poison],
+    });
+    expect(bySeq(2)).toMatchObject({ worldPosition: null, health: 150, mana: 40, conditions: [] });
+    for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+      expect(bySeq(3)).not.toHaveProperty(field);
+    }
+  });
+
+  it('drops a malformed world or vital field on the way back, field by field (#836, OW-15)', async () => {
+    // O ledger grava estes campos direto nas colunas: uma coordenada fora do mapa, uma vida negativa
+    // ou uma condição com prazo `NaN` não pode chegar lá. O campo torto some e os outros seguem.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, {
+      worldPosition: { x: 1, y: 2 } as never, townId: '', health: -4, mana: 12,
+      conditions: [{ key: 'haste' }] as never,
+    }));
+
+    const [found] = await store.pendingFor(characterId);
+
+    expect(found).toMatchObject({ mana: 12 });
+    for (const field of ['worldPosition', 'townId', 'health', 'conditions']) {
+      expect(found).not.toHaveProperty(field);
+    }
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um
