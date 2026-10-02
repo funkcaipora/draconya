@@ -113,6 +113,32 @@ Saída é **um frame por ciclo**, em lote, nunca um `send` por evento — é o q
 projeção de 0,5–1,5 KB/s por jogador. As exceções são `welcome` e `pong`, que saem na hora:
 `pong` que espera o ciclo mede a fila, não a rede.
 
+**A mesma mensagem para N visualizadores é codificada UMA vez por ciclo** (OW-22, ADR 0060 d.11).
+O `EncodeCache` (`game/viewer.ts`) guarda o frame de cada OBJETO de mensagem, e o
+`SessionHost.flush` o passa a `Viewer.flush` nas sessões com mais de um visualizador — a hunt fria
+de um visualizador só não paga a inserção no mapa. A chave é a **identidade do objeto**, não o
+conteúdo, e é daí que sai a regra de quem escreve um caminho de saída:
+
+- **Monte a mensagem UMA vez, fora do laço de destinatários**, e entregue a mesma referência a
+  todos (`const message = {...}; for (const v of ...) v.send(message)`). Montá-la dentro do laço
+  (`v.send({ type: 'x', ...dados })`) funciona, produz os mesmos bytes e desliga o cache em
+  silêncio: é o tipo de regressão que nenhum teste de conteúdo vê, e só o `bench:city` (coluna
+  `B cod/vis/s`) e o teste `o mesmo passo para vários vizinhos é codificado UMA vez` pegam.
+- **Não mute uma mensagem depois de entregá-la a um visualizador.** O cache vive até o fim do
+  flush; mutar entre dois flushes é inofensivo (`clear()` fecha o ciclo), mutar entre duas entregas
+  do mesmo ciclo manda conteúdos diferentes por engano.
+- O lote de cada visualizador continua sendo montado por visualizador (`packBatch`): cada um recebe
+  um conjunto diferente de mensagens, e o envelope de lote tem chave de ofuscação própria. O fio
+  não muda byte a byte — com `Math.random` fixo, os frames saem iguais com e sem o cache
+  (`encodeOnce: false` é o controle, e o `bench:city` com `ENCODE=each` o mede).
+
+**Os visualizadores de uma sessão são um `ViewerSet`** (`game/viewer-set.ts`): o conjunto mais um
+índice `characterId → Set<Viewer>`. `viewers.of(id)` e `viewers.countOf(id)` substituem o filtro
+`for (v of viewers) if (v.characterId === id)` — numa praça de trezentos, o passo de cada um era
+`vizinhos × visualizadores` comparações. O índice só se mantém consistente porque `add` e `delete`
+são os dois únicos pontos de entrada: não existe jeito de mexer num lado e esquecer o outro. Quem
+solta visualizadores enquanto percorre copia antes (`[...viewers.of(id)]`).
+
 ## Reanexar devolve estado, nunca replay (FUN-32)
 
 `session-attach` responde com `session-state`: **onde as coisas estão agora**, mais os
@@ -1007,6 +1033,15 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   a partir de um tile em que a criatura nunca esteve, para ele.
 - **A AOI só existe no shard.** Numa hunt de um personagem ela seria índice para nada, no caminho
   quente das 5.000 instâncias que a FUN-46 mediu.
+- **A célula da AOI carrega o ANDAR** (OW-22). Dois personagens em andares que o Canary não deixa
+  ver um ao outro não se enxergam, por perto que estejam em x e y: da superfície se veem os andares
+  0 a 7 (o 6 alcança até o 8, o 7 até o 9), do subsolo dois para cada lado (`Spectators::getSpectators`,
+  `canary/src/map/spectators.cpp:125-139`; `floorRange` e `floorsSee` em `game/aoi.ts`). A relação é
+  simétrica (preso por teste nos 16 × 16 pares), a chave de célula tem uma faixa por andar de
+  subsolo e uma só para a superfície, e trocar de andar SEMPRE reavalia — a escada leva um tile
+  adiante, e na mesma célula a regra continua sendo por andar. O alcance em x e y continua o da
+  célula: o `canSee` do Canary desloca a caixa um tile por andar (a perspectiva do cliente) e a AOI
+  não — folga de sobra para os andares que o recorte tem. Um ponto sem `z` vale o andar 7.
 - **`sentStats` guarda o que foi ENTREGUE, nunca o que foi calculado** (FUN-109). O
   `player-stats` ao vivo sai da comparação campo a campo entre os vitais de agora e os últimos
   que algum visualizador recebeu — no `session-attach` e no ciclo com visualizador. Sem

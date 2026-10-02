@@ -290,6 +290,9 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
   [plano](../open-world-plan.md). É aí que `canLogout` ganha chamador, e que a sessão de mundo
   ganha quem a hospede.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
+- O leque de saída barato (OW-22) saiu: codificar uma vez, visualizadores por personagem e AOI com
+  andar — ver [Cidade](city.md#o-leque-barato-ow-22-845). Falta a AOI v2 para criaturas (OW-33) e
+  para combate, efeitos, campos, cadáveres e tiles (OW-34): hoje a AOI só conhece jogador.
 
 ## Divergências do PRD
 
