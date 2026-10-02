@@ -329,8 +329,9 @@ export const characters = pgTable(
     /**
      * O mundo a que o personagem pertence (#836, OW-15, ADR 0060 decisão 2.a): o `id` de
      * `content.worlds` (`data/worlds/<id>.json`), escolhido na criação, como no Tibia. `'main'` é o
-     * único mundo hoje. Nada o lê ainda — quem o usa é a escolha de mundo (OW-50) e a admissão do
-     * `WorldShard` (OW-18).
+     * único mundo hoje. Nada o lê ainda — quem o usa é a escolha de mundo (OW-50). A admissão do
+     * `WorldShard` (OW-18) NÃO o lê: o ticket não leva o id, e ela usa a constante `DEFAULT_WORLD_ID`
+     * (`'main'`) até a OW-50 trazê-lo.
      */
     worldId: text('world_id').notNull().default('main'),
     /**

@@ -87,7 +87,7 @@ O caminho de volta tem uma armadilha: `Session.enter` **não** traduz o personag
 sessão anterior não há de onde vir), então uma sessão que já andou — o recém-chegado de uma party em curso,
 a Cidade, o mundo — veria toda condição como vencida no instante da entrada, e o ruleset a apagaria.
 `carryRestoredConditions` soma o relógio da sessão **antes** de `enter` (o hospedeiro o faz para o
-recém-chegado e a Cidade; o `WorldShard` da OW-18 tem de fazer o mesmo).
+recém-chegado e a Cidade, e o `WorldShard.admit` da OW-18 o faz para quem nasce do ticket).
 
 ### O repouso é `'offline'`
 
@@ -735,6 +735,27 @@ agregado, então a bênção comprada no templo move `goldDelta` E `goldSpent`, 
 segue como era. Os Charms (`charm-unlock`, `charm-assign`, `charm-remove`) continuam valendo de qualquer
 sessão (ADR 0052 d.4).
 
+### O equipamento atravessa a transição (mundo ↔ hunt)
+
+O destino de uma transição é construído **antes** de a origem soltar o personagem (a recusa do destino não pode
+deixá-lo sem sessão), e o personagem é o MESMO `CharacterRuntime` nas duas. Até o mundo ser hospedado só a Cidade
+— que não simula — era origem; agora a origem também tem observer de equipamento, prazo de anel e regeneração de
+item. Três regras:
+
+- **O observer é do dono.** `EquipmentObserver.owner` é a sessão que o instalou, e o `onLeave`/`onEnd` chama
+  `Inventory.releaseEquipmentObserver(session)`, que só limpa o que é dela. Sem isso a saída da origem apagava o
+  observer que o destino acabara de instalar: a bota não mexia na velocidade e o anel tirado deixava o vencimento
+  na fila.
+- **O que só a origem sabe vai antes.** O hospedeiro chama `Session.beforeLeave(characterId)`
+  (`Ruleset.onBeforeLeave`) antes de construir o destino, e o `HuntRuleset` guarda o restante do prazo do anel no
+  `overlay` — o destino o lê na entrada. **Só publica; não cancela nada**: a transição recusada deixa o anel
+  vencendo na fila da origem, e o `onLeave`/`onEnd` repete a conta com o mesmo valor (nenhum tempo lógico corre
+  entre os dois). Sem isso o anel vestido 10 minutos no mundo chegava à hunt com o prazo cheio.
+- **A regeneração do item sai da fila na saída.** O subject é `<id>:<slot>:<recurso>`, que o `cancelEvents(<id>)`
+  da entrada (subject exato) não alcança; o mundo reentra o MESMO id na MESMA sessão num relogue rápido, e a cadeia
+  que ficou achava o personagem novo por id e curava junto da nova — o anel a 2×, 3×… A instância não muda: o id
+  de quem sai nunca volta à fila dela.
+
 ### O que mais o hospedeiro faz com o mundo
 
 - **A AOI está ligada** (`usesAreaOfInterest`): cada visualizador recebe só a vizinhança — quem está por
@@ -762,8 +783,8 @@ sessão (ADR 0052 d.4).
   **Largar a hunt a partir do mundo ainda não passa por `canLogout`**: o `api` só vê o TIPO da sessão, e o gate
   de quem está em luta é do `game` (OW-20, `member-in-fight`).
 - **Os amigos** (`api/friends.ts`): `GET /api/friends` responde `where: 'world'` para o amigo no mundo — `'city'`
-  na Cidade, `'hunt'` em qualquer instância, `null` offline. O rótulo no cliente é da OW-23: até lá o amigo no
-  mundo aparece com o ponto de online e o texto "offline".
+  na Cidade, `'hunt'` em qualquer instância, `null` offline. O cliente o rotula "No mundo" (`FriendsModal`); o
+  resto do HUD do mundo é da OW-23.
 
 ### O nó se recusa a subir com outro `game`
 

@@ -517,7 +517,15 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   sozinha ("não encontram o personagem"), e isso só é verdade até o mesmo id voltar — o passo, a
   regeneração e o bot achariam o `CharacterRuntime` novo e empilhariam uma cadeia por relogue. Um
   no-op na instância (o id de quem entra nunca esteve na fila). Subject por personagem NOVO que o
-  `onEnter` não cancele é a mesma regressão. (10) **A âncora do tempo cobrado só anda com evento**:
+  `onEnter` não cancele é a mesma regressão — e `cancelEvents` é de subject EXATO: o do anel é
+  `<id>:<slot>:<recurso>` (`ITEM_REGEN`), que o `onLeave` cancela por slot vestido (#839). (9b) **A
+  transição constrói o destino ANTES de a origem soltar o MESMO `CharacterRuntime`** (#839): o
+  observer de equipamento tem DONO (`EquipmentObserver.owner`, a sessão) e o `onLeave`/`onEnd` só o tira
+  por `releaseEquipmentObserver(session)` — `setEquipmentObserver(null)` apagaria o do destino; e o
+  restante do prazo do anel é publicado por `Ruleset.onBeforeLeave` (`Session.beforeLeave`, chamado pelo
+  hospedeiro antes de construir o destino), porque o destino o lê do `overlay` na entrada e o
+  `#parkEquipment` da origem chegaria tarde. O hook só publica: nada que cancele ou desfaça, para a
+  transição recusada deixar a origem intacta. (10) **A âncora do tempo cobrado só anda com evento**:
   o mundo vazio não tem evento, e `onEnter` do mundo cobra os que já estavam e leva
   `#staminaAnchorMs` para agora — senão o primeiro a entrar paga a comida do intervalo vazio. (11)
   **O id de item novo nasce em `#newInstanceId` e só lá**: o critério é `partyOptions` OU

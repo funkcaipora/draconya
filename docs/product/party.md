@@ -134,8 +134,9 @@ Três caminhos de formação e entrada, sobre o mesmo fluxo HTTP:
 - **Amigos** (mínimo do §21): tabela `friend (character_id, friend_character_id, created_at)`,
   par único, sem pedidos nem bloqueios. `POST /api/friends { name }`,
   `DELETE /api/friends/:characterId` e `GET /api/friends` →
-  `[{ characterId, name, vocationId, level, online, where: 'city' | 'hunt' | null }]` (`online`/
-  `where` saem do `directory`, que conhece o tipo da sessão, não a hunt). **Convite tradicional**
+  `[{ characterId, name, vocationId, level, online, where: 'city' | 'world' | 'hunt' | null }]` (`online`/
+  `where` saem do `directory`, que conhece o tipo da sessão, não a hunt; `'world'` é o mundo aberto, com
+  `OPEN_WORLD` — sem a flag nunca sai). **Convite tradicional**
   (com party): o convite fica visível ao convidado por um índice reverso
   (`party:invited:{characterId}`, TTL do convite); `GET /api/party/mine` devolve `invites[]`, e
   `POST /api/party/:id/decline` recusa. **Convite social** (M26, #502; sem party):
@@ -151,7 +152,8 @@ Três caminhos de formação e entrada, sobre o mesmo fluxo HTTP:
   `party-full` quando a lotação viva chegou a `maxMembers`.
 - **Entrada na instância em curso** (`join` com a party em `state: 'hunting'`): o `api` valida
   convite ou sala pública (level e **vaga por vocação**), lotação viva, personagem na Cidade/
-  repouso e liquida o progresso pendente dele; **reserva a vaga ANTES de emitir o ticket**
+  repouso ou no mundo (`OPEN_WORLD`, #839 — `inSharedSpace`) e liquida o progresso pendente dele;
+  **reserva a vaga ANTES de emitir o ticket**
   (`reserveSlot` em Lua) e faz rollback — `releaseSlot` + revogação do ticket — se a emissão
   falhar, para não deixar vaga ocupada por fantasma; resolve o nó **da sessão**
   (`directory.lookup(leaderId).nodeId`) e emite um ticket com `party: { sessionId, leaderId,
