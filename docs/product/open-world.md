@@ -389,6 +389,9 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 - O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
   sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
+- O leque de saída barato (OW-22) saiu: codificar uma vez, visualizadores por personagem e AOI com
+  andar — ver [Cidade](city.md#o-leque-barato-ow-22-845). Falta a AOI v2 para criaturas (OW-33) e
+  para combate, efeitos, campos, cadáveres e tiles (OW-34): hoje a AOI só conhece jogador.
 
 ## Divergências do PRD
 

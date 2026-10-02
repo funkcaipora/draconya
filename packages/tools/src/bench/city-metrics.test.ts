@@ -56,6 +56,7 @@ describe('summarize', () => {
     viewers: 2,
     cycleMs: 100,
     bytes: 4_000,
+    encodedBytes: 1_000,
     messages: 80,
     frames: 8,
     drops: 0,
@@ -66,6 +67,8 @@ describe('summarize', () => {
     // 4 ciclos de 100 ms = 0,4 s; 4.000 B / 2 visualizadores / 0,4 s.
     expect(summary.elapsedSeconds).toBeCloseTo(0.4);
     expect(summary.bytesPerViewerPerSecond).toBeCloseTo(5_000);
+    // O que a CPU serializou: 1.000 B / 2 visualizadores / 0,4 s.
+    expect(summary.encodedBytesPerViewerPerSecond).toBeCloseTo(1_250);
     expect(summary.messagesPerViewerPerSecond).toBeCloseTo(100);
     expect(summary.framesPerViewerPerSecond).toBeCloseTo(10);
     expect(summary.bytesPerFrame).toBe(500);
@@ -90,8 +93,9 @@ describe('summarize', () => {
   });
 
   it('rodada vazia ou sem visualizador não vira NaN nem Infinity', () => {
-    const empty = summarize({ ...run, samples: [], bytes: 0, messages: 0, frames: 0 });
+    const empty = summarize({ ...run, samples: [], bytes: 0, encodedBytes: 0, messages: 0, frames: 0 });
     expect(empty.bytesPerViewerPerSecond).toBe(0);
+    expect(empty.encodedBytesPerViewerPerSecond).toBe(0);
     expect(empty.bytesPerFrame).toBe(0);
     expect(empty.cpuUs.p99).toBe(0);
     const alone = summarize({ ...run, viewers: 0 });
