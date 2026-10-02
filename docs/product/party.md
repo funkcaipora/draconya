@@ -61,7 +61,14 @@ hunt (ADR 0035 d.1).
   ticket por membro com o mesmo `sessionId`; se o k-ésimo ticket falhar, os k−1 anteriores são
   revogados. O primeiro ticket a chegar ao `game` cria a sessão com os N; o líder e quem mais
   estiver com o cliente aberto entram pelo ticket que o `api` devolveu, e quem não estiver entra
-  quando abrir (`GET /api/party/mine` devolve o ticket pendente). No modal de caçadas, o líder
+  quando abrir (`GET /api/party/mine` devolve o ticket pendente). **Com `OPEN_WORLD` (OW-20, #841) a largada a
+  partir do mundo passa por `canLogout`**: antes de mover QUALQUER membro, o `game` pergunta ao `sim` se cada um
+  dos que estão no mundo deste nó poderia sair agora (PZ sempre, no-logout nunca, o resto só fora de luta), e um
+  membro em luta derruba a largada inteira — o upgrade do websocket responde 409 `member-in-fight`, ninguém é
+  movido e o culpado recebe o `logout-refused` com o motivo. O `api` não vê isso (só o tipo da sessão), então o
+  formulário já está `hunting` e os tickets já saíram: eles expiram em 30 s, e a party é desfeita depois da
+  carência de 45 s. Quem estava em repouso entra direto, e a âncora de cada um — o tile de onde saiu do mundo —
+  atravessa a largada ([`open-world.md`](open-world.md#o-mundo-e-a-hunt-idle-ow-20-841)). No modal de caçadas, o líder
   tem "Iniciar com o time" (`shell/party-start.ts`, configure-then-start: o patch só sai se a
   configuração difere da seleção) e o membro não-líder vê o botão desabilitado com o motivo —
   NENHUM caminho manda `enter-hunt` solo.
@@ -350,7 +357,9 @@ ruleset (`requestExit`): o membro sai depois do `exitDelayMs` e fora da janela d
 e o `session-ended` que volta é o extrato de quem saiu. O membro que sai por dentro do `sim`
 (`member-left`: morte, regra de saída, esta saída) volta para a Cidade pela mesma sucessão — o
 construtor de sessão recebe o personagem que já saiu (`departed`), porque ele não está mais em
-`from.participants`. Depois de uma saída, quem tem a regra `party-member-lost` no bot sai também, em cascata
+`from.participants`. **Com `OPEN_WORLD` (OW-20) a volta é ao mundo, com alguém olhando, ou ao repouso, sem**: o
+membro desanexado que sai por dentro vai ao repouso sem encerrar a hunt dos outros — `release` a encerraria —, e
+o que olha volta ao tile de onde saiu (o templo, se morreu). Depois de uma saída, quem tem a regra `party-member-lost` no bot sai também, em cascata
 e na ordem de entrada (`bot.md`). O último a sair encerra a sessão com o motivo dele; se a cascata
 levou alguém, o motivo é `exit-rule`. Uma party que ficou com um membro vira, na prática, solo:
 morte encerra, loot é do matador sem sorteio.

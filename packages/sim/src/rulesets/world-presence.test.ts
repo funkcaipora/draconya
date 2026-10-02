@@ -892,3 +892,72 @@ describe('a linha do tempo do x-log é a mesma a 1 Hz e a 10 Hz (OW-14, invarian
     expect(slow.trace).toEqual(fast.trace);
   });
 });
+
+describe('logoutVerdictOf: o canLogout respondido sem agir (OW-20, ADR 0060 d.6a)', () => {
+  it('é o veredicto do `canLogout`: PZ sempre, no-logout nunca, e o resto só sem luta', () => {
+    const session = newWorld();
+    const pz = arrive(session, 'pz'); // o templo é PZ
+    const open = arrive(session, 'open', OUTSIDE);
+    const blocked = arrive(session, 'blocked', NO_LOGOUT);
+    const pzNoLogout = arrive(session, 'pz-no-logout', PZ_NO_LOGOUT);
+    const ruleset = rulesetOf(session);
+
+    expect(ruleset.logoutVerdictOf(session, 'pz')).toEqual({ ok: true });
+    expect(ruleset.logoutVerdictOf(session, 'open')).toEqual({ ok: true });
+    expect(ruleset.logoutVerdictOf(session, 'blocked')).toEqual({ ok: false, reason: 'no-logout-tile' });
+    // O no-logout vale por cima da PZ: o tile `P` não deixa sair.
+    expect(ruleset.logoutVerdictOf(session, 'pz-no-logout')).toEqual({ ok: false, reason: 'no-logout-tile' });
+
+    // Em luta: a PZ isenta, o tile normal recusa por `in-fight`, o no-logout continua por tile.
+    for (const hero of [pz, open, blocked, pzNoLogout]) hero.lastCombatActionAtMs = 0;
+    expect(ruleset.logoutVerdictOf(session, 'pz')).toEqual({ ok: true });
+    expect(ruleset.logoutVerdictOf(session, 'open')).toEqual({ ok: false, reason: 'in-fight' });
+    expect(ruleset.logoutVerdictOf(session, 'blocked')).toEqual({ ok: false, reason: 'no-logout-tile' });
+  });
+
+  it('só LÊ: nenhum evento, nenhuma saída pedida e o personagem continua onde estava', () => {
+    const session = newWorld();
+    arrive(session, 'a', OUTSIDE);
+    session.drainEvents();
+    const queued = session.snapshot();
+
+    rulesetOf(session).logoutVerdictOf(session, 'a');
+    rulesetOf(session).logoutVerdictOf(session, 'a');
+
+    // Mutação que mata: implementar a pergunta por `requestLogout` — ela emite `departure-requested`, e quem só
+    // queria saber se podia entrar numa hunt soltaria o personagem do mundo.
+    expect(session.drainEvents()).toEqual([]);
+    expect(session.participants.map((participant) => participant.id)).toEqual(['a']);
+    expect(session.snapshot()).toEqual(queued);
+  });
+
+  it('a janela de luta vence com o relógio LÓGICO: o mesmo veredicto a 1 Hz e a 10 Hz', () => {
+    const verdicts = (stepMs: number) => {
+      const session = newWorld();
+      const hero = arrive(session, 'a', OUTSIDE);
+      hero.lastCombatActionAtMs = session.nowMs;
+      const seen: Array<readonly [number, boolean]> = [];
+      for (let t = 0; t <= IN_FIGHT_WINDOW_MS + 2_000; t += stepMs) {
+        seen.push([session.nowMs, rulesetOf(session).logoutVerdictOf(session, 'a')?.ok === true]);
+        session.advanceBy(stepMs);
+      }
+      return seen.filter(([at]) => at % 1_000 === 0);
+    };
+    const fast = verdicts(100);
+    const slow = verdicts(1_000);
+    expect(fast).toEqual(slow);
+    // Recusa até a janela vencer, e passa depois — a fronteira é a do `isInFight`.
+    expect(fast.find(([, ok]) => ok)?.[0]).toBeGreaterThan(IN_FIGHT_WINDOW_MS - 1);
+    expect(fast.find(([at]) => at === 1_000)?.[1]).toBe(false);
+  });
+
+  it('quem não está na sessão e quem morreu não têm veredicto: `null`, para quem pergunta decidir', () => {
+    const session = newWorld();
+    const hero = arrive(session, 'a');
+    const ruleset = rulesetOf(session);
+
+    expect(ruleset.logoutVerdictOf(session, 'ninguem')).toBeNull();
+    hero.alive = false;
+    expect(ruleset.logoutVerdictOf(session, 'a')).toBeNull();
+  });
+});

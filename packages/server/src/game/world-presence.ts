@@ -13,7 +13,7 @@
 // luta). É o que mantém o invariante 3: perder a conexão chega ao `sim` como intenção do servidor, no
 // instante lógico, nunca como leitura de socket.
 
-import type { EndReason, Session, WorldDepartureReason } from '@draconya/sim';
+import type { EndReason, LogoutVerdict, Session, WorldDepartureReason } from '@draconya/sim';
 
 /**
  * O que o hospedeiro pede a um ruleset de MUNDO. Os três métodos são do `WorldRuleset`
@@ -57,4 +57,32 @@ export function worldPresenceOf(ruleset: object): WorldPresence | undefined {
  */
 export function endReasonOf(reason: WorldDepartureReason): EndReason {
   return reason === 'death' ? 'death' : 'manual-exit';
+}
+
+/**
+ * O que o hospedeiro pergunta a um ruleset de MUNDO antes de levar o personagem para uma instância (OW-20,
+ * ADR 0060 d.6a): ele poderia sair AGORA? É `WorldRuleset#logoutVerdictOf` — o `canLogout` do Canary
+ * respondido sem agir, ao contrário de `requestLogout`, que emite a saída.
+ */
+interface LogoutVerdictSource {
+  logoutVerdictOf(session: Session, characterId: string): LogoutVerdict | null;
+}
+
+/**
+ * O veredicto de `canLogout` do personagem no ruleset, ou `undefined` se o ruleset não responde.
+ *
+ * Por FORMA, como `worldPresenceOf`, e separado dele de propósito: um ruleset de teste que fale a língua
+ * da presença (os três métodos) sem saber responder ao `canLogout` continua valendo como mundo, e a
+ * pergunta não o recusa — só quem declara a regra a aplica. A Cidade e a hunt devolvem `undefined`, e é o
+ * que mantém a entrada na instância — de onde eles vêm — como era: nenhum portão.
+ *
+ * `null` é o ruleset que não conhece o personagem (ou ele já morreu): quem pergunta decide, e o
+ * hospedeiro o trata como "sem o que recusar".
+ */
+export function logoutVerdictOf(
+  ruleset: object, session: Session, characterId: string,
+): LogoutVerdict | null | undefined {
+  const candidate = ruleset as Partial<LogoutVerdictSource>;
+  if (typeof candidate.logoutVerdictOf !== 'function') return undefined;
+  return candidate.logoutVerdictOf(session, characterId);
 }

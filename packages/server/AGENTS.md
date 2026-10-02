@@ -978,8 +978,10 @@ desligada dá a Cidade de sempre e `to: 'world'` devolve `null`; a ligada dá o 
   novo — o ledger é `UNIQUE (session_id, seq)` e o `seq` recomeça em zero, então reusar o id colidiria com os
   extratos da anterior (invariante 10) — e com a versão de conteúdo de agora (invariante 7).
 - **O teto vale só na ENTRADA do repouso.** `entry: 'rest'` (o login) recusa o mundo cheio com
-  `WorldFullError`; `entry: 'instance'` (quem volta de uma hunt) NUNCA recusa. Quem aplica o teto a toda entrada
-  deixa o personagem sem sessão ao voltar. O erro sobe por `createSession` antes de qualquer registro; quem o
+  `WorldFullError`; `entry: 'instance'` (quem volta de uma instância para a qual SAIU do mundo) NUNCA recusa. Quem
+  aplica o teto a toda entrada deixa o personagem sem sessão ao voltar. `entry: 'instance-from-rest'` (#841, OW-20:
+  a hunt idle direta e a party largada do repouso, que nunca ocuparam vaga) recusa como o `'rest'`, mas não roda
+  `carryRestoredConditions` — ver "O mundo e a hunt idle", adiante. O erro sobe por `createSession` antes de qualquer registro; quem o
   converte em fila com posição é a porta do hospedeiro (`WorldEntryGate`, OW-21 — ver "A entrada pelo
   repouso", adiante), e um nó sem a fila injetada ainda falha o handshake, como a OW-18 o deixou.
 - **`carryRestoredConditions` é do `'rest'`.** O personagem do ticket nasce com as condições no relógio de zero, e
@@ -989,9 +991,11 @@ desligada dá a Cidade de sempre e `to: 'world'` devolve `null`; a ligada dá o 
   `worlds/main.json` com a flag ligada não sobe — a recusa é na construção do `WorldShard`.
 - **`ALLOWED` tem `world` no centro** (`game/transitions.ts`): do mundo a toda instância, de toda instância ao
   mundo; a Cidade continua, e mundo e Cidade NÃO se tocam. A tabela diz só o que é POSSÍVEL — `canLogout` na
-  entrada da instância e a volta só com alguém olhando são do hospedeiro (OW-20). O fim, a morte e a drenagem de uma
-  hunt ainda levam à Cidade (`#settleOne`, `buildSession({ to: 'city' })`).
-- **`worldFor` (o builder) trata `'instance'`**, e a âncora que o `placeOnEnter` usa é a que a saída gravou em
+  entrada da instância e a volta só com alguém olhando são do hospedeiro (OW-20, ver "O mundo e a hunt idle",
+  abaixo): com a flag ligada o fim de uma hunt vai ao mundo ou ao repouso (`#settleOne`), e só sem ela volta à
+  Cidade (`buildSession({ to: 'city' })`).
+- **`worldFor` (o builder) lê `request.worldEntry`** (`'instance'`, o padrão, ou `'instance-from-rest'`; quem diz é
+  o hospedeiro, `#buildWorldReturn`), e a âncora que o `placeOnEnter` usa é a que a saída gravou em
   `CharacterRuntime.worldPosition` (`#anchorWorldPosition`, OW-16) — lida ANTES de o destino ser construído.
 
 **O serviço de Cidade por PZ.** `#cityServiceRefusal(hosted, characterId, cityText)` soma `offersCityServices`
@@ -1024,7 +1028,8 @@ no `game` com a flag ligada. O `compose.coolify.yml` o fixa (`${NODE_ID:-game-1}
 
 **Party e amigos no `api`:** `inSharedSpace(location)` (`api/party.ts`) aceita `null`, `'city'` e `'world'` onde
 só `'city'` valia — o nome da recusa não mudou. `api/friends.ts` responde `where: 'world'`. A party largada do
-mundo NÃO passa por `canLogout` (o `api` só vê o tipo da sessão): é o `member-in-fight` da OW-20.
+mundo passa por `canLogout` no `game`, não no `api` (que só vê o tipo da sessão): é o `member-in-fight` da OW-20
+(ver "O mundo e a hunt idle").
 
 ## A presença do mundo: socket vira intenção, evento vira I/O, e o hospedeiro não decide (#840, OW-19, ADR 0060 d.7)
 
@@ -1162,6 +1167,91 @@ socket. A rota (autenticada, só leitura) devolve `{ openWorld, hunts: [{ id, na
 `catalogue.hunts` (`entryHunts`); sem a dependência a rota não existe (404, e o cliente trata como "sem menu"). Não
 confere nada: a hunt pedida continua sendo conferida pelo `POST /api/tickets` (`hasHunt`). Teste:
 `api/entry-options.test.ts`. O que o cliente faz com ela: `docs/product/open-world.md`, "O cliente do mundo".
+
+## O mundo e a hunt idle: entrada por `canLogout`, volta assistida ao mundo e desassistida ao repouso (#841, OW-20, ADR 0060 d.6a e d.6c)
+
+A promessa central da hunt idle é que o personagem desanexado **nunca acaba sozinho no mundo**, onde morreria sem
+ninguém olhando. Tudo aqui é do `SessionHost` (`game/host.ts`) e só existe com `OPEN_WORLD`: sem a flag o fim de
+uma hunt volta à Cidade, como sempre. Produto: `docs/product/open-world.md`, "O mundo e a hunt idle".
+
+**A entrada passa por `canLogout`** (`SessionHost#transition` → `#refuseIfCannotLogout`). Quem entra numa instância
+sai do mundo, e no Tibia isso é a regra do logout: PZ sempre, no-logout nunca, o resto só sem luta. O hospedeiro
+pergunta ao `sim` (`logoutVerdictOf` de `game/world-presence.ts`, por FORMA — a Cidade e a hunt devolvem
+`undefined` e a transição é a de sempre) **antes de qualquer efeito**: sem âncora, sem destino, sem extrato. A
+recusa é um `TransitionError` `'cannot-logout'` com o motivo (`logoutRefusal`), e `#requestTransition` o entrega
+como a mensagem `logout-refused` — a MESMA do `logout` recusado, para o cliente (OW-23) escrever uma frase só —,
+e não como `system-message`. Vale para toda instância (`enter-hunt`, `enter-training`, a transição por API); o
+tile `P` (PZ + no-logout) recusa o treino também, porque o no-logout vale por cima da PZ.
+
+**A volta decide pelo visualizador, no fim da sessão** (`#settleOne`; só com `openWorld`):
+
+| O fim da instância | Visualizador (`#watchers`) | Vai para |
+|---|---|---|
+| fim, morte, regra de saída, `leave-hunt` | com | o mundo (`#buildWorldReturn`), na âncora — o templo na morte; o REPOUSO se a hunt nasceu do repouso e o mundo não a recebe (abaixo) |
+| idem | sem | o REPOUSO (`#releaseToRest`) |
+| a drenagem (`drainAll`) | com ou sem | o repouso: `release` fecha o socket com 1001 e o cliente volta pelo ticket |
+
+Armadilhas, todas com teste que as mata (`game/world-idle-hunt.test.ts`, mutação conferida):
+
+- **A decisão é DEPOIS de gravar o extrato**, não antes: o visualizador que cai durante o `await` do Redis vale
+  como desanexado. Decidir antes poria no mundo, sem ninguém, quem já fechou o navegador.
+- **O extrato que acabou de pousar É o checkpoint do repouso.** `#persistReceipt` leva o mundo e os vitais do dono
+  (`#worldStateOf`, `receiptWorldStateOf`): a âncora (o tile de saída, ou nula na morte → o templo) e a vida e a mana
+  (as da volta, CHEIAS na morte, sem condição). Não há um segundo gravamento: o repouso só SOLTA.
+- **`#releaseToRest` não é `release`.** `release` de uma sessão privada a ENCERRA (`session.end('manual-exit')`), e
+  quem chega aqui pode ser o membro de uma party que saiu por dentro do `sim` — a hunt continua para os outros. O
+  repouso solta o personagem (visualizadores, mapas, snapshot, diretório, slot — `#unhost`, a metade que `release`
+  também usa) e só descarta a sessão quando não sobra ninguém dela.
+- **O mundo nunca recebe quem não tem visualizador** (ADR 0060, "Alternativas": "Fim de hunt desanexada volta ao
+  mundo" foi descartada). A chegada sem visualizador existe — todo login a faz, e o `sim` a trata com
+  `presence-lost` (OW-19) —, mas pôr no mundo, de propósito, quem fechou o navegador numa hunt é deixá-lo parado e
+  vulnerável por 60 s no tile de saída, onde nada o tira de uma luta. O repouso evita o risco inteiro.
+- **A morte volta o personagem ao máximo e ao templo nas duas saídas**: ao repouso, pelo extrato; ao mundo, por
+  `WorldRuleset#onEnter` (sim), que devolve vida e mana e zera a âncora de quem chega morto. A Cidade curava; o mundo
+  não cura quem chega vivo.
+- **`#homeType()`** é o destino de `leave-hunt` quando ele não passa pelo `requestExit` (o retry manual da
+  sucessão que falhou, o treino): o mundo com a flag, a Cidade sem ela. Dois lugares que decidissem "para onde se
+  volta" divergiriam.
+
+**O teto na volta: o passe é de quem SAIU do mundo** (`#leftWorld`, `#buildWorldReturn`). A volta ao mundo não é
+sempre `'instance'`: só quem saiu do mundo para a instância — a transição (`#replace` marca quando a origem é o
+mundo e desmarca quando o destino é) e a largada de party (`#leaveForParty`) — guarda o passe. A hunt idle direta
+(`entry: { hunt }`) e a party largada do repouso nunca ocuparam vaga: a volta bate na porta como o login
+(`WorldEntryGate#login`, com o `premium` do personagem) e o shard recusa o cheio (`WorldFullError`) — nos dois casos
+o destino é o REPOUSO, e `#settleOne` e `#runTransition` (a volta manual) o cumprem com `#releaseToRest`. Sem esta
+distinção o mundo cheio engordava com quem escolheu a hunt por ele estar cheio e furava a fila. Armadilhas:
+
+- **Ausente é o lado seguro.** `#leftWorld` não sobrevive ao nó: a hunt retomada de snapshot não tem a marca, e com o
+  mundo cheio vai ao repouso. Nunca inverta a polaridade (marcar quem NÃO saiu): o padrão passaria do teto.
+- **O passe sai em `#unhost` e na hunt direta** (`entry` definido): a marca de uma saída anterior não pode valer para
+  a hunt que nasce do repouso depois.
+- **`#releaseToRest` esvazia a fila do visualizador antes de fechar** (`viewer.flush()`): `Viewer#close` não a
+  esvazia, e sem isso o `session-ended` — o resumo da hunt — nunca chega a quem olhava quando o mundo está cheio.
+
+**A largada de party** (`#prepare` → `#partyMemberInFight`). O primeiro ticket da party cria a sessão com TODOS e
+tira cada membro do mundo (`#createAndRegisterSession`, `#leaveForParty`); é ali que se sabe quem está em luta —
+o `api` só vê o tipo da sessão. Antes de mover QUALQUER um, todo membro hospedado no mundo deste nó passa por
+`logoutVerdictOf`; um recusado derruba a largada inteira: `PrepareResult.refused: 'member-in-fight'` (409 no
+upgrade, `server.ts`), ninguém é movido, o culpado recebe o `logout-refused` com o motivo, e a luta que acaba
+libera o ticket seguinte. O ticket de entrada (`join`) de quem está em luta cai do mesmo jeito; uma party cuja
+sessão já está hospedada aqui já foi largada, e o ticket de quem chega depois não tem o que conferir. **A party
+que já está de pé não sabe da recusa**: o `api` gravou o formulário como `hunting` e os tickets expiram em 30 s;
+`disbandIfDead` o desfaz depois da carência de 45 s. Tirar o formulário na hora é do `api`, que não vê o `game`.
+**A âncora atravessa a largada** (`#leaveForParty` devolve o tile de onde o membro saiu do mundo): a party constrói o
+personagem do TICKET — a linha do banco, um checkpoint atrás —, e o extrato do fim da hunt leva a âncora DELE com
+versão maior que a da saída; sem herdar a de agora, a party voltaria ao tile do último checkpoint. Só a âncora:
+vitais e condições são os da hunt, que pode já ter começado. **A âncora é escrita DEPOIS do `#createLocal`**
+(`#adoptAnchors`, pelo id da sessão), nunca na `Session` que `#createAndRegisterSession` construiu: dois tickets da
+mesma party que chegam juntos constroem uma cada, e o `#createLocal` guarda a que hospeda primeiro — escrever na
+descartada perdia a âncora, e o fim da hunt gravava a do ticket (ou nula) por cima. Vale para o membro do próprio
+ticket e para os `others` que o `#leaveForParty` tirou do mundo (só o que há: um `null` nunca sobrescreve); o
+`#admitLateJoiner` escreve no `newcomer`, que já é da sessão viva.
+
+Testes: `game/world-idle-hunt.test.ts` (o hospedeiro com a Thais real e a `rat-cellars`: a recusa de cada motivo, a
+volta ao mesmo tile, o repouso, a morte, a corrida do visualizador, a party e a drenagem; a flag desligada),
+`game/world-idle-hunt.postgres.test.ts` (a linha de `characters` que o próximo ticket lê; o passe do teto, a âncora de dois tickets
+simultâneos e a do `join` estão no primeiro arquivo), `game/world-shard.test.ts` (`'instance-from-rest'`), `sim` —
+`world.test.ts`/`world-presence.test.ts` (`logoutVerdictOf`, o morto que chega).
 
 ## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
 
@@ -1326,10 +1416,11 @@ do invariante 8 é o personagem deslogado. O `select` consulta o diretório ante
 upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a `0029` falhar ao rodar
 depois dele (`ADD COLUMN` sem `IF NOT EXISTS`). O banco legado entra pela migração.
 
-**O que NÃO existe ainda.** A âncora é escrita pelo checkpoint e pela saída desde a OW-16 (ver "O checkpoint do
-mundo"); a volta da hunt para o mundo é a OW-20. O mundo é hospedado desde a OW-18 (ver "O mundo hospedado"): com a
-flag ligada o login cai nele, que NÃO cura na entrada, e a vida do ticket sobrevive. O que ainda cai na Cidade, que
-CURA ao entrar (`city.ts:126-130`), é o fim de uma hunt. O contrato — coluna, ticket, sessão, extrato — tem teste de
+**O que a OW-20 fechou.** A âncora é escrita pelo checkpoint e pela saída desde a OW-16 (ver "O checkpoint do
+mundo"); a volta da hunt para o mundo é a OW-20 (ver "O mundo e a hunt idle"). O mundo é hospedado desde a OW-18
+(ver "O mundo hospedado"): com a flag ligada o login cai nele, que NÃO cura na entrada, e a vida do ticket
+sobrevive — e o fim de uma hunt já não cai na Cidade, que curava: vai ao mundo (com visualizador) ou ao repouso,
+com a vida da volta. O contrato — coluna, ticket, sessão, extrato — tem teste de
 ponta a ponta (`jobs/world-vitals.postgres.test.ts`). A liquidação do checkpoint sem linha de ledger é a OW-17 (abaixo).
 
 ## A liquidação do checkpoint: o checkpoint sem valor movido não cria linha de ledger (#838, OW-17, ADR 0060 d.10.d-e)

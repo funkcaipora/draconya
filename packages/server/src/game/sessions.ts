@@ -194,8 +194,13 @@ export const DEFAULT_WORLD_ID = 'main';
  *   (`WorldEntryGate`, OW-21): o shard só diz que não cabe.
  * - `'instance'`: de uma hunt, do treino, de uma quest — quem JÁ ESTAVA no mundo antes de entrar nela,
  *   e voltar a ele não pode ser recusado: o teto vale só na entrada.
+ * - `'instance-from-rest'`: de uma instância que NASCEU do repouso — a hunt idle direta (OW-21, d.6b) ou a
+ *   party largada de quem não tinha sessão. Esse personagem nunca ocupou vaga no mundo: a hunt foi a primeira
+ *   sessão dele, e o teto o alcança como alcança o login (`WorldFullError`). A diferença para `'rest'` é uma só:
+ *   ele JÁ andou por uma sessão, e `moveToClock` traduziu as condições dele — `carryRestoredConditions` as
+ *   deslocaria duas vezes (#841, OW-20).
  */
-export type WorldEntry = 'rest' | 'instance';
+export type WorldEntry = 'rest' | 'instance' | 'instance-from-rest';
 
 export interface WorldShardOptions {
   /**
@@ -225,7 +230,8 @@ export interface WorldShardOptions {
  *
  * **O teto vale só na ENTRADA do repouso** (d.2b): `admit(..., 'rest')` recusa o mundo cheio, e
  * `admit(..., 'instance')` nunca recusa — quem volta de uma hunt já estava no mundo antes de sair, e
- * barrá-lo prenderia o personagem numa sessão encerrada.
+ * barrá-lo prenderia o personagem numa sessão encerrada. Quem volta de uma instância que nasceu no repouso
+ * (`'instance-from-rest'`) nunca esteve no mundo, e o teto o recusa como ao login.
  *
  * **Uma sessão num processo só** (invariante 9). Com mais de um nó `game`, é a trava `world:{id}:owner`
  * (OW-59) que garante isso; até lá, `OPEN_WORLD` só liga com um `game` (`game/server.ts` recusa subir).
@@ -268,7 +274,7 @@ export class WorldShard {
    * O personagem que NASCE do ticket (`'rest'`) traz as condições como prazo restante (relógio zero,
    * #836): a sessão que já andou tem outro relógio, e `Session.enter` não traduz quem nunca esteve numa
    * sessão — `carryRestoredConditions`, antes do `enter`, o leva para o dela. Quem volta de uma
-   * instância (`'instance'`) já foi traduzido por `moveToClock`.
+   * instância (`'instance'` e `'instance-from-rest'`) já foi traduzido por `moveToClock`.
    */
   admit(worldId: string, character: CharacterRuntime, entry: WorldEntry): Session {
     const world = this.#content.worlds.get(worldId);
@@ -282,7 +288,7 @@ export class WorldShard {
     if (live === undefined && existing !== undefined) this.#worlds.delete(worldId);
 
     const capacity = this.#capacity ?? world.capacity;
-    if (entry === 'rest' && live !== undefined && live.participants.length >= capacity) {
+    if (entry !== 'instance' && live !== undefined && live.participants.length >= capacity) {
       throw new WorldFullError(worldId, capacity);
     }
     const session = live ?? this.#create(worldId);
@@ -441,8 +447,9 @@ function huntEntryFor(
  *
  * - **desligada** (o default): o login cai na Cidade, `to: 'world'` devolve `null` (o host recusa a
  *   transição) e o jogo é o de hoje, byte a byte. Nenhum `WorldShard` existe.
- * - **ligada**: o login cai no mundo, e `to: 'world'` volta a ele. A Cidade continua existindo — o fim
- *   de uma hunt ainda volta a ela até a OW-20 —, com o MESMO `CityShard` nos dois caminhos.
+ * - **ligada**: o login cai no mundo, e `to: 'world'` volta a ele. A Cidade continua existindo, com o MESMO
+ *   `CityShard` nos dois caminhos, mas nada a alcança: o fim de uma hunt vai ao mundo, com alguém olhando, ou
+ *   ao repouso (`SessionHost#settleOne`, OW-20).
  *
  * O MESMO shard nos dois caminhos é o ponto: quem entra no jogo e quem volta de uma instância chegam no
  * mesmo lugar, e dois shards seriam dois mundos que nunca se veem — defeito invisível até alguém tentar
@@ -775,7 +782,7 @@ export function createSessionBuilder(
     else materializeStamina(character, now(), content.stamina);
 
     if (request.to === 'city') return cityFor(shard, from, character);
-    if (request.to === 'world') return worlds === undefined ? null : worldFor(worlds, from, character);
+    if (request.to === 'world') return worlds === undefined ? null : worldFor(worlds, request, from, character);
     if (request.to === 'hunt') return huntFor(content, request, character, now);
     if (request.to === 'training') return trainingFor(content, request, character, now);
     // Quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com erro claro,
@@ -808,11 +815,20 @@ function cityFor(shard: CityShard, from: Session, character: CharacterRuntime): 
  * no tile de onde ele saiu.
  *
  * **A volta só com alguém olhando é do hospedeiro** (OW-20, d.6c): este construtor não sabe quem olha, e
- * por isso o fim de uma hunt ainda não passa por aqui — volta à Cidade, como sempre.
+ * quem decide entre chamá-lo e levar o personagem ao repouso é `SessionHost#settleOne`. Quem chega aqui já foi
+ * decidido: é a volta ASSISTIDA.
+ *
+ * **Nem toda volta é `'instance'`.** Só quem SAIU do mundo para a instância guarda o passe: o teto não o alcança. A
+ * hunt idle direta e a party largada do repouso nunca ocuparam vaga, e quem sabe de onde cada um veio é o
+ * hospedeiro, que o diz em `request.worldEntry` (`'instance-from-rest'` — o teto vale, e o mundo cheio lança
+ * `WorldFullError`, que ele converte em repouso). Sem a indicação o padrão é o passe, que é o que um chamador
+ * que só constrói destino — o teste do builder — sempre teve.
  */
-function worldFor(worlds: WorldShard, from: Session, character: CharacterRuntime): Session | null {
+function worldFor(
+  worlds: WorldShard, request: TransitionRequest, from: Session, character: CharacterRuntime,
+): Session | null {
   if (from.ruleset.type === 'world') return null;
-  return worlds.admit(DEFAULT_WORLD_ID, character, 'instance');
+  return worlds.admit(DEFAULT_WORLD_ID, character, request.worldEntry ?? 'instance');
 }
 
 function huntFor(

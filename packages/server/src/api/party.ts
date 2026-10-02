@@ -245,8 +245,8 @@ async function view(
  *
  * O NOME da recusa (`not-in-city`, `inviter-in-hunt`) não muda: o cliente a traduz por ele, e o `api` que
  * recusa é o mesmo com a flag `OPEN_WORLD` ligada ou desligada. **Quem larga a party a partir do MUNDO passa
- * por `canLogout` no `game`** (ADR 0060 d.6a) — a OW-20; o `api` só vê o tipo da sessão, e não sabe se o
- * personagem está em luta.
+ * por `canLogout` no `game`** (ADR 0060 d.6a, OW-20, `member-in-fight`): o `api` só vê o tipo da sessão, e não
+ * sabe se o personagem está em luta — o `game` recusa a largada quando o primeiro ticket chega.
  */
 function inSharedSpace(location: { type: string } | null): boolean {
   return location === null || location.type === 'city' || location.type === 'world';
