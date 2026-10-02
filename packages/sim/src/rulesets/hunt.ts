@@ -2067,6 +2067,15 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #lootSeqOfDeparted = new Map<string, number>();
 
+  /**
+   * Os personagens cuja AUTOMAÇÃO está suspensa: o jogador que os dirigia não está mais (a perda de
+   * conexão do mundo, OW-14 — `suspendAutomation`). Vazio em toda hunt e em todo mundo em que
+   * ninguém caiu, e lido por `#isSuspended` no caminho quente: um `Set.size` num conjunto vazio.
+   * Não entra no snapshot — o mundo não tem snapshot (ADR 0060 d.10a), e quem o hospeda entrega
+   * `presence-lost` a quem chega sem visualizador.
+   */
+  readonly #suspended = new Set<string>();
+
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
     self: null as unknown as CharacterRuntime, targetCount: 0, target: null, partyTarget: null,
@@ -3146,6 +3155,7 @@ export class HuntRuleset implements Ruleset {
     // quem entra nunca esteve na fila (o primeiro nasce com ela; o de party é um id novo) —, e não
     // consome `seq` nem toca em evento de ninguém.
     session.cancelEvents(character.id);
+    this.#suspended.delete(character.id);
     // A âncora do tempo cobrado acompanha o ÚLTIMO EVENTO, e o mundo pode ficar sem evento nenhum
     // (vazio, e sem monstro dormente enquanto a OW-30 não chega): com ninguém dentro o relógio
     // anda e a âncora fica parada no último evento. O primeiro evento de quem chega depois cobraria
@@ -3287,6 +3297,8 @@ export class HuntRuleset implements Ruleset {
     // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
+    // Quem sai leva a suspensão consigo: o mesmo id que voltar entra dirigido por quem o loga.
+    this.#suspended.delete(character.id);
     // O `lootSeq` fica com a sessão: quem voltar pelo mesmo id continua dele (ver `onEnter`).
     if (this.#topology.namesOwnerInItemIds) this.#lootSeqOfDeparted.set(character.id, character.lootSeq);
     // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
@@ -5015,6 +5027,11 @@ export class HuntRuleset implements Ruleset {
     // espera a lista esvaziar.
     if (runner.fearWalk !== null) return this.#advanceFearWalk(session, character, runner);
 
+    // Sem dono (`suspendAutomation`): o personagem fica onde está, vulnerável. Não há caminhada
+    // manual (foi limpa), perseguição nem postura — tudo isso é o jogador ou o bot dele —, e a
+    // sessão continua reagendando o passo como faz com qualquer personagem parado.
+    if (this.#isSuspended(character.id)) return null;
+
     // `walk-to` distante em curso (#763, achado de QA ao vivo na Darashia Dragon Lair): PRIORIDADE
     // MÁXIMA, ACIMA do combate-stop logo abaixo. Um clique para um cadáver longe, com dragões no
     // alcance o caminho INTEIRO, empacava para sempre no combate-stop de sempre — o alvo nunca
@@ -6107,6 +6124,62 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O jogador que dirigia o personagem sumiu (OW-14, ADR 0060 d.7; `Player::sendPing`,
+   * `canary/src/creatures/players/player.cpp:2321-2338`): tudo o que o move SEM um jogador para, e
+   * ele fica onde está — vulnerável, como o Tibia deixa quem perdeu a conexão. É o que o mundo faz
+   * em `presence-lost`; a hunt idle não o usa, porque ali ninguém precisa estar presente.
+   *
+   * - o alvo é SOLTO (`setAttackedCreature(nullptr)`, `player.cpp:2323-2325`): o explícito, o
+   *   candidato do auto-target e a caminhada até um alvo;
+   * - a eleição de alvo da política (`#autoSelectTarget`) e o golpe automático no melhor ao
+   *   alcance (`#attackTarget`) param — o targeting É o bot;
+   * - o bot (`#armBot`/`#onBot`) e as automações da barra (`#armAutomations`/`#onAutomation`)
+   *   param, e os grupos ficam engatilhados;
+   * - a caminhada manual (`manualWalkTo`), o follow e a postura param (`#playerStep`).
+   *
+   * O que NÃO para é o que o jogo faz com o personagem: a regeneração, as condições, o medo que o
+   * faz andar (`fearWalk`) e, claro, o que os monstros fazem com ele. Nada é cancelado na fila: o
+   * golpe e os grupos que já estavam agendados vencem, encontram o personagem sem dono e não fazem
+   * nada — a invariante "engatilhado OU agendado" continua de pé, e `resumeAutomation` só precisa
+   * rearmar o que ficou engatilhado.
+   *
+   * Devolve `false` — e não muda nada — para quem não está na sessão ou já estava suspenso (o
+   * segundo `presence-lost` não é uma segunda queda).
+   */
+  protected suspendAutomation(characterId: string): boolean {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || this.#suspended.has(characterId)) return false;
+    this.#suspended.add(characterId);
+    runner.attackTarget = null;
+    runner.attackTargetPinned = false;
+    runner.botCandidate = null;
+    runner.manualWalkTo = null;
+    runner.manualWalkHoldUntilMs = null;
+    return true;
+  }
+
+  /**
+   * Devolve o personagem a quem o dirige (`presence-restored`): reelege o alvo, acorda os grupos
+   * do bot que ficaram engatilhados e o ciclo das automações — o que `configureBot` faz ao salvar
+   * uma configuração, e pelo mesmo caminho, agendado no instante lógico atual (nada por tick).
+   * Devolve `false` se não estava suspenso.
+   */
+  protected resumeAutomation(session: Session, characterId: string): boolean {
+    if (!this.#suspended.delete(characterId)) return false;
+    const character = findById(session.participants, characterId);
+    if (character === null || !character.alive) return true;
+    this.#autoSelectTarget(session, character);
+    this.#armBot(session, characterId);
+    this.#armAutomations(session, characterId);
+    return true;
+  }
+
+  /** O personagem está sem dono (`suspendAutomation`)? Um `Set.size` num conjunto quase sempre vazio. */
+  #isSuspended(characterId: string): boolean {
+    return this.#suspended.size !== 0 && this.#suspended.has(characterId);
+  }
+
+  /**
    * Um jogador pediu para andar (FUN-69). Mesmo caminho do bot, mesma razão de recusa.
    *
    * Não mexe no walker: se o passo tirou o personagem da rota, o vencimento seguinte de
@@ -6288,7 +6361,9 @@ export class HuntRuleset implements Ruleset {
     const runner = this.#runnerOf(characterId);
     runner.botReady[group] = true;
     const bot = runner.bot;
-    if (bot === undefined || !character.alive) return;
+    // Suspenso, o grupo fica ENGATILHADO (a linha acima) e nada executa: `resumeAutomation` o
+    // acorda pelo `#armBot`, sem evento pendente que o dobre.
+    if (bot === undefined || !character.alive || this.#isSuspended(characterId)) return;
 
 const slots = bot.groups.get(group);
     if (slots === undefined) return;
@@ -8645,7 +8720,7 @@ const slots = bot.groups.get(group);
   #armBot(session: Session, characterId: string): void {
     const runner = this.#runnerOf(characterId);
     const bot = runner.bot;
-    if (bot === undefined) return;
+    if (bot === undefined || this.#isSuspended(characterId)) return;
     for (const group of bot.groups.keys()) {
       if (!runner.botReady[group]) continue;
       this.#scheduleBot(session, group, characterId, 0);
@@ -9046,6 +9121,7 @@ const slots = bot.groups.get(group);
   #armAutomations(session: Session, characterId: string): void {
     const runner = this.#runners.get(characterId);
     if (runner === undefined || runner.automations.list.length === 0) return;
+    if (this.#isSuspended(characterId)) return;
     session.cancelEvent(AUTOMATION, characterId);
     session.scheduleIn(AUTOMATION, 0, {
       priority: EventPriority.Housekeeping, subject: characterId,
@@ -9062,6 +9138,9 @@ const slots = bot.groups.get(group);
   #onAutomation(session: Session, characterId: string): void {
     const runner = this.#runners.get(characterId);
     if (runner === undefined) return;
+    // Suspenso, o ciclo morre aqui e NÃO se reagenda: quem o traz de volta é `resumeAutomation`
+    // (`#armAutomations`), e um ciclo por segundo para um personagem sem dono seria polling.
+    if (this.#isSuspended(characterId)) return;
     const character = findById(session.participants, characterId);
     if (character !== null && character.alive && runner.actuator !== undefined) {
       const view = this.#botViewOf(character);
@@ -13973,6 +14052,9 @@ const slots = bot.groups.get(group);
    * batendo no monstro colado enquanto a runa espera o alvo distante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
+    // Sem dono não há em quem bater — nem o alvo solto nem o melhor da política abaixo, que é o
+    // bot escolhendo (`suspendAutomation`).
+    if (this.#isSuspended(character.id)) return null;
     // O alvo explícito (jogador ou bot, #470/#480) vem primeiro. O pinned do JOGADOR é
     // EXCLUSIVO: fora do alcance devolve `null` em vez de cair na política. O eleito pelo bot
     // NÃO é — fora do alcance ele cede para o candidato/política, e é isso que mantém o corpo
@@ -14124,6 +14206,8 @@ const slots = bot.groups.get(group);
   #autoSelectTarget(session: Session, character: CharacterRuntime): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || !character.alive) return;
+    // A eleição de alvo é o bot: sem dono, ninguém elege (`suspendAutomation`).
+    if (this.#isSuspended(character.id)) return;
     if (this.#isPinned(character)) {
       if (this.#attackTargetOfRunner(character) !== null) return;
     }

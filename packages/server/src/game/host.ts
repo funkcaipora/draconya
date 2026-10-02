@@ -3607,6 +3607,14 @@ export class SessionHost {
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
           hosted.departures.push(event);
           continue;
+        case 'departure-requested':
+        case 'logout-refused':
+          // A saída do MUNDO (OW-14, #835): só a sessão `world` os emite, e o hospedeiro ainda não
+          // a hospeda (o `WorldShard` é a OW-18, atrás de `OPEN_WORLD`). Quem os lê é a presença
+          // no hospedeiro (OW-19): `departure-requested` é gameplay e vale SEM visualizador — o
+          // x-log é justamente o caso em que não há —, então o ramo sem visualizador acima também
+          // vai ganhar o caso dele; `logout-refused` vira a mensagem do protocolo para quem pediu.
+          continue;
         case 'equipment-changed':
           // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
           // pelo `inventory`, e a mensagem é a MESMA de sempre (opcode 16, sem campo novo).
