@@ -13,6 +13,7 @@ import type {
   SkillProgress as ProtocolSkillProgress,
 } from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
+import { logoutRefusalText } from './exit-refusal.js';
 import { aimTracker } from './aim.js';
 import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
@@ -322,6 +323,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         loyaltyBonusPercent: message.loyaltyBonusPercent ?? 0,
         soul: message.soul,
         soulMax: message.soulMax,
+        // A zona do tile e a luta (#846, OW-23, `player-stats` do OW-11): os dois ícones do mundo. Ausente é
+        // "este servidor não diz" — `null`, e nunca `'normal'`/`false`: o ícone só some porque o servidor disse
+        // que não há, e um nó anterior (ou uma sessão sem zona, como toda hunt) esconde os dois sem afirmar nada.
+        zone: message.zone ?? null,
+        inFight: message.inFight ?? null,
       }));
       return;
 
@@ -656,6 +662,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // attach se ainda houver uma, com o que falta AGORA — e a contagem de antes, contada
         // no relógio local, estaria errada.
         exitPending: null,
+        // Uma sessão começou (#846, OW-23): quem esperava na fila entrou, e a recusa de sair e os ícones de
+        // zona e de luta eram de uma sessão que já não é esta — o servidor reenvia os ícones no
+        // `player-stats` que segue o attach.
+        worldQueue: null,
+        exitRefusal: null,
+        zone: null,
+        inFight: null,
         onlinePlayers: message.onlinePlayers ?? null,
         // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats`,
         // `target-changed` (#470) e `active-conditions` logo depois dele, no mesmo attach
@@ -792,14 +805,35 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
-    // `logout-refused` e `world-full` (OW-11, #832, ADR 0060 d.7 e d.2b): contratos do MUNDO, e quem os
-    // mostra é a sessão `world` do cliente (OW-23). O hospedeiro já emite os dois: o `logout-refused` desde
-    // a OW-19 (#840) — a cada `logout` que `canLogout` recusa, a quem pediu —, e o `world-full` desde a
-    // OW-21 (#842) — a posição na fila do mundo cheio, no handshake recusado. Ficam como NÃO aplicados, e
-    // de propósito: o `satisfies never` abaixo existe para que mensagem nova não seja ignorada por
-    // esquecimento, e aqui a omissão é a decisão, declarada.
+    // `logout-refused` (OW-11, #832; OW-23, #846; ADR 0060 d.7): o veredicto do `canLogout`. O hospedeiro o emite
+    // desde a OW-19 (#840) a cada `logout` que `canLogout` recusa, a quem pediu — e a quem pediu uma hunt idle de onde
+    // o Tibia não deixaria deslogar (d.6a), quando a OW-20 chegar. O personagem não mudou. A tela mostra o aviso
+    // sobre o mundo (`ExitRefusalNotice`) e o `HuntsModal` mostra o seu; aqui fica o dado e UMA linha no registro,
+    // para o chat acender mesmo fechado, como toda recusa do servidor.
     case 'logout-refused':
+      hud.set((state) => ({
+        ...state,
+        exitRefusal: { reason: message.reason, atMs: nowMs },
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'warning', text: logoutRefusalText(message.reason), atMs: nowMs,
+        }),
+      }));
+      return;
+
+    // `world-full` (OW-11, #832; OW-23, #846; ADR 0060 d.2b): o mundo está cheio e o personagem entrou na fila do
+    // Canary. SUBSTITUI a fila (cada tentativa traz a posição de agora) com o instante local em que chegou — a
+    // duração é do relógio do servidor, e é o carimbo que faz a contagem da tela andar. Quem volta no prazo é
+    // a conexão (`net/connection.ts`); quem a mostra é `WorldQueue`.
     case 'world-full':
+      hud.set((state) => ({
+        ...state,
+        worldQueue: {
+          position: message.position,
+          retryAfterMs: message.retryAfterMs,
+          huntAvailable: message.huntAvailable,
+          receivedAtMs: nowMs,
+        },
+      }));
       return;
 
     default:

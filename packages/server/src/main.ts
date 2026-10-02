@@ -147,6 +147,8 @@ async function main(): Promise<void> {
         }),
         // A hunt idle direta do login (OW-21): o `api` confere que a hunt pedida existe, no conteúdo fixado no boot.
         hasHunt: (huntId: string) => content.hunts.has(huntId),
+        // As hunts que o menu de entrada oferece (OW-23): as do catálogo, na mesma ordem em que o jogo as lista.
+        entryHunts: () => catalogue.hunts,
         // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
         ...(content.bot.defaultConfig === undefined
           ? {}

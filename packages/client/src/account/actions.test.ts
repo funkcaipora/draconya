@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { create, play, refresh, signOut } from './actions.js';
+import { create, huntInsteadOfWaiting, leaveGame, loadEntryOptions, play, refresh, signOut } from './actions.js';
+import { INITIAL_HUD, hud } from '../state/hud.js';
+import { INITIAL_BOT, bot, botResult, edit, emptyDraft, loadConfig, toConfig } from '../bot/store.js';
 import { INITIAL_ACCOUNT, account } from './store.js';
 
 const identity = { accountId: 'a1', email: 'jogador@exemplo.com' };
@@ -26,6 +28,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 beforeEach(() => {
   account.set(() => INITIAL_ACCOUNT);
+  hud.set(() => INITIAL_HUD);
   vi.unstubAllGlobals();
 });
 
@@ -166,5 +169,138 @@ describe('sair (FUN-97)', () => {
     expect(account.get()).toMatchObject({
       phase: 'anonymous', identity: null, characters: [], playing: null,
     });
+  });
+});
+
+describe('por onde a primeira sessão nasce (OW-23, #846)', () => {
+  it('sem pedir nada, entra pelo MUNDO — o default, e o pedido de sempre', async () => {
+    server({ '/select': () => json(hero) });
+
+    await play('c1');
+
+    expect(account.get().entry).toBe('world');
+  });
+
+  it('"Caçar (idle)" guarda a hunt escolhida, que vai no ticket', async () => {
+    server({ '/select': () => json(hero) });
+
+    await play('c1', { hunt: 'rat-cellars' });
+
+    expect(account.get()).toMatchObject({ playing: 'c1', entry: { hunt: 'rat-cellars' } });
+  });
+
+  it('a recusa do select não guarda o `entry`: o jogador continua na escolha', async () => {
+    server({ '/select': () => json({ error: 'character-not-found' }, 404) });
+
+    await play('c1', { hunt: 'rat-cellars' });
+
+    expect(account.get().playing).toBeNull();
+    expect(account.get().entry).toBe('world');
+  });
+});
+
+describe('o menu de entrada do servidor (OW-23, #846)', () => {
+  it('guarda a flag e as hunts que o servidor ofereceu', async () => {
+    const calls = server({
+      '/api/entry-options': () => json({
+        openWorld: true, hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1 }],
+      }),
+    });
+
+    await loadEntryOptions();
+
+    expect(account.get().entryOptions).toEqual({
+      openWorld: true, hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1 }],
+    });
+    expect(calls[0]?.init?.credentials).toBe('include');
+  });
+
+  it('um servidor sem a rota (404) é "sem menu": a tela cai no botão único, sem erro vermelho', async () => {
+    server({ '/api/entry-options': () => json({ error: 'not-found' }, 404) });
+
+    await loadEntryOptions();
+
+    expect(account.get().entryOptions).toBeNull();
+    expect(account.get().error).toBeNull();
+  });
+
+  it('servidor fora do ar também é "sem menu" — um enfeite não pode custar a entrada', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
+
+    await loadEntryOptions();
+
+    expect(account.get().entryOptions).toBeNull();
+    expect(account.get().error).toBeNull();
+  });
+
+  it('corpo torto (o que não é o contrato) é "sem menu", não um menu pela metade', async () => {
+    server({ '/api/entry-options': () => json({ openWorld: 'sim', hunts: 3 }) });
+
+    await loadEntryOptions();
+
+    expect(account.get().entryOptions).toBeNull();
+  });
+
+  it('a lista de personagens NÃO depende dele: refresh não chama a rota do menu', async () => {
+    const calls = server({
+      '/api/auth/me': () => json(identity),
+      '/api/characters': () => json({ characters: [hero] }),
+    });
+
+    await refresh();
+
+    expect(calls.some((call) => call.url.includes('entry-options'))).toBe(false);
+  });
+});
+
+describe('caçar em vez de esperar na fila (OW-23, #846)', () => {
+  it('troca o `entry` para a hunt, e o personagem continua o mesmo', () => {
+    account.set((state) => ({ ...state, playing: 'c1', entry: 'world' }));
+
+    huntInsteadOfWaiting('rotworm-caves');
+
+    expect(account.get()).toMatchObject({ playing: 'c1', entry: { hunt: 'rotworm-caves' } });
+  });
+});
+
+describe('sair do jogo e voltar à escolha (OW-23, #846)', () => {
+  it('esquece o personagem, volta o `entry` ao mundo e zera o HUD do que saiu', async () => {
+    const calls = server({
+      '/api/auth/me': () => json(identity),
+      '/api/characters': () => json({ characters: [{ ...hero, state: 'offline' }] }),
+    });
+    account.set((state) => ({
+      ...state, phase: 'ready', identity, characters: [hero], playing: 'c1', entry: { hunt: 'rat-cellars' },
+    }));
+    hud.set((state) => ({ ...state, characterId: 'c1', gold: 999, level: 40 }));
+
+    leaveGame();
+    // O que o jogador vê na escolha do próximo personagem: nunca o ouro do que acabou de sair.
+    expect(account.get()).toMatchObject({ playing: null, entry: 'world' });
+    expect(hud.get()).toBe(INITIAL_HUD);
+
+    await vi.waitFor(() => { expect(account.get().characters[0]?.state).toBe('offline'); });
+    // Recarrega a lista: o estado de cada personagem mudou com a saída.
+    expect(calls.map((call) => call.url).some((url) => url.includes('/api/characters'))).toBe(true);
+  });
+
+  it('esquece o rascunho do bot: o personagem seguinte recebe a configuração DELE, e não a barra recusada do anterior', () => {
+    server({
+      '/api/auth/me': () => json(identity),
+      '/api/characters': () => json({ characters: [hero] }),
+    });
+    account.set((state) => ({ ...state, phase: 'ready', identity, characters: [hero], playing: 'c1' }));
+    // O jogador mexeu na barra, o servidor recusou e o rascunho ficou tocado (é o que ele precisa corrigir).
+    edit((draft) => ({ ...draft, activeSet: 1 }));
+    botResult(false, 'conjunto 2: tecla repetida');
+
+    leaveGame();
+    // Mutação que mata: `leaveGame` zerar só o HUD — `loadConfig` do próximo personagem retornaria cedo
+    // (`touched` e não salvo) e a barra dele seria a do anterior.
+    expect(bot.get()).toEqual(INITIAL_BOT);
+    loadConfig({ ...toConfig(emptyDraft()), activeSet: 2 });
+
+    expect(bot.get().draft.activeSet).toBe(2);
+    expect(bot.get().save).toBe('saved');
   });
 });

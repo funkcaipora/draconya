@@ -18,6 +18,8 @@ describe('describeEvent (FUN-110)', () => {
       // (o `sim` não mudou o formato do evento), mas a dificuldade não é mais mostrada.
       ['entered-hunt', 'rat-cellars/cautious', 'Entrou em Rat Cellars'],
       ['entered-city', 'c1', 'Voltou para a cidade'],
+      // O mundo aberto (OW-23, #846): o `sim` grava `entered-world` com o dono no detalhe.
+      ['entered-world', 'c1', 'Entrou no mundo'],
       ['level-up', '4', 'Subiu de level · 4'],
       ['level-down', '9 → 8', 'Perdeu level · 9 → 8'],
       ['xp-penalty', '1200', 'Perdeu 1200 XP'],

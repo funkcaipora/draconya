@@ -13,9 +13,10 @@ sem valor movido vira só estado absoluto, sem linha de ledger) e o **mundo hosp
 de Cidade só em PZ, a party e os amigos), a **presença no hospedeiro** (OW-19, #840: o último
 visualizador que se solta, a chegada sem visualizador e o `logout` viram intenção para o `sim`, e a saída
 que ele decide vai ao repouso), a **entrada pelo repouso** (OW-21, #842: o mundo cheio vira uma fila com
-posição, e a hunt idle é a primeira sessão de quem a pede, sem passar pelo mundo) e o **mundo e a hunt idle**
+posição, e a hunt idle é a primeira sessão de quem a pede, sem passar pelo mundo), o **mundo e a hunt idle**
 (OW-20, #841: entrar numa instância passa por `canLogout`, e o fim dela volta ao mundo com alguém olhando e ao
-repouso sem ninguém). A apresentação do cliente (OW-23) ainda não saiu do papel.
+repouso sem ninguém) e o **cliente do mundo** (OW-23, #846: o menu "Entrar no mundo" ou "Caçar (idle)", a fila,
+os ícones de PZ e de luta e o logout recusado).
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -26,14 +27,15 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem dez: o que o mundo **é** como dado, a regra de
+cada peça do plano que sai do papel; hoje existem onze: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
 topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
 que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) —, o
 checkpoint, que leva o que o mundo rendeu ao Redis (OW-16), a liquidação do checkpoint, que decide o que
 do extrato vira linha de ledger (OW-17), o mundo hospedado, que põe o personagem dentro dele (OW-18), e a
-presença no hospedeiro, que liga o socket à saída do `sim` (OW-19), e a entrada pelo repouso, que decide por
-onde ele entra e o que acontece quando o mundo está cheio (OW-21).
+presença no hospedeiro, que liga o socket à saída do `sim` (OW-19), a entrada pelo repouso, que decide por
+onde ele entra e o que acontece quando o mundo está cheio (OW-21), e o cliente, que mostra tudo isso a quem
+joga (OW-23).
 
 ## O personagem em repouso (OW-15, #836)
 
@@ -99,7 +101,8 @@ recém-chegado e a Cidade, e o `WorldShard.admit` da OW-18 o faz para quem nasce
 Com a flag ligada, a lista e a seleção de personagens (`api/characters.ts`) reportam o personagem **sem
 sessão no diretório** como `'offline'` — o estado sem sessão do invariante 8 —, em vez do `'city'` que a
 coluna `state` guarda por default. O diretório continua mandando: quem está numa hunt, ou no mundo, nunca é
-`offline`. O cliente ainda mostra o texto cru (`STATE_TEXT` não conhece `offline`): é da OW-23.
+`offline`. A tela de escolha de personagem o escreve "em repouso" (e `world`, "no mundo"): ver [O cliente do
+mundo](#o-cliente-do-mundo-ow-23-846).
 
 ### O que ainda não existe
 
@@ -585,7 +588,7 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
   sem criatura nenhuma. O personagem ocioso ainda agenda um `PLAYER_STEP` por passo (o custo de
   quem fica parado, medido pelo `bench:world`, OW-35).
 - **O evento notável.** A entrada grava `entered-world` (o dono no detalhe, como `entered-city`); o
-  texto dele no cliente é da OW-23 — até lá ele sai cru, como todo tipo que o cliente não conhece.
+  cliente o escreve "Entrou no mundo" (`event-text.ts`, OW-23).
 
 ## A saída do Tibia (OW-14, #835)
 
@@ -787,8 +790,8 @@ item. Três regras:
   **Largar a party a partir do mundo passa por `canLogout`, no `game`**: o `api` só vê o TIPO da sessão, e o gate
   de quem está em luta é do `game` (OW-20, `member-in-fight`, abaixo).
 - **Os amigos** (`api/friends.ts`): `GET /api/friends` responde `where: 'world'` para o amigo no mundo — `'city'`
-  na Cidade, `'hunt'` em qualquer instância, `null` offline. O cliente o rotula "No mundo" (`FriendsModal`); o
-  resto do HUD do mundo é da OW-23.
+  na Cidade, `'hunt'` em qualquer instância, `null` offline. O cliente o rotula "No mundo" (`FriendsModal`,
+  #839); o resto do HUD do mundo é o [cliente do mundo](#o-cliente-do-mundo-ow-23-846) (OW-23).
 
 ### O nó se recusa a subir com outro `game`
 
@@ -801,8 +804,9 @@ OW-59.
 
 - **A stamina** (OW-46): o tempo no mundo conta como recuperação na próxima transição e no próximo login — o
   `materializeStamina` da fronteira e o marco do extrato ainda tratam o mundo como "offline" (ADR 0060 d.14b).
-- **O `player-stats.zone` e o `inFight`** (OW-11): o protocolo os tem, e nenhum servidor os emite. O cliente
-  da OW-23 depende deles para os ícones de PZ e de luta.
+- **O `player-stats.zone` e o `inFight`** (OW-11): o protocolo os tem, o cliente os lê (OW-23, ícones de PZ e
+  de luta) e **nenhum servidor os emite ainda** — nenhuma issue do M48 os produz. Sem isso os dois ícones nunca
+  acendem em jogo: é o que falta para o roteiro da OW-24.
 - **A morte no mundo** (OW-32): sem monstro (OW-25) não há como morrer, e o dia em que houver, a saída por
   `member-left` leva o personagem à Cidade — a tela de relogin e o repouso no templo são da OW-32. (A morte
   NA HUNT já volta ao templo, de vida cheia, desde a OW-20.)
@@ -902,10 +906,11 @@ personagem: sai quem o `sim` nomeou, e o resto do mundo continua. O hospedeiro c
 
 - **A morte e o idle kick** (OW-32, OW-47) emitem o mesmo `departure-requested`, com os motivos `death` e
   `idle-kick`, e o hospedeiro já os cumpre. O que não existe é quem os emite, e a tela de morte no cliente.
-- **A mensagem de saída no cliente** (OW-23): o `logout-refused` chega e o cliente o ignora sem derrubar
-  (`apply.ts`); o texto da recusa e o ícone de luta são dele.
-- **A volta da hunt** (OW-20): feita ("O mundo e a hunt idle", abaixo) — o fim de uma hunt decide entre o mundo e
-  o repouso pelo visualizador.
+- **A mensagem de saída no cliente** existe desde a OW-23: o `logout-refused` vira o aviso sobre o mundo, e o
+  fechamento `1000` + `logout` leva à escolha de personagem (ver [O cliente do
+  mundo](#o-cliente-do-mundo-ow-23-846)); o ícone de luta é dele, e quem o emite ainda falta.
+- **A volta da hunt** (OW-20): feita ([O mundo e a hunt idle](#o-mundo-e-a-hunt-idle-ow-20-841)) — o fim de uma
+  hunt decide entre o mundo e o repouso pelo visualizador.
 
 ## A entrada pelo repouso (OW-21, #842)
 
@@ -991,7 +996,6 @@ handshake falha, como a OW-18 o deixou.
 
 ### O que ainda não existe
 
-- **O cliente** (OW-23): mostra a posição, respeita o `retryAfterMs` e oferece a hunt idle.
 - **A escolha do mundo** (OW-50): a porta é a do `main`; o ticket ainda não leva `world_id`.
 - **Uma métrica da fila**: o tamanho dela é `WorldQueue.size`, e nenhum painel o lê ainda.
 
@@ -1067,6 +1071,123 @@ a janela de 60 s; do templo à hunt e de volta ao mesmo tile; a morte com e sem 
 durante a gravação; a party com um membro em luta; a drenagem; a flag desligada.
 `game/world-idle-hunt.postgres.test.ts`: a linha de `characters` que o próximo ticket lê — o tile, a vida e a mana.
 
+## O cliente do mundo (OW-23, #846)
+
+O cliente passa a saber que existe um mundo e a mostrar o que o Tibia mostra: **a porta de entrada**, **a fila**,
+**os ícones de PZ e de luta**, **o logout recusado** e **o amigo no mundo**. Tudo é apresentação de um veredicto
+do servidor (invariante 4) — o cliente só manda `logout`, `enter-hunt` e o `entry` do ticket. Com `OPEN_WORLD`
+desligado, que é o default, nada disto aparece: o botão único "Entrar no jogo", a faixa de pills da Cidade e o
+ticket são os de antes, byte a byte.
+
+### A porta: "Entrar no mundo" ou "Caçar (idle)"
+
+Na escolha de personagem, quem está **em repouso** vê duas portas (ADR 0060 d.6b): **Entrar no mundo** (o
+`entry: 'world'` do ticket, o default) e **Caçar (idle)**, que abre a lista de hunts e manda
+`entry: { hunt }` — a hunt idle é a primeira sessão, sem passar pelo mundo nem pela fila dele. A hunt que o seletor
+traz marcada é a de maior level recomendado que o personagem alcança (a ordem do servidor desempata).
+
+| Quando | O que a tela mostra |
+|---|---|
+| Servidor sem mundo aberto, que não respondeu, ou sem hunt a oferecer | O botão único de sempre ("Entrar no jogo") |
+| Personagem que **já tem sessão** (a hunt em que estava, o mundo) | O botão único: o servidor o reencontra e ignora o `entry`, então oferecer "Caçar (idle)" prometeria o que ele não faz |
+| Mundo aberto, hunts e personagem em repouso | O menu de duas portas |
+
+**De onde vêm a flag e as hunts: `GET /api/entry-options`.** O catálogo de hunts só chega pelo socket, e a escolha
+que decide o PRIMEIRO ticket acontece antes de qualquer socket. A rota (autenticada, só leitura) devolve
+`{ openWorld, hunts: [{ id, name, recommendedLevel }] }` — com a flag desligada, `hunts` vai **vazio**. É a única
+peça de `server` desta issue; quem confere a hunt pedida continua sendo o `POST /api/tickets` (`400 unknown-hunt`).
+O cliente a lê **depois** da lista de personagens e sem custo para ela: um servidor sem a rota (404) ou fora do ar é
+"sem menu", nunca um erro na tela.
+
+O estado de cada personagem na lista é escrito: `offline` é **"em repouso"** (o personagem sem sessão, que
+com a flag ligada o `api` reporta assim, OW-15) e `world` é **"no mundo"**.
+
+### A sessão `'world'` no cliente
+
+`isHunting('world')` é **falso**: o mundo é a sessão compartilhada em que se entra pela fila e da qual se sai
+por logout — não uma instância com "Sair da caçada", party loot e regras de saída. A casca trata o `'world'` à
+parte (`isWorld`):
+
+- **a faixa de pills** (`HuntActions`) é a da Cidade com o rótulo "Caçar (idle)" — entrar numa hunt do mundo é
+  sair dele para a hunt idle — e mais uma: **"Sair do jogo"**, que manda o `logout`. Só o mundo a tem;
+- **o overlay de área** diz "Mundo aberto", a zona do tile (zona de proteção, ou "não se pode sair daqui") e
+  quantas criaturas estão ao alcance — nunca "a praça não credita nada";
+- **o HUD de combate** (Batalha, vitais, barra de ações) é fixo e já está ligado; o **analisador** é o do
+  personagem (a sessão do mundo só manda o que é dele, OW-18) e se chama "Analisador", não "de caçada";
+- **amigos e party** tratam o mundo como espaço social: convidar vale (a hunt é que bloqueia o convite, RF-02).
+
+**"Sair do jogo".** O servidor decide (`canLogout`): aceito, ele fecha **todos** os visualizadores com o código
+`1000` e o motivo `logout` (`SessionHost.release`) — e o cliente, ao ver esse fechamento, **não reconecta**: volta à
+escolha de personagem, com o HUD zerado e a lista recarregada. Qualquer outro fechamento (a drenagem `1001`, o
+`1000` de `session-moved`) continua sendo queda, e o cliente reanexa como sempre. Recusado, volta o `logout-refused`
+(abaixo).
+
+### Os ícones de PZ e de luta
+
+`player-stats.zone` e `player-stats.inFight` (OW-11) alimentam dois selos na fileira de condições sobre o mundo
+(`BuffBar`), com as regras do Canary (`canary/src/creatures/players/player.cpp:926-934`):
+
+- **Zona de proteção** só em `zone: 'protection'` — o `TILESTATE_PROTECTIONZONE`. `no-pvp` (a regra do mundo
+  inteiro) e `no-logout` não acendem ícone.
+- **Em luta** apaga dentro da PZ mesmo com `inFight: true`: o Canary tira as espadas quando o personagem pisa a
+  zona de proteção, porque ali a luta não prende ninguém.
+- **Ausente é "este servidor não diz"** (`null`), nunca "normal, sem luta": o `session-state` zera os dois, e o
+  `player-stats` que o segue (ou o próximo) os põe de volta. Um nó que não os manda não acende — nem apaga — nada.
+
+### O logout recusado
+
+`logout-refused { reason }` vira **um aviso sobre o mundo** (cinco segundos, em português, no centro) e **uma linha
+de aviso no registro do chat**, para o ícone acender mesmo com ele fechado:
+
+| `reason` | Texto |
+|---|---|
+| `in-fight` | "Você não pode sair durante uma luta." |
+| `no-logout-tile` | "Você não pode sair daqui." |
+
+O **`HuntsModal`** a partir do mundo **não fecha ao enviar** o `enter-hunt`: a entrada numa hunt idle é sair do
+mundo, que o servidor só permite onde o Tibia deixaria deslogar (ADR 0060 d.6a). Ele fecha quando a **sessão
+muda**, e se a entrada é recusada mostra o motivo no rodapé — "Você não pode entrar numa caçada durante uma luta."
+ou "…daqui." —, enquanto o aviso sobre o mundo se cala (a mesma recusa não é lida duas vezes). **O canal dessa
+recusa a OW-20 confirmou:** é o `logout-refused` que chega DEPOIS do pedido (o veredicto do mesmo `canLogout`, ver
+[O mundo e a hunt idle](#o-mundo-e-a-hunt-idle-ow-20-841)); o cliente também mostra a linha de aviso do sistema mais
+recente depois dele, que o servidor não usa.
+
+### A fila do mundo cheio
+
+O servidor responde `world-full { position, retryAfterMs, huntAvailable }` e fecha o socket com o código 4001
+(OW-21). O cliente faz o que o do Tibia faz — **mostra a posição, espera o tempo que o servidor mandou e tenta de
+novo sozinho**:
+
+- A tela da fila **toma o lugar do `Shell`** (sem sessão não há mundo a desenhar): "Você está na posição N da
+  fila de espera. Tentando de novo em S s." — a contagem corre no relógio local, a partir do instante em que a
+  mensagem chegou, e arredonda para cima ("0 s" só quando é agora).
+- **A volta é no `retryAfterMs`, e não no recuo de uma queda** (`net/connection.ts`): o recuo exponencial é para
+  falha, e voltar muito depois do prazo — a espera mais 15 s — devolveria o personagem ao fim da fila. O cliente soma
+  uma folga de até 500 ms (só para depois, nunca antes), e o status da conexão é `queued` ("na fila"), não
+  "reconectando". A espera não conta como tentativa que deu errado.
+- Cada tentativa traz a posição de agora e **substitui** a fila; o `session-state` — a sessão começou — a zera, e o
+  `Shell` volta.
+- **"Caçar agora"** (só com `huntAvailable` e com hunts a oferecer) refaz a conexão com `entry: { hunt }`: a hunt
+  idle não tem fila nem teto. O `entry` vai no ticket **só até o primeiro `session-state`** da conexão: depois dele
+  a volta de uma queda pede o mundo — o servidor honra o `entry` de quem não tem sessão, e quem a teve e a perdeu
+  (a hunt acabou; a Cidade foi recolhida depois de 5 min sem visualizador) também não tem uma, então repeti-lo
+  recriaria uma caçada que o jogador não pediu. **"Sair da fila"** volta à escolha de personagem; o lugar dele expira sozinho, no
+  prazo da fila.
+
+### Parâmetros
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| Quanto o aviso de logout recusado fica sobre o mundo | 5 s | `packages/client/src/state/exit-refusal.ts`, `EXIT_REFUSAL_NOTICE_MS` |
+| Folga somada ao `retryAfterMs` da fila | até 500 ms | `packages/client/src/net/connection.ts`, `QUEUE_RETRY_JITTER_MS` |
+| Fechamento do servidor que quer dizer "o personagem saiu" | código `1000`, motivo `logout` | `packages/client/src/net/connection.ts`, `LOGOUT_CLOSE` (o servidor: `SessionHost.release`) |
+
+### O que ainda não existe
+
+- **Quem emite `zone` e `inFight`** (nenhuma issue do M48): o cliente os lê, o protocolo os tem e o servidor
+  não os manda. Sem isso os selos nunca acendem em jogo, só em teste.
+- **A tela de morte** e o combate no mundo (OW-36), **o QA no navegador** (OW-24).
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor | Onde mora |
@@ -1091,9 +1212,9 @@ durante a gravação; a party com um membro em luta; a drenagem; a flag desligad
 
 ## Em aberto
 
-- **O cliente da OW-20** (OW-23): o `logout-refused` que a entrada numa hunt recusada devolve, e o 409
-  `member-in-fight` da largada de party, ainda não têm texto nem tela — o cliente de hoje os ignora. O
-  `HuntsModal` passa a mostrar o motivo.
+- **O 409 `member-in-fight`** da largada de party (OW-20) ainda não tem texto nem tela no cliente: o
+  `logout-refused` que o culpado recebe tem (OW-23), mas quem só espera o ticket vê o handshake falhar e
+  reconecta.
 - **A party que o `game` recusou** (OW-20): o `api` já gravou o formulário como `hunting` e emitiu os tickets, e
   o `game` não tem como desfazê-lo — os tickets expiram em 30 s e `disbandIfDead` o remove depois da carência
   de 45 s. Desfazer na hora pede o `game` falar com o `party-store`, que hoje é do `api`.
@@ -1105,9 +1226,8 @@ durante a gravação; a party com um membro em luta; a drenagem; a flag desligad
 - O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
   sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
-- **O cliente da fila** (OW-23) ainda não existe: o cliente de hoje ignora o `world-full` e reconecta pelo
-  recuo de sempre, que pode passar do prazo da fila (espera mais 15 s) e devolvê-lo ao fim dela. A OW-23 passa a
-  respeitar o `retryAfterMs` e a oferecer a hunt idle (`huntAvailable`).
+- **O cliente da fila** existe desde a OW-23 (ver [O cliente do mundo](#o-cliente-do-mundo-ow-23-846)): respeita
+  o `retryAfterMs`, mostra a posição e oferece a hunt idle (`huntAvailable`).
 - O leque de saída barato (OW-22) saiu: codificar uma vez, visualizadores por personagem e AOI com
   andar — ver [Cidade](city.md#o-leque-barato-ow-22-845). Falta a AOI v2 para criaturas (OW-33) e
   para combate, efeitos, campos, cadáveres e tiles (OW-34): hoje a AOI só conhece jogador.

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { describe, expect, it, vi } from 'vitest';
-import { HuntActions, leaveHunt } from './HuntActions.js';
+import { HuntActions, leaveHunt, logoutOfGame } from './HuntActions.js';
 import { stopTraining } from './TrainingStatus.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 
@@ -174,5 +174,45 @@ describe('leaveHunt (RF-07)', () => {
   it('propagates a silent failure (no connection) as false', () => {
     const send = vi.fn(() => false);
     expect(leaveHunt(send)).toBe(false);
+  });
+});
+
+describe('HuntActions no mundo aberto (OW-23, #846)', () => {
+  async function renderWorld(): Promise<string> {
+    const { prelude } = await prerender(createElement(HuntActions, { hunting: false, world: true, onChoose: () => {} }));
+    return new Response(prelude).text();
+  }
+
+  it('oferece "Caçar (idle)" e "Sair do jogo", e nunca "Sair da caçada"', async () => {
+    const html = await renderWorld();
+    expect(html).toContain('Caçar (idle)');
+    expect(html).toContain('Sair do jogo');
+    expect(html).not.toContain('Escolher caçada');
+    expect(html).not.toContain('Sair da caçada');
+    expect(html).not.toContain('Detalhes da caçada');
+  });
+
+  it('a Cidade e a hunt NÃO ganham "Sair do jogo": sair do jogo é uma ação só do mundo', async () => {
+    expect(await render(false)).not.toContain('Sair do jogo');
+    expect(await render(true)).not.toContain('Sair do jogo');
+  });
+
+  it('sem `world` a faixa é a de sempre: "Escolher caçada", byte a byte o que era', async () => {
+    const html = await render(false);
+    expect(html).toContain('Escolher caçada');
+    expect(html).not.toContain('Caçar (idle)');
+  });
+
+  it('logoutOfGame manda a intenção `logout` e nada mais — quem decide é o servidor', () => {
+    const send = vi.fn(() => true);
+    expect(logoutOfGame(send)).toBe(true);
+    expect(send).toHaveBeenCalledExactlyOnceWith({ type: 'logout' });
+  });
+
+  it('o clique de "Sair do jogo" está ligado a logoutOfGame(sendIntent), no ramo sem caçada', async () => {
+    const source = await readFile(new URL('./HuntActions.tsx', import.meta.url), 'utf8');
+    const callIndex = source.indexOf('logoutOfGame(sendIntent)');
+    expect(callIndex).toBeGreaterThan(source.indexOf('if (!hunting)'));
+    expect(callIndex).toBeLessThan(source.lastIndexOf('return ('));
   });
 });
