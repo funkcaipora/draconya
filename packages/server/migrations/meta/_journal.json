@@ -197,6 +197,13 @@
       "when": 1791600000000,
       "tag": "0027_632-hazard",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791700000000,
+      "tag": "0028_823-durable-version",
+      "breakpoints": true
     }
   ]
 }

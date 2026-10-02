@@ -182,6 +182,9 @@ export function buildApi(
       ...(dependencies.currentBoostedMonsterId === undefined
         ? {}
         : { currentBoostedMonsterId: dependencies.currentBoostedMonsterId }),
+      ...(dependencies.pendingDurableVersion === undefined
+        ? {}
+        : { pendingDurableVersion: dependencies.pendingDurableVersion }),
       ...(dependencies.loyaltyBonusPercentOf === undefined
         ? {}
         : { loyaltyBonusPercentOf: dependencies.loyaltyBonusPercentOf }),
