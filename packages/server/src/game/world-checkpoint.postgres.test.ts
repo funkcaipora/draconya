@@ -150,9 +150,10 @@ const ledgerOf = async (database: NonNullable<typeof db>, characterId: string) =
 
 describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez (#837, OW-16)', () => {
   /** O `jobs` liquidando o que ESTE personagem deixou no Redis — o caminho que o ticket usa. */
-  const sweep = (database: NonNullable<typeof db>, receipts: ReceiptStore, characterId: string) =>
+  const sweep = (database: NonNullable<typeof db>, receipts: ReceiptStore, characterId: string, openWorld = false) =>
     settleCharacterProgress(characterId, {
       database: database.database.db, receipts, logger, progression: content.progression,
+      ...(openWorld ? { openWorld: true } : {}),
     });
 
   it('100 de loot e 50 de venda, dois checkpoints e um logout: o ledger soma exatamente 150', async () => {
@@ -306,76 +307,83 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     expect(await rowOf(database, ids.characterId)).toMatchObject({ gold: 100 });
   });
 
-  it('a pilha que nasceu na sessão guarda a quantidade de AGORA: pegar, checkpoint, pegar de novo, comer, sair', async () => {
-    // O `acquired` é cumulativo e o ledger não toca a linha que já existe: o caso que o prefixo da sessão
-    // cria — todo item que o personagem pega no mundo leva o mesmo prefixo, e a pilha mantém o id ao
-    // empilhar. Sem `quantities`, o banco ficaria com 1 e o personagem perderia 2 queijos no login.
-    const database = db as NonNullable<typeof db>;
-    const ids = await seedCharacter(database);
-    const world = hostedWorld();
-    const { hero } = await world.enter(ids);
-    const stack = `${world.session.id}:p1:0`;
+  // Os três valem com a flag do `jobs` desligada (todo extrato é linha de ledger) E ligada (#838: o checkpoint sem
+  // valor novo é só estado, sem linha de ledger) — a quantidade é estado absoluto sob a versão nos dois caminhos.
+  describe.each([[false], [true]])('o inventário do mundo no banco, com OPEN_WORLD do `jobs` %s', (openWorld) => {
+    it('a pilha que nasceu na sessão guarda a quantidade de AGORA: pegar, checkpoint, pegar de novo, comer, sair', async () => {
+      // O `acquired` é cumulativo e o ledger não toca a linha que já existe: o caso que o prefixo da sessão
+      // cria — todo item que o personagem pega no mundo leva o mesmo prefixo, e a pilha mantém o id ao
+      // empilhar. Sem `quantities`, o banco ficaria com 1 e o personagem perderia 2 queijos no login.
+      const database = db as NonNullable<typeof db>;
+      const ids = await seedCharacter(database);
+      const world = hostedWorld();
+      const { hero } = await world.enter(ids);
+      const stack = `${world.session.id}:p1:0`;
 
-    give(hero, stack, 'cheese', 1);
-    await world.host.checkpointWorlds();
-    give(hero, stack, 'cheese', 2); // empilha: a mesma instância, agora com 3
-    await world.host.checkpointWorlds();
-    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 2, failed: 0 });
-    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 3]]));
+      give(hero, stack, 'cheese', 1);
+      await world.host.checkpointWorlds();
+      give(hero, stack, 'cheese', 2); // empilha: a mesma instância, agora com 3
+      await world.host.checkpointWorlds();
+      expect(await sweep(database, world.receipts, ids.characterId, openWorld)).toMatchObject({ written: 2, failed: 0 });
+      expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 3]]));
 
-    hero.inventory.consumeOne(stack); // comeu uma — o `sim` não reporta isto
-    await world.host.release(ids.characterId, 1000, 'logout');
-    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 1, failed: 0 });
+      hero.inventory.consumeOne(stack); // comeu uma — o `sim` não reporta isto
+      await world.host.release(ids.characterId, 1000, 'logout');
+      expect(await sweep(database, world.receipts, ids.characterId, openWorld)).toMatchObject({ written: 1, failed: 0 });
 
-    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 2]]));
-  });
+      expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 2]]));
+      // Com a flag ligada o segundo checkpoint (a mesma pilha, só mais gorda) é estado puro: sem linha de ledger.
+      expect((await ledgerOf(database, ids.characterId)).length).toBe(openWorld ? 2 : 3);
+    });
 
-  it('comer a última unidade apaga a linha: o item não volta no login seguinte', async () => {
-    const database = db as NonNullable<typeof db>;
-    const ids = await seedCharacter(database);
-    const world = hostedWorld();
-    const { hero } = await world.enter(ids);
-    const stack = `${world.session.id}:p1:0`;
+    it('comer a última unidade apaga a linha: o item não volta no login seguinte', async () => {
+      const database = db as NonNullable<typeof db>;
+      const ids = await seedCharacter(database);
+      const world = hostedWorld();
+      const { hero } = await world.enter(ids);
+      const stack = `${world.session.id}:p1:0`;
 
-    give(hero, stack, 'cheese', 1);
-    await world.host.checkpointWorlds();
-    await sweep(database, world.receipts, ids.characterId);
-    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 1]]));
+      give(hero, stack, 'cheese', 1);
+      await world.host.checkpointWorlds();
+      await sweep(database, world.receipts, ids.characterId, openWorld);
+      expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 1]]));
 
-    hero.inventory.consumeOne(stack);
-    await world.host.checkpointWorlds(); // o checkpoint, e não só o logout, leva a remoção
-    await sweep(database, world.receipts, ids.characterId);
-    expect(await stacksOf(database, ids.characterId)).toEqual(new Map());
+      hero.inventory.consumeOne(stack);
+      await world.host.checkpointWorlds(); // o checkpoint, e não só o logout, leva a remoção
+      await sweep(database, world.receipts, ids.characterId, openWorld);
+      expect(await stacksOf(database, ids.characterId)).toEqual(new Map());
 
-    // E o `acquired` cumulativo que ainda vem na saída não a ressuscita.
-    await world.host.release(ids.characterId, 1000, 'logout');
-    await sweep(database, world.receipts, ids.characterId);
-    expect(await stacksOf(database, ids.characterId)).toEqual(new Map());
-  });
+      // E o `acquired` cumulativo que ainda vem na saída não a ressuscita.
+      await world.host.release(ids.characterId, 1000, 'logout');
+      await sweep(database, world.receipts, ids.characterId, openWorld);
+      expect(await stacksOf(database, ids.characterId)).toEqual(new Map());
+    });
 
-  it('a pilha de um login anterior também: o que se come do mundo desce no banco, e a última some', async () => {
-    // O prefixo da sessão só alcança o que ELA criou; o queijo que veio da hunt de ontem tem outro id e
-    // não está no `acquired` — e é o mais comum de se comer.
-    const database = db as NonNullable<typeof db>;
-    const ids = await seedCharacter(database);
-    const yesterday = `hunt-ontem:${randomUUID()}:0`;
-    const last = `hunt-ontem:${randomUUID()}:1`;
-    await database.database.db.insert(itemInstances).values([
-      { id: yesterday, itemId: 'cheese', ownerCharacterId: ids.characterId, origin: 'loot', quantity: 5 },
-      { id: last, itemId: 'cheese', ownerCharacterId: ids.characterId, origin: 'loot', quantity: 1 },
-    ]);
-    const world = hostedWorld();
-    const { hero } = await world.enter(ids, [
-      { instanceId: yesterday, itemId: 'cheese', quantity: 5 }, { instanceId: last, itemId: 'cheese', quantity: 1 },
-    ]);
+    it('a pilha de um login anterior também: o que se come do mundo desce no banco, e a última some', async () => {
+      // O prefixo da sessão só alcança o que ELA criou; o queijo que veio da hunt de ontem tem outro id e
+      // não está no `acquired` — e é o mais comum de se comer.
+      const database = db as NonNullable<typeof db>;
+      const ids = await seedCharacter(database);
+      const yesterday = `hunt-ontem:${randomUUID()}:0`;
+      const last = `hunt-ontem:${randomUUID()}:1`;
+      await database.database.db.insert(itemInstances).values([
+        { id: yesterday, itemId: 'cheese', ownerCharacterId: ids.characterId, origin: 'loot', quantity: 5 },
+        { id: last, itemId: 'cheese', ownerCharacterId: ids.characterId, origin: 'loot', quantity: 1 },
+      ]);
+      const world = hostedWorld();
+      const { hero } = await world.enter(ids, [
+        { instanceId: yesterday, itemId: 'cheese', quantity: 5 }, { instanceId: last, itemId: 'cheese', quantity: 1 },
+      ]);
 
-    hero.inventory.consumeOne(yesterday);
-    hero.inventory.consumeOne(yesterday);
-    hero.inventory.consumeOne(last);
-    await world.host.release(ids.characterId, 1000, 'logout');
-    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 1, failed: 0 });
+      hero.inventory.consumeOne(yesterday);
+      await world.host.checkpointWorlds(); // só a quantidade mudou: estado puro com a flag ligada
+      hero.inventory.consumeOne(yesterday);
+      hero.inventory.consumeOne(last);
+      await world.host.release(ids.characterId, 1000, 'logout');
+      expect(await sweep(database, world.receipts, ids.characterId, openWorld)).toMatchObject({ written: 2, failed: 0 });
 
-    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[yesterday, 3]]));
+      expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[yesterday, 3]]));
+    });
   });
 
   it('o personagem parado na PZ não escreve nada: nem Redis, nem ledger', async () => {

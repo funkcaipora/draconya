@@ -2884,6 +2884,41 @@ describe.runIf(ready)('a quantidade de cada instância carregada é absoluta (#8
     expect(await quantitiesOf(database, other)).toEqual(new Map([[foreign, 9]]));
   });
 
+  it('o checkpoint que SÓ muda a quantidade é estado puro (#838): aplica sem linha de ledger, e a versão o guarda', async () => {
+    // Comer de uma pilha que o dono já tem não nasce nem morre instância nenhuma: não é valor, e o ledger não
+    // ganha linha. A quantidade chega pelo mesmo `applyQuantities`, sob a versão.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const stack = `${sessionId}:p1:0`;
+    await database.database.db.insert(itemInstances).values({
+      id: stack, itemId: 'cheese', ownerCharacterId: characterId, origin: 'loot', quantity: 3,
+    });
+    const idle = {
+      durationMs: 60_000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+      itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0, damageDealt: 0, healingDone: 0,
+    };
+
+    await receipts.save(receiptOf(sessionId, characterId, {
+      reason: 'checkpoint', seq: 2, durableVersion: 2, aggregates: idle, notableEvents: [],
+      acquired: [cheeseOf(stack, 2)], quantities: { [stack]: 2 },
+    }));
+    const result = await writePendingReceipts({ ...sweepOf(database, receipts), openWorld: true });
+
+    expect(result).toMatchObject({ written: 1, failed: 0, stateOnly: 1 });
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[stack, 2]]));
+    expect(await database.database.db.select().from(ledger).where(eq(ledger.characterId, characterId))).toEqual([]);
+
+    // Um checkpoint MAIS VELHO que chega depois não devolve a quantidade de antes.
+    await receipts.save(receiptOf(sessionId, characterId, {
+      reason: 'checkpoint', seq: 1, durableVersion: 1, aggregates: idle, notableEvents: [],
+      acquired: [cheeseOf(stack, 3)], quantities: { [stack]: 3 },
+    }));
+    await writePendingReceipts({ ...sweepOf(database, receipts), openWorld: true });
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[stack, 2]]));
+  });
+
   it('extrato SEM `quantities` (a hunt, um nó anterior) não toca a quantidade', async () => {
     const database = db as NonNullable<typeof db>;
     const characterId = await seedCharacter(database);

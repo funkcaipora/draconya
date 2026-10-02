@@ -1031,7 +1031,11 @@ Armadilhas, todas com teste que as mata (`world-checkpoint.test.ts`, mutação c
   PRÓPRIO jogo carregou (nunca uma linha que o banco tenha e a sessão não viu). A marca é lida por
   `#receiptLine` e só é TROCADA depois dele (`#buildCheckpoint`) — inverter a ordem compara o inventário
   contra ele mesmo. Só o mundo (`hosted.checkpoint !== null`) os leva: o extrato da hunt e da Cidade é
-  byte a byte o de antes.
+  byte a byte o de antes. **Com a liquidação da OW-17**, `quantities` é estado (`applyQuantities` dentro de
+  `applyProgression`, atrás de `absolute`), então o checkpoint que só muda a quantidade — nenhuma instância
+  nova, nenhum `removedInstances` — não cria linha de ledger; a instância que SAI vai em `removedInstances`,
+  que é valor (`movesValue`) e vira linha. O ledger registra nascimento e morte de instância, não cada
+  unidade da pilha.
 
 Teste: `receipts.test.ts` (o `MULTI`, a queda antes do `EXEC`, no Redis de verdade),
 `game/world-checkpoint.test.ts` (o mecanismo, ruleset de mentira), `game/world-checkpoint-real.test.ts` (a

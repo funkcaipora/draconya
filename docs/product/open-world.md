@@ -181,6 +181,13 @@ e voltaria no login. A linha do mundo leva, além do `acquired`:
   ou o do último extrato montado — e só entra o que o **próprio jogo carregou**: uma linha que o banco
   tenha e a sessão nunca viu não é apagada.
 
+**E a liquidação sem ledger (OW-17).** A quantidade que muda sozinha — comer de uma pilha que o dono já tem,
+ou empilhar nela — não nasce nem mata instância, então `movesValue` não a conta: o checkpoint é estado puro e
+`applyQuantities` a aplica sem linha de ledger, idempotente pela versão como o layout. A instância que
+**sai** entra em `removedInstances`, que é valor ("item que morreu"), e o checkpoint dela vira linha de
+ledger. O ledger registra o nascimento e a morte da instância, não cada unidade da pilha; se um dia ele
+passar a auditar a quantidade, é `movesValue` que aprende.
+
 Só o mundo leva os dois: a hunt e a Cidade emitem o extrato de sempre, byte a byte. (Comer de uma pilha
 persistida dentro de uma hunt continua sem refletir no banco até o fim dela — defeito anterior ao mundo e
 fora desta issue.)
