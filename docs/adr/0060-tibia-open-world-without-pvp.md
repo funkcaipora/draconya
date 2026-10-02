@@ -658,3 +658,28 @@ A decisão 10.f manda persistir vida, mana e condições (`characters.health/man
 O `upgrade-existing-schema.sql` não ganha as colunas, como não ganhou a `durable_version` (#823): é o upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a migração `0029` falhar ao rodar depois dele.
 
 **Efeito no que esta decisão escreveu:** nenhum. A decisão 10.f continua valendo; esta emenda só registra o formato das condições, onde a flag nasce e as duas regras de segurança do extrato.
+
+## Emenda — 2026-10-02 (#838, OW-17): o extrato sem valor movido é estado sob versão, e a flag chega ao `jobs`
+
+A decisão 10.d diz que a linha sem valor movido não cria linha de ledger e leva só estado absoluto, idempotente
+pela versão (10.e). A OW-17 a implementou em `packages/server/src/jobs/ledger.ts` e fechou quatro detalhes que a
+decisão deixava abertos (`docs/product/open-world.md`, "A liquidação do checkpoint no `jobs`"):
+
+- **"Sem valor" tem definição fechada** (`movesValue`): `xpGained`, `goldGained`, `goldSpent`, `kills` e `deaths`
+  iguais a zero, e `acquired` e `removedInstances` vazios. A XP negativa da penalidade de morte e o gold que
+  entra e sai na mesma sessão contam como valor. Os campos monotônicos (Bestiário, Bosstiary, magias, vocação,
+  promoção) não contam — já são idempotentes por si — e entram em todo extrato, também no atrasado.
+- **Só o extrato VERSIONADO pula o ledger.** Sem versão não há a guarda que torna a aplicação idempotente, e a
+  chave `(session_id, seq)` é a única idempotência dele: o extrato de um nó anterior (deploy em rolagem) segue
+  com linha de ledger mesmo sem valor.
+- **A flag `OPEN_WORLD` chega ao `jobs` e à liquidação do ticket.** A emenda da OW-15 dizia que o `jobs` não a
+  lê; agora a lê para uma coisa só, o pulo do ledger. Com ela desligada — o default — todo extrato grava a linha,
+  como antes. Uma divergência de flag entre `jobs` e `api` é inofensiva: o mesmo extrato dá o mesmo estado, com
+  uma linha de ledger a mais ou a menos.
+- **O estado aplicado sem ledger não toca em `xp`, `gold` nem `level`.** `characters.gold` segue sendo a
+  projeção do ledger.
+
+**Efeito no que esta decisão escreveu:** nenhum no desenho. O invariante 10 fica intacto, porque ele fala de
+movimentação de valor e a linha sem valor não move nenhum; o que a emenda registra é a definição de "valor", a
+regra do extrato sem versão e onde a flag é lida. Os números do custo (3,3 transações/s e até 288 mil linhas de
+ledger por dia por mundo com 200 personagens a 60 s) seguem os da decisão 10.d, agora com o teto explicado.
