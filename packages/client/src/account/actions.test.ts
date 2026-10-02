@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { create, huntInsteadOfWaiting, leaveGame, loadEntryOptions, play, refresh, signOut } from './actions.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
+import { INITIAL_BOT, bot, botResult, edit, emptyDraft, loadConfig, toConfig } from '../bot/store.js';
 import { INITIAL_ACCOUNT, account } from './store.js';
 
 const identity = { accountId: 'a1', email: 'jogador@exemplo.com' };
@@ -281,5 +282,25 @@ describe('sair do jogo e voltar à escolha (OW-23, #846)', () => {
     await vi.waitFor(() => { expect(account.get().characters[0]?.state).toBe('offline'); });
     // Recarrega a lista: o estado de cada personagem mudou com a saída.
     expect(calls.map((call) => call.url).some((url) => url.includes('/api/characters'))).toBe(true);
+  });
+
+  it('esquece o rascunho do bot: o personagem seguinte recebe a configuração DELE, e não a barra recusada do anterior', () => {
+    server({
+      '/api/auth/me': () => json(identity),
+      '/api/characters': () => json({ characters: [hero] }),
+    });
+    account.set((state) => ({ ...state, phase: 'ready', identity, characters: [hero], playing: 'c1' }));
+    // O jogador mexeu na barra, o servidor recusou e o rascunho ficou tocado (é o que ele precisa corrigir).
+    edit((draft) => ({ ...draft, activeSet: 1 }));
+    botResult(false, 'conjunto 2: tecla repetida');
+
+    leaveGame();
+    // Mutação que mata: `leaveGame` zerar só o HUD — `loadConfig` do próximo personagem retornaria cedo
+    // (`touched` e não salvo) e a barra dele seria a do anterior.
+    expect(bot.get()).toEqual(INITIAL_BOT);
+    loadConfig({ ...toConfig(emptyDraft()), activeSet: 2 });
+
+    expect(bot.get().draft.activeSet).toBe(2);
+    expect(bot.get().save).toBe('saved');
   });
 });

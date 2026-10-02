@@ -8,6 +8,7 @@ import * as api from './api.js';
 import { ApiError } from './api.js';
 import type { TicketEntry } from './api.js';
 import { hud, INITIAL_HUD } from '../state/hud.js';
+import { resetBot } from '../bot/store.js';
 
 /**
  * A frase de "sem conexão": o `else` de `attempt` a usa quando a chamada nem chegou a
@@ -105,11 +106,14 @@ export function huntInsteadOfWaiting(huntId: string): void {
  * Volta à escolha de personagem: o jogador saiu do jogo (o logout aceito, #846) ou desistiu da fila.
  *
  * Zera o HUD — o que ele guarda é do personagem que acabou de sair, e o próximo a entrar não pode ver o
- * ouro e o inventário de outro na primeira tela. O mundo (`state/world.ts`) não precisa: o `instance-enter`
- * da próxima sessão o limpa por inteiro. Recarrega a lista, porque o estado de cada personagem mudou.
+ * ouro e o inventário de outro na primeira tela — e o rascunho do bot, que `loadConfig` preserva quando está
+ * tocado e não salvo: a barra e as automações de um personagem não podem virar as do seguinte (`resetBot`).
+ * O mundo (`state/world.ts`) não precisa: o `instance-enter` da próxima sessão o limpa por inteiro. Recarrega
+ * a lista, porque o estado de cada personagem mudou.
  */
 export function leaveGame(): void {
   hud.set(() => INITIAL_HUD);
+  resetBot();
   account.set((state) => ({ ...state, playing: null, entry: 'world' }));
   void refresh();
 }
