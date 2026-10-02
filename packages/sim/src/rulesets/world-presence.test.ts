@@ -177,6 +177,9 @@ const rulesetOf = (session: Session): WorldRuleset => {
 
 const XLOG = 'xlog-attempt';
 
+/** Um conjunto da barra de ações sem nenhum slot: o bot não tem o que apertar. */
+const emptySet = () => ({ slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null) });
+
 /** Anda a sessão `durationMs` em fatias de `stepMs`, e devolve tudo o que ela emitiu. */
 function run(session: Session, durationMs: number, stepMs = 100): DomainEvent[] {
   const emitted: DomainEvent[] = [];
@@ -409,21 +412,33 @@ describe('perda de conexão: o x-log aos 60 s (OW-14, ADR 0060 d.7)', () => {
     expect(departuresOf(run(session, 10_000))).toHaveLength(1);
   });
 
+  // O carimbo de luta, em relação ao instante da queda: nenhum, no próprio instante (a janela de
+  // 60 s vence EXATAMENTE junto com a tentativa — o caso em que desistir errado vira atraso zero) e
+  // um golpe de há 90 s (já vencido). Em tile de no-logout o carimbo é irrelevante: a tentativa lê
+  // `'no-logout-tile'`, e a guarda de `#onXlogAttempt` é o que a impede de reagendar por luta.
   it.each([
     ['no-logout sozinho', NO_LOGOUT],
     ['PZ + no-logout', PZ_NO_LOGOUT],
   ] as const)('tile de %s: a tentativa desiste e NÃO vira varredura (o idle kick é o teto)', (_name, at) => {
-    const session = newWorld();
-    const trace = traceEvents(session);
-    arrive(session, 'a', at);
-    rulesetOf(session).presenceLost(session, 'a');
-    // Nem com luta: o tile vence.
-    expect(departuresOf(run(session, XLOG_DELAY_MS))).toEqual([]);
-    // Uma tentativa, e nenhuma depois: o personagem não anda sem dono, então o tile não muda.
-    expect(session.dueAtOf(XLOG, 'a')).toBeNull();
-    expect(departuresOf(run(session, 20 * 60_000))).toEqual([]);
-    expect(attemptsOf(trace, 'a')).toEqual([XLOG_DELAY_MS]);
-    expect(session.participants.map((p) => p.id)).toEqual(['a']);
+    for (const [stampName, stampAgoMs] of [
+      ['sem luta', null], ['golpe no instante da queda', 0], ['golpe de 90 s atrás', 90_000],
+    ] as const) {
+      const session = newWorld();
+      const trace = traceEvents(session);
+      const hero = arrive(session, 'a', at);
+      run(session, 90_000);
+      hero.lastCombatActionAtMs = stampAgoMs === null ? null : session.nowMs - stampAgoMs;
+      const lostAtMs = session.nowMs;
+      rulesetOf(session).presenceLost(session, 'a');
+      // Uma tentativa, nos 60 s, e nada mais: o personagem não anda sem dono, então o tile não muda.
+      // Sem a guarda, o carimbo no instante da queda reagendaria com atraso zero até estourar o teto
+      // de eventos por avanço (e `scheduleIn` lança em atraso negativo) — por isso nenhum lança aqui.
+      expect(() => run(session, XLOG_DELAY_MS), stampName).not.toThrow();
+      expect(session.dueAtOf(XLOG, 'a'), stampName).toBeNull();
+      expect(departuresOf(run(session, 20 * 60_000)), stampName).toEqual([]);
+      expect(attemptsOf(trace, 'a'), stampName).toEqual([lostAtMs + XLOG_DELAY_MS]);
+      expect(session.participants.map((p) => p.id), stampName).toEqual(['a']);
+    }
   });
 
   it('o carimbo de luta velho não segura: só `isInFight` vale, no relógio lógico', () => {
@@ -639,7 +654,6 @@ describe('o alvo é solto e a automação para (OW-14, ADR 0060 d.7)', () => {
   });
 
   it('a caminhada atrás do alvo (postura `follow`) também para: o herói sem conexão não sai do tile', () => {
-    const emptySet = () => ({ slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null) });
     const chase: BotConfigV2 = botConfigV2Schema.parse({
       version: BOT_VOCABULARY_VERSION, activeSet: 0,
       sets: [emptySet(), emptySet(), emptySet(), emptySet()],
@@ -705,7 +719,6 @@ describe('o alvo é solto e a automação para (OW-14, ADR 0060 d.7)', () => {
   });
 
   it('a automação da barra (swap-ring) também para sem conexão e retoma ao reanexar', () => {
-    const emptySet = () => ({ slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null) });
     const config: BotConfigV2 = botConfigV2Schema.parse({
       version: BOT_VOCABULARY_VERSION, activeSet: 0,
       sets: [emptySet(), emptySet(), emptySet(), emptySet()],
@@ -736,6 +749,81 @@ describe('o alvo é solto e a automação para (OW-14, ADR 0060 d.7)', () => {
     run(session, 2_000);
     expect(hero.inventory.equippedAt('finger')?.itemId).toBe('other-ring');
     expect(trace.filter(([, kind]) => kind === 'bot-automation').length).toBeGreaterThan(0);
+  });
+
+  it('o ciclo da automação JÁ agendado na queda vence, não age e NÃO se reagenda: só reanexar o traz de volta', () => {
+    const config: BotConfigV2 = botConfigV2Schema.parse({
+      version: BOT_VOCABULARY_VERSION, activeSet: 0,
+      sets: [emptySet(), emptySet(), emptySet(), emptySet()],
+      automations: [{
+        model: 'swap-ring',
+        params: { itemId: 'other-ring', manaFloor: 0, restorePrevious: true },
+        enter: [{ kind: 'hp', op: '<', percent: 40 }],
+        exit: [{ kind: 'hp', op: '>', percent: 90 }],
+      }],
+    });
+    const session = newWorld();
+    const trace = traceEvents(session);
+    // Vida cheia: a condição de entrada é falsa, e o ciclo da automação roda (e se reagenda) a cada
+    // segundo sem fazer nada — o evento está NA FILA no instante da queda.
+    const hero = member('a', {
+      worldPosition: OUTSIDE,
+      inventory: { backpack: [{ instanceId: 'bag-0', itemId: 'other-ring', quantity: 1 }], equipped: {} },
+    });
+    session.enter(hero);
+    const ruleset = rulesetOf(session);
+    ruleset.configureBot(session, config, 'a');
+    run(session, 3_000);
+    expect(session.dueAtOf('bot-automation', 'a')).not.toBeNull();
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+
+    ruleset.presenceLost(session, 'a');
+    const lostAtMs = session.nowMs;
+    // A condição passa a valer SEM dono: o ciclo que já estava agendado vence e encontra o
+    // personagem suspenso. Sem a guarda de `#onAutomation` ele vestiria o anel e se reagendaria,
+    // a cada segundo, para quem ninguém dirige.
+    hero.health = 1_000;
+    run(session, 10_000);
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+    expect(session.dueAtOf('bot-automation', 'a')).toBeNull();
+    expect(trace.filter(([at, kind]) => kind === 'bot-automation' && at > lostAtMs + 1_000)).toEqual([]);
+
+    // Reanexou: o ciclo volta e, com a condição valendo, o anel é vestido.
+    ruleset.presenceRestored(session, 'a');
+    run(session, 2_000);
+    expect(hero.inventory.equippedAt('finger')?.itemId).toBe('other-ring');
+    expect(session.dueAtOf('bot-automation', 'a')).not.toBeNull();
+  });
+
+  it('a caminhada até um tile distante (`walk-to`) é abandonada na queda e NÃO retoma ao reanexar', () => {
+    const FROM = abs(3, 4);
+    const DESTINATION = { x: 8, y: 4 };
+    const start = () => {
+      const session = newWorld();
+      const hero = arrive(session, 'a', FROM);
+      const ruleset = rulesetOf(session);
+      // O primeiro passo sai já no pedido; o resto do caminho fica guardado para os próximos passos.
+      expect(ruleset.requestMove(session, 'a', DESTINATION)).toMatchObject({ ok: true });
+      return { session, hero, ruleset };
+    };
+
+    // O controle: com dono, o herói chega ao destino.
+    const control = start();
+    run(control.session, 10_000);
+    expect(control.hero.position).toEqual({ ...DESTINATION, z: 7 });
+
+    const { session, hero, ruleset } = start();
+    const firstStep = { ...hero.position };
+    expect(firstStep).not.toEqual(FROM);
+    ruleset.presenceLost(session, 'a');
+    // Parado onde o primeiro passo o deixou, mesmo com o destino a quatro tiles.
+    run(session, 10_000);
+    expect(hero.position).toEqual(firstStep);
+    // E o destino antigo não volta com o dono: a caminhada foi LIMPA na queda (`suspendAutomation`),
+    // não só pausada — quem reanexa ao mesmo personagem não o vê sair andando sozinho.
+    ruleset.presenceRestored(session, 'a');
+    run(session, 10_000);
+    expect(hero.position).toEqual(firstStep);
   });
 });
 
