@@ -254,6 +254,11 @@ export interface SessionTopology {
   /**
    * A stamina queima por TEMPO de sessão (§10.2)? Instância: sim, 1:1 com o tempo de hunt. O mundo
    * a queima quando se ganha XP, como o Canary, e isso é a OW-46.
+   *
+   * Controla SÓ a stamina e o aviso `stamina-exhausted`. A comida (`fedMs`, #726) não é desta
+   * chave: ela drena pelo tempo de sessão em qualquer topologia, porque é a
+   * `CONDITION_REGENERATION` do Canary, que conta o tempo com o jogador no jogo — um mundo que
+   * desligasse esta chave não pode congelar a refeição.
    */
   readonly burnsStaminaByTime: boolean;
 

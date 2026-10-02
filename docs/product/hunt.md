@@ -709,7 +709,7 @@ OW-13 que a escreve; esta costura só abre a porta.
 | o que a morte e a saída concluída fazem (`onCharacterDied`, `onExitFinished`) | solo encerra; party solta quem saiu com o extrato dele |
 | o que nasce com o primeiro corredor (`startsInstanceSchedules`) | o spawn inicial e as regras de saída |
 | onde quem entra é colocado (`placeOnEnter`) | o primeiro no tile inicial da rota, o segundo no livre mais próximo |
-| a rota, as regras de saída e a stamina por tempo (`runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime`) | valem |
+| a rota, as regras de saída e a stamina por tempo (`runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime`) | valem (a chave `burnsStaminaByTime` é só da stamina e do aviso `stamina-exhausted`; a comida drena sempre) |
 | se o extrato nomeia o dono (`namesOwnerInEvents`) | só com mais de um presente |
 
 Cada uso de `session.participants` do ruleset foi classificado — o que é "criaturas presentes" e

@@ -6,9 +6,11 @@
 //
 // **Drena por `dtMs` de hunt, nunca por tick** (invariante 2) — o mesmo argumento de
 // `drainStamina`: um evento próprio só para "descontar o tempo" duplicaria a cadência que já
-// existe em `#burnStamina` (`hunt.ts`), chamado a cada vencimento com o tempo LÓGICO decorrido
-// desde a última cobrança. Ao contrário da stamina, não há recuperação fora de hunt — a Cidade
-// não anda (ADR 0004/0023), e comer só acontece dentro da hunt (decisão 8 do ADR 0049).
+// existe em `#chargeElapsedTime` (`hunt.ts`), chamado a cada vencimento com o tempo LÓGICO
+// decorrido desde a última cobrança. Esse método drena a comida em qualquer topologia, mesmo onde
+// a stamina não queima por tempo (`burnsStaminaByTime: false`). Ao contrário da stamina, não há
+// recuperação fora de hunt — a Cidade não anda (ADR 0004/0023), e comer só acontece dentro da
+// hunt (decisão 8 do ADR 0049).
 //
 // A REGENERAÇÃO em si (se ela CONSULTA `fedMs`) é `progression.regeneration.requiresFood`,
 // lido em `HuntRuleset#onRegen` — este arquivo só mantém o contador; quem decide se alguém olha

@@ -20,7 +20,7 @@
 //
 // **A stamina não anda no Treino** (ADR 0060 d.14c, emenda ao ADR 0059 d.1): o exercise training do
 // Canary é online, e o Canary só regenera stamina deslogado. O Treino não a drena — só a hunt o faz
-// (`#burnStamina`) —, e quem a impede de RECUPERAR é a fronteira da transição de saída, que só avança o
+// (`#chargeElapsedTime`) —, e quem a impede de RECUPERAR é a fronteira da transição de saída, que só avança o
 // marco (`holdStamina`, `game/sessions.ts`). Sem monstro, sem suprimento consumido, sem dano, sem RNG.
 
 import type {

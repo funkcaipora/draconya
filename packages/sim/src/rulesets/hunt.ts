@@ -2048,7 +2048,7 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #tileOverrides: TileOverrides;
 
-  /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
+  /** Até que instante lógico o tempo de sessão já foi cobrado (stamina e comida). Ver `#chargeElapsedTime`. */
   #staminaAnchorMs = 0;
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
@@ -3445,7 +3445,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
     // Saída pelo socket (#193): a cascata roda no primeiro evento depois dela.
     this.#flushLoss(session, 'manual-exit');
-    if (this.#topology.burnsStaminaByTime) this.#burnStamina(session);
+    this.#chargeElapsedTime(session);
 
     switch (event.kind) {
       case PLAYER_STEP: return this.#onPlayerStep(session, event.subject);
@@ -3492,21 +3492,31 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Stamina cai 1:1 com o tempo de hunt, e zerar NÃO encerra nada (§10.2). É a regra que mais
-   * parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
+   * Cobra o TEMPO de sessão decorrido: a stamina cai 1:1 com o tempo de hunt, e a comida
+   * (`fedMs`, #726) drena pelo mesmo `dtMs`. Zerar a stamina NÃO encerra nada (§10.2) — é a regra
+   * que mais parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
    * continua caçando, matando e apanhando — só para de ganhar XP.
    *
    * Cobrada pelo tempo LÓGICO decorrido desde a última cobrança, e não por um evento próprio:
    * é uma grandeza contínua, e um evento periódico daria a ela uma granularidade que ela não
    * tem. Assim a conta é exata em qualquer cadência, e o custo é uma subtração.
+   *
+   * **São duas grandezas com regras diferentes, numa âncora só.** A stamina queima por tempo só
+   * onde `topology.burnsStaminaByTime` diz (a instância; o mundo a queima ao ganhar XP, OW-46), e
+   * também só então vale o aviso `stamina-exhausted`. A comida é a `CONDITION_REGENERATION` do
+   * Canary, que conta o tempo com o jogador no jogo em qualquer modo — por isso drena SEMPRE,
+   * inclusive onde a chave é `false`: uma refeição que nunca acaba seria bug do mundo, e o
+   * `fedMs` é persistido. A âncora avança nos dois casos; um segundo acumulador para a mesma
+   * grandeza contínua é o que `food.ts` explica que não vale a pena.
    */
-  #burnStamina(session: Session): void {
+  #chargeElapsedTime(session: Session): void {
     const dtMs = session.nowMs - this.#staminaAnchorMs;
     if (dtMs <= 0) return;
     this.#staminaAnchorMs = session.nowMs;
+    const burnsStamina = this.#topology.burnsStaminaByTime;
     for (const character of session.participants) {
       if (!character.alive) continue;
-      const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      const exhausted = burnsStamina && drainStamina(character, dtMs, this.#options.stamina);
       // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
       // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
       // calculado aqui evita um segundo acumulador para a mesma grandeza contínua.

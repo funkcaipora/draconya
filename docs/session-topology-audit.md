@@ -44,7 +44,7 @@ Os 16 usos de classe T estão atrás de 9 perguntas e 2 chaves da `SessionTopolo
 | `onLeaderGone` | 2 | O mais antigo assume e grava `leader-changed`. |
 | `onCharacterDied` | 1 | Solo encerra; party solta o morto com o extrato dele. |
 | `onExitFinished` | 1 | O mesmo, para a saída concluída. |
-| `burnsStaminaByTime` | 1 | Sim. |
+| `burnsStaminaByTime` | 1 | Sim (só a stamina; a comida drena em qualquer topologia). |
 | `runsExitRules` | 2 | Sim: o evento periódico e a cascata `party-member-lost`. |
 | `namesOwnerInEvents` | 2 | Só com mais de um presente. |
 | `startsInstanceSchedules` | — | Com o primeiro corredor. |
@@ -115,7 +115,7 @@ Linhas de `packages/sim/src/rulesets/hunt.ts` em `00c70359`. As colunas "Classe"
 | 18 | 3248 | `#flushLoss` | `const next = session.participants[0];` | T | `onLeaderGone` |
 | 19 | 3266 | `#emitPartyState` | `members: session.participants.map((p) => ({ characterId: p.id, alive: p.ali...` | G | `party-state`: sai cedo sem `#party` |
 | 20 | 3305 | `exitStatus` | `const lastCombatAtMs = findById(session.participants, characterId)?.lastCom...` | P | busca por id |
-| 21 | 3462 | `#burnStamina` | `for (const character of session.participants) {` | T | `burnsStaminaByTime` — o laço é de presentes, quem decide se roda é a chave |
+| 21 | 3462 | `#chargeElapsedTime` (era `#burnStamina`) | `for (const character of session.participants) {` | T | `burnsStaminaByTime` — o laço é de presentes; a chave decide só a stamina e o aviso `stamina-exhausted`, a comida (`drainFedMs`) drena sempre |
 | 22 | 3492 | `#onRegen` | `const character = findById(session.participants, characterId);` | P | busca por id |
 | 23 | 3621 | `#onCharacterDied` | `if (session.participants.length <= 1) {` | T | `onCharacterDied` |
 | 24 | 3699 | `#onMemberLost` | `for (const member of [...session.participants]) {` | T | `runsExitRules` — a cascata `party-member-lost` é uma regra de saída |

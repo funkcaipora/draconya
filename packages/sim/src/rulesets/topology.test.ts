@@ -596,6 +596,40 @@ describe('o que roda: rota, regras de saída e stamina por tempo', () => {
     expect(staminaAfter()).toBeLessThan(stamina.maxMs);
     expect(staminaAfter(topologyWith({ burnsStaminaByTime: false }))).toBe(stamina.maxMs);
   });
+
+  it('burnsStaminaByTime: false não congela a comida — `fedMs` drena pelo tempo em qualquer topologia', () => {
+    const afterOneMinute = (topology?: SessionTopology) => {
+      const hero = member('hero');
+      hero.fedMs = 600_000;
+      const { session } = start([hero], {
+        loaded: content({ routes: [emptyRoute] }), ...(topology === undefined ? {} : { topology }),
+      });
+      run(session, 60_000);
+      return { fedMs: hero.fedMs, staminaMs: hero.staminaMs };
+    };
+    const instance = afterOneMinute();
+    const world = afterOneMinute(topologyWith({ burnsStaminaByTime: false }));
+    // A comida: o mesmo minuto de sessão, com a chave ligada ou desligada.
+    expect(instance.fedMs).toBe(540_000);
+    expect(world.fedMs).toBe(540_000);
+    // E a stamina continua sendo só da chave.
+    expect(instance.staminaMs).toBeLessThan(stamina.maxMs);
+    expect(world.staminaMs).toBe(stamina.maxMs);
+  });
+
+  it('burnsStaminaByTime: false também cala o aviso `stamina-exhausted`', () => {
+    const warnings = (topology?: SessionTopology) => {
+      const hero = member('hero');
+      hero.staminaMs = 1_000;
+      const { session } = start([hero], {
+        loaded: content({ routes: [emptyRoute] }), ...(topology === undefined ? {} : { topology }),
+      });
+      run(session, 60_000);
+      return session.notableEvents.filter((e) => e.type === 'stamina-exhausted').length;
+    };
+    expect(warnings()).toBe(1);
+    expect(warnings(topologyWith({ burnsStaminaByTime: false }))).toBe(0);
+  });
 });
 
 describe('extrato: o formato do detalhe não depende de quantos estão online', () => {
