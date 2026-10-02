@@ -17,7 +17,11 @@
 //   (ADR 0003:27-32), e desde o ADR 0020 `hz` só agrupa trabalho: o resultado é o mesmo a 1 Hz e a
 //   10 Hz, e a taxa fixa é o que mantém a apresentação sem salto;
 // - o gate de serviço de Cidade por tile (`acceptsCityServices`) e a tradução da posição para a
-//   coordenada absoluta (`worldPositionOf`).
+//   coordenada absoluta (`worldPositionOf`);
+// - a SAÍDA do Tibia (OW-14): o `logout` que passa por `canLogout` (`requestLogout`) e a perda de
+//   conexão (`presenceLost`/`presenceRestored`), que solta o alvo, para a automação e tenta sair aos
+//   60 s — e, em luta, quando a janela de luta vence. O `sim` decide e EMITE `departure-requested`
+//   ou `logout-refused`; tirar o personagem da sessão com o checkpoint é I/O, do hospedeiro.
 //
 // Nada disto é novo motor, e nada aqui roda por tick (invariante 2): o que o mundo faz continua
 // sendo evento da fila da sessão. E a sessão é a do hospedeiro — este arquivo só a monta.
@@ -25,16 +29,29 @@
 import type { Content, Hunt, Point, Route, Tilemap, World } from '@draconya/content';
 import { absoluteToLocal, localToAbsolute } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
+import { IN_FIGHT_WINDOW_MS } from '../combat/in-fight.js';
 import { Rng } from '../rng.js';
+import { EventPriority } from '../schedule.js';
+import type { ScheduledEvent } from '../schedule.js';
 import { Session } from '../session.js';
 import type { SessionLimits } from '../session.js';
-import { hasZoneFlag } from '../zones.js';
+import { NO_WORLD_POSITION, XLOG_DELAY_MS } from '../world-exit.js';
+import type { WorldDepartureReason } from '../world-exit.js';
+import { canLogout, hasZoneFlag } from '../zones.js';
+import type { LogoutVerdict } from '../zones.js';
 import { HuntRuleset, contentOptionsOf } from './hunt.js';
 import type { HuntRulesetOptions } from './hunt.js';
 import { instanceTopology, worldTopology } from './topology.js';
 
 /** A taxa de atualização do mundo, em Hz, com ou sem visualizador (ADR 0060 d.5, ADR 0003). */
 export const WORLD_HZ = 10;
+
+/**
+ * A tentativa de sair do personagem sem conexão (OW-14). O subject é o id dele, como o de todo
+ * evento de personagem: `Session.cancelEvents(character.id)` — o que `onEnter` faz — a leva junto,
+ * e `presenceRestored` a cancela pelo par `(kind, subject)`.
+ */
+const XLOG_ATTEMPT = 'xlog-attempt';
 
 /**
  * Os tetos da sessão do mundo (ADR 0060 d.5): `MAX_EVENTS_PER_ADVANCE` e `MAX_PENDING_DOMAIN_
@@ -123,6 +140,143 @@ export class WorldRuleset extends HuntRuleset {
    */
   worldPositionOf(character: CharacterRuntime): Point | undefined {
     return localToAbsolute(this.#map, character.position);
+  }
+
+  // --- a saída do Tibia (OW-14, ADR 0060 d.7) ---------------------------------------------------
+
+  /**
+   * O jogador pediu para sair (a intenção `logout`): passa por `canLogout` (OW-10, a regra de
+   * `Player::canLogout`, `canary/src/creatures/players/player.cpp:6960-6979`) e resulta em UM de
+   * dois eventos de domínio — nunca nos dois, e nunca em nenhum:
+   *
+   * - `departure-requested { reason: 'logout' }`, com a posição absoluta, quando o Tibia deixaria;
+   * - `logout-refused { reason }`, com o motivo do Canary (`protocolgame.cpp:1151-1162`) — tile de
+   *   no-logout ou luta fora da PZ —, e o personagem fica como está.
+   *
+   * Na PZ a saída é imediata, em luta ou não; fora dela, só depois de a janela de luta vencer.
+   * O veredicto é o MESMO a 1 Hz e a 10 Hz: `canLogout` lê o relógio lógico, não o de parede.
+   *
+   * Quem pede o logout é o cliente (invariante 4: só intenção), e a decisão é do servidor. A saída
+   * em si — o checkpoint e soltar o personagem para o repouso — é do hospedeiro, que lê o evento:
+   * o `sim` não faz I/O, e o personagem continua na sessão até ele chamar `Session.leave`.
+   *
+   * Devolve o veredicto para quem quer responder na hora; `null` — e nada é emitido — para quem não
+   * está na sessão ou já morreu (a morte tem a saída dela, OW-32).
+   */
+  requestLogout(session: Session, characterId: string): LogoutVerdict | null {
+    const character = this.#presentCharacter(session, characterId);
+    if (character === null) return null;
+    const verdict = canLogout(character, this.#map, session.nowMs);
+    if (verdict.ok) this.#requestDeparture(session, character, 'logout');
+    else session.emit({ kind: 'logout-refused', characterId, reason: verdict.reason });
+    return verdict;
+  }
+
+  /**
+   * O último visualizador do personagem se soltou, ou ele chegou ao mundo sem nenhum: uma intenção
+   * de SERVIDOR — o cliente nunca a manda, e o protocolo não tem opcode para ela (invariante 4).
+   * Quem a entrega é o hospedeiro, no instante lógico em que a conexão caiu (ADR 0060 d.7).
+   *
+   * No Tibia o personagem sem conexão não some: fica parado, vulnerável, e sai depois — por isso
+   * isto NÃO o tira do mundo, só o deixa só:
+   *
+   * 1. o alvo é solto e a automação dele para (`suspendAutomation`: targeting, bot, barra de
+   *    ações, caminhada, follow e postura) — `Player::sendPing`, `player.cpp:2323-2325`;
+   * 2. agenda a tentativa de saída em `XLOG_DELAY_MS` (60 s, `player.cpp:2327`).
+   *
+   * Na tentativa (`#onXlogAttempt`), `canLogout` decide: passa, e sai (`departure-requested`, motivo
+   * `'xlog'`); em luta, reagenda para o instante em que a janela de luta vence — um evento, não uma
+   * varredura. O Canary tenta UMA vez e deixa o idle kick resolver (`player.cpp:2335-2337`); o TFS
+   * derruba mesmo em luta (`tfs/src/player.cpp:895-908`); o Draconya fica com o `canLogout` do
+   * Canary e o "sai quando a luta acaba" do Tibia, com o idle kick (OW-47) como teto — nenhum dos
+   * dois desenhos deixa fugir de uma luta fechando o navegador nem deixa o personagem vulnerável
+   * até 16 minutos depois de a luta acabar (ADR 0060, "Alternativas consideradas").
+   *
+   * Idempotente: o segundo `presence-lost` de quem já está sem conexão é ignorado, e NÃO reinicia a
+   * contagem — senão cada reconexão que falha empurraria a saída. Quem não está na sessão ou já
+   * morreu também é ignorado.
+   *
+   * Nada aqui depende de `attached` (invariante 3): o hospedeiro entrega a intenção, e o resultado
+   * é o mesmo a 1 Hz e a 10 Hz.
+   */
+  presenceLost(session: Session, characterId: string): void {
+    if (this.#presentCharacter(session, characterId) === null) return;
+    if (!this.suspendAutomation(characterId)) return;
+    this.#scheduleXlogAttempt(session, characterId, XLOG_DELAY_MS);
+  }
+
+  /**
+   * Um visualizador voltou ao personagem (`presence-restored`, também intenção de servidor):
+   * cancela a tentativa de saída e devolve o personagem a quem o dirige — o alvo é reeleito e a
+   * automação retoma de onde estava. Reanexar ANTES dos 60 s cancela a saída; depois deles, só
+   * importa se o personagem ainda está na sessão (o hospedeiro o soltou, ou não).
+   *
+   * Ignorado, sem efeito, para quem não estava sem conexão.
+   */
+  presenceRestored(session: Session, characterId: string): void {
+    session.cancelEvent(XLOG_ATTEMPT, characterId);
+    this.resumeAutomation(session, characterId);
+  }
+
+  override onEvent(session: Session, event: ScheduledEvent): void {
+    // Primeiro o que o `HuntRuleset` faz antes de qualquer evento (a ocupação, a cascata pendente,
+    // o tempo cobrado), que ignora o tipo que não conhece; depois a tentativa de saída.
+    super.onEvent(session, event);
+    if (event.kind === XLOG_ATTEMPT) this.#onXlogAttempt(session, event.subject);
+  }
+
+  /**
+   * A tentativa de saída do personagem sem conexão venceu. Decide pelo estado de AGORA — onde ele
+   * está e quando foi o último golpe —, não pelo de quando a tentativa foi agendada: ele pode ter
+   * apanhado de novo nos 60 s, e a janela de luta recomeça do último golpe.
+   */
+  #onXlogAttempt(session: Session, characterId: string): void {
+    const character = this.#presentCharacter(session, characterId);
+    // Saiu da sessão antes (o evento "vence, não encontra o personagem"), ou morreu: a morte tem a
+    // saída dela (OW-32).
+    if (character === null) return;
+    const verdict = canLogout(character, this.#map, session.nowMs);
+    if (verdict.ok) {
+      this.#requestDeparture(session, character, 'xlog');
+      return;
+    }
+    // Tile de no-logout: o Canary desiste (`shouldForceLogout = false`, `player.cpp:2335-2337`), e
+    // não há o que esperar — o personagem não anda sem dono, então o tile não muda. É o idle kick
+    // (OW-47) que o tira dali. Esperar uma luta que não existe seria polling.
+    if (verdict.reason !== 'in-fight') return;
+    const lastCombatMs = character.lastCombatActionAtMs;
+    // `canLogout` só diz 'in-fight' com o carimbo presente; a guarda é do tipo, não do jogo.
+    if (lastCombatMs === null) return;
+    // O primeiro instante em que `isInFight` deixa de valer, se ninguém bater de novo: quando
+    // bater, o carimbo anda e a tentativa seguinte reagenda outra vez.
+    this.#scheduleXlogAttempt(session, characterId, lastCombatMs + IN_FIGHT_WINDOW_MS - session.nowMs);
+  }
+
+  #scheduleXlogAttempt(session: Session, characterId: string, delayMs: number): void {
+    session.scheduleIn(XLOG_ATTEMPT, delayMs, {
+      // Por último no instante, sobre o mundo já resolvido: o golpe que vence junto com a tentativa
+      // renova a janela de luta antes de ela ser lida.
+      priority: EventPriority.Housekeeping, subject: characterId,
+    });
+  }
+
+  /**
+   * Emite o pedido de saída, com a posição de AGORA. Só emite: o personagem continua na sessão até
+   * o hospedeiro gravar o checkpoint e chamar `Session.leave` (ver `DepartureRequested`).
+   */
+  #requestDeparture(session: Session, character: CharacterRuntime, reason: WorldDepartureReason): void {
+    session.emit({
+      kind: 'departure-requested',
+      characterId: character.id,
+      reason,
+      worldPosition: this.worldPositionOf(character) ?? NO_WORLD_POSITION,
+    });
+  }
+
+  /** O participante VIVO, ou `null`: quem não está na sessão e quem já morreu não saem por aqui. */
+  #presentCharacter(session: Session, characterId: string): CharacterRuntime | null {
+    const character = session.participants.find((participant) => participant.id === characterId);
+    return character !== undefined && character.alive ? character : null;
   }
 }
 
