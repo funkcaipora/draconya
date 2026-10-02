@@ -1084,6 +1084,14 @@ terceiro com `capacity: 2` recebe a posição 1 e entra depois que alguém sai; 
 hunt com o mundo cheio entra), `game/rest-entry-boot.test.ts` (o socket de verdade), `game/world-shard.test.ts`
 (`vacanciesOf` e a fábrica), `api/tickets.test.ts` e `tickets.test.ts` (o pedido e o claim).
 
+**O menu de entrada do cliente (#846, OW-23): `GET /api/entry-options`** (`api/entry-options.ts`). O catálogo de
+hunts só chega pelo socket, e o menu "Entrar no mundo" ou "Caçar (idle)" decide o PRIMEIRO ticket — antes de qualquer
+socket. A rota (autenticada, só leitura) devolve `{ openWorld, hunts: [{ id, name, recommendedLevel }] }`; com
+`OPEN_WORLD` desligado as `hunts` vão VAZIAS, e o cliente cai no botão único de sempre. O `main` a alimenta com
+`catalogue.hunts` (`entryHunts`); sem a dependência a rota não existe (404, e o cliente trata como "sem menu"). Não
+confere nada: a hunt pedida continua sendo conferida pelo `POST /api/tickets` (`hasHunt`). Teste:
+`api/entry-options.test.ts`. O que o cliente faz com ela: `docs/product/open-world.md`, "O cliente do mundo".
+
 ## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
 
 A sessão `checkpointed` (o mundo: `checkpointsProgress`) não tem `end` nem snapshot, e o progresso dos donos
