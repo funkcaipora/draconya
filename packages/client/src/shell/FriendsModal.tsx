@@ -32,6 +32,9 @@ const HUNT_HINT = 'Em caçada você não pode convidar — saia da caçada para 
  *  nome da hunt, que ele não mandou (D8). */
 function whereLabel(where: FriendView['where']): string {
   if (where === 'city') return 'Cidade';
+  // O mundo aberto (`OPEN_WORLD`, #839): o servidor já manda `'world'`, e sem esta linha o amigo online
+  // cairia no `offline` abaixo — o ponto verde de online ao lado do texto de ausente.
+  if (where === 'world') return 'No mundo';
   if (where === 'hunt') return 'Em caçada';
   return 'offline';
 }

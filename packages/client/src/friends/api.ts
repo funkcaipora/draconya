@@ -14,8 +14,11 @@ export interface FriendView {
   readonly vocationId: string | null;
   readonly level: number;
   readonly online: boolean;
-  /** `'city'` na Cidade viva, `'hunt'` fora dela, `null` offline. O diretório manda (#403). */
-  readonly where: 'city' | 'hunt' | null;
+  /**
+   * `'city'` na Cidade viva, `'world'` no mundo aberto (`OPEN_WORLD`, #839), `'hunt'` em qualquer outra sessão,
+   * `null` offline. O diretório manda (#403).
+   */
+  readonly where: 'city' | 'world' | 'hunt' | null;
 }
 
 const REFUSAL: Record<string, string> = {
