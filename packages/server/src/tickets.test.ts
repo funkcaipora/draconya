@@ -604,6 +604,41 @@ describe.runIf(available)('session ticket', () => {
     });
   });
 
+  it('carries the entry of a character coming from rest, and refuses a claim with a torn one (#842, OW-21)', async () => {
+    // A hunt idle direta do login (ADR 0060 d.6b): o ticket diz onde a PRIMEIRA sessão nasce. Ausente é o
+    // mundo, e o claim sem entrada é o de antes, byte a byte — a chave nem existe.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const world = await tickets.issue('a1', 'p1', { level: 1, xp: 0 });
+    if (!world.ok) throw new Error('expected a ticket');
+    const rawWorld = await redis.get(`ticket:${world.value.ticket}`);
+    expect(JSON.parse(rawWorld ?? '{}')).not.toHaveProperty('entry');
+    expect(await tickets.consume(world.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0 },
+    });
+    await tickets.revoke(world.value.ticket, 'a1', 'p1');
+
+    const hunt = await tickets.issue('a1', 'p1', { level: 1, xp: 0 }, undefined, undefined, { hunt: 'rat-cellars' });
+    if (!hunt.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(hunt.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1', initialCharacter: { level: 1, xp: 0 },
+      entry: { hunt: 'rat-cellars' },
+    });
+    await tickets.revoke(hunt.value.ticket, 'a1', 'p1');
+
+    // Torto é ticket recusado — NUNCA "o mundo": quem lê o claim decidiria pelo que sobrou, e o jogador que
+    // pediu a hunt idle cairia no meio da multidão sem ter pedido.
+    for (const entry of [{ hunt: '' }, { hunt: 7 }, {}, 'hunt', null, ['rat-cellars']]) {
+      const torn = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0 }, undefined, undefined, entry as unknown as { hunt: string },
+      );
+      if (!torn.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(torn.value.ticket, 'n1'), JSON.stringify(entry)).toBeNull();
+      await tickets.revoke(torn.value.ticket, 'a1', 'p1');
+    }
+  });
+
   it('carries the offline training record, and drops one it cannot trust (#631, ADR 0059 d.3)', async () => {
     // O banco e a skill do livro entram na sessão: o banco CRESCE com o tempo de hunt, e sem o
     // registro de entrada a primeira hunt do dia sobrescreveria a linha com um banco zerado. A
