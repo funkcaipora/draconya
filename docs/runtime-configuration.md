@@ -80,11 +80,14 @@ operação:
   reinicia com o mesmo `NODE_ID` encontra o batimento da encarnação anterior e sobe normalmente. **O default
   de `NODE_ID` é o `hostname()`** — o id do contêiner, que muda a cada subida —, e então o contêiner novo vê o
   batimento do anterior como "outro nó" e recusa, até ele expirar (até 30 s): o orquestrador reinicia o
-  contêiner recusado, e a tentativa seguinte passa. **Defina `NODE_ID` fixo** (`NODE_ID=game-1`, como no
-  `.env.example`) no `game` com `OPEN_WORLD` ligado, para o restart e o deploy em rolagem não passarem por
-  isso.
+  contêiner recusado, e a tentativa seguinte passa — um crash-loop de boot de até um lease a cada deploy, que
+  leva `api` e `jobs` junto quando os três papéis são um processo só. **Defina `NODE_ID` fixo** (`NODE_ID=game-1`,
+  como no `.env.example`) no `game` com `OPEN_WORLD` ligado, para o restart e o deploy em rolagem não passarem
+  por isso. O `compose.coolify.yml` já o fixa (`NODE_ID: ${NODE_ID:-game-1}` no `app`, que é um contêiner só;
+  a variável do Coolify o sobrescreve); o `compose.prod.yml` o lê do `.env`, e aí é do operador.
 - **A drenagem para o batimento**, e a chave dele expira em até um lease: um deploy que sobe o novo
-  contêiner enquanto o antigo ainda drena recusa a primeira tentativa, pelo mesmo motivo.
+  contêiner enquanto o antigo ainda drena recusa a primeira tentativa, pelo mesmo motivo — **com `NODE_ID`
+  diferente**: com o id fixo o batimento do antigo é o próprio, e não conta.
 - **Redis fora do ar também recusa.** Não saber se há outro nó é a forma de abrir dois mundos, e o `main` já
   falha para o Redis fora do ar.
 - **É proteção de BOOT, não trava.** Duas subidas ao mesmo tempo, nenhuma vendo a outra, passam; e um `game` com

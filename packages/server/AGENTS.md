@@ -1016,7 +1016,7 @@ Outras decisões do hospedeiro, cada uma com teste que a mata (`game/world-host.
 ignora o próprio `NODE_ID` (a encarnação anterior bate até o fim do lease), e cai com `MultipleGameNodesError`
 ANTES de abrir a porta e de bater o coração. O Redis que falha também derruba o boot. **O default de `NODE_ID` é
 o `hostname()`** — o id do contêiner —, então um contêiner reiniciado vê o anterior por até 30 s: fixe `NODE_ID`
-no `game` com a flag ligada.
+no `game` com a flag ligada. O `compose.coolify.yml` o fixa (`${NODE_ID:-game-1}`); o `compose.prod.yml` o lê do `.env`.
 
 **Party e amigos no `api`:** `inSharedSpace(location)` (`api/party.ts`) aceita `null`, `'city'` e `'world'` onde
 só `'city'` valia — o nome da recusa não mudou. `api/friends.ts` responde `where: 'world'`. A party largada do
