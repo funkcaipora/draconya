@@ -331,6 +331,13 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'already-chosen': 'Você já escolheu a sua vocação.',
 };
 
+/**
+ * O serviço de Cidade pedido fora de uma zona de proteção do mundo (OW-18, ADR 0060 d.4): no Tibia a loja,
+ * o depósito e os santuários vivem em PZ, e o mundo aberto é onde a Cidade deixa de ser um lugar e passa a
+ * ser uma zona. Uma frase só para todo serviço — o jogador precisa saber ONDE ir, não qual NPC.
+ */
+const SERVICE_ZONE_REFUSAL = 'Isso só se faz numa zona de proteção.';
+
 /** A recusa de `promote-vocation` (#566, ADR 0042 decisão 1), em palavras. */
 const PROMOTE_REFUSAL: Readonly<Record<PromoteRefusal, string>> = {
   'no-vocation': 'Escolha uma vocação antes de se promover.',
@@ -503,6 +510,23 @@ const USE_ON_MAP_REFUSAL: Readonly<Record<UseOnMapRejection, string>> = {
   'no-capacity': 'Sua mochila está cheia demais para isso.',
   'unknown-item': 'O baú não tem nada para te dar.',
 };
+
+/**
+ * A identidade de hunt que o fio leva da sessão: `huntId` e `difficulty`. O MUNDO é um `HuntRuleset` e por
+ * isso os tem, mas são os sintéticos do motor (`world:main`, `world`) — o `Hunt` e a rota que ele exige e o
+ * mundo não usa —, e não descrevem hunt nenhuma do catálogo: mandá-los faria o cliente procurar a "hunt"
+ * `world:main` e não achar (`HuntDetailsModal`). A sessão do mundo não é uma hunt, e não leva a identidade de
+ * uma (OW-18). Para as outras sessões é o que sempre foi.
+ */
+function huntIdentityOf(
+  ruleset: Session['ruleset'],
+): { readonly huntId?: string; readonly difficulty?: string } {
+  if (ruleset.type === 'world') return {};
+  return {
+    ...(ruleset.huntId === undefined ? {} : { huntId: ruleset.huntId }),
+    ...(ruleset.difficulty === undefined ? {} : { difficulty: ruleset.difficulty }),
+  };
+}
 
 /** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */
 function slotStateSignature(states: readonly SlotState[]): string {
@@ -729,9 +753,24 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
  */
 interface SentAnalyzer {
   readonly aggregates: Aggregates;
+  /**
+   * Quantos eventos notáveis a sessão já tinha na entrega — a posição ABSOLUTA, contada desde a criação
+   * dela (`notableEventsTotal`), e não o tamanho da lista. O mundo apara a lista (`Session.
+   * notableEventsDropped`, OW-13), e com o tamanho como cursor o analisador de um personagem apontaria
+   * para o lugar errado depois do primeiro descarte — e, com a lista no teto, nunca veria um evento novo.
+   */
   readonly eventCount: number;
   /** A seção PARTY do analisador entregue por último (ADR 0035 d.11). `undefined` em solo. */
   readonly party: S2CProps<'analyzer'>['party'];
+}
+
+/**
+ * A posição ABSOLUTA do fim da lista de eventos notáveis: quantos a sessão já registrou desde que nasceu.
+ * É o cursor do analisador (`SentAnalyzer.eventCount`), e é o tamanho da lista para quem nunca a apara
+ * (a hunt, a Cidade): `notableEventsDropped` é sempre zero sem o teto de `maxNotableEventsPerCharacter`.
+ */
+function notableEventsTotal(session: Session): number {
+  return session.notableEventsDropped + session.notableEvents.length;
 }
 
 /** O extrato DESTE personagem entre os que a sessão emitiu (#187). `null` enquanto ela vive. */
@@ -739,10 +778,14 @@ function receiptOf(hosted: HostedSession, characterId: string): Receipt | null {
   return hosted.session.receipts().find((receipt) => receipt.characterId === characterId) ?? null;
 }
 
-function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: number): boolean {
+/**
+ * Os agregados entregues por último são os de agora? A lista de eventos notáveis NÃO entra: se há evento
+ * novo para o personagem é pergunta de quem chama (`#presentAnalyzer`), porque no mundo "a lista andou" não
+ * quer dizer "andou para ele" (OW-18).
+ */
+function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates): boolean {
   const a = sent.aggregates;
-  return sent.eventCount === eventCount
-    && a.xpGained === aggregates.xpGained
+  return a.xpGained === aggregates.xpGained
     && a.goldGained === aggregates.goldGained
     && a.goldSpent === aggregates.goldSpent
     && a.kills === aggregates.kills
@@ -2205,6 +2248,12 @@ export class SessionHost {
     const character = this.#ownerOf(viewer.characterId);
     const hosted = this.#hostedSession(viewer.characterId);
     if (character === undefined || hosted === undefined) return;
+    // Vender é a loja do Tibia: no mundo, só em PZ (OW-18). Cidade e hunt vendem de onde estão, como sempre.
+    const refusal = this.#zoneServiceRefusal(hosted, character.id);
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
+      return;
+    }
     const result = character.inventory.sellItems(instanceIds, this.#options.itemCatalog ?? EMPTY_ITEMS);
     if (result.ok) {
       character.goldDelta += result.gold;
@@ -2287,6 +2336,11 @@ export class SessionHost {
     // Conjurar na Cidade muda estado durável (#792, ADR 0044 d.2) — estoque, mana e gold —, e
     // o shard só grava no logout quem está em `dirty` (#154, a mesma marca de `equip`/
     // `choose-vocation`). Sem isto, a carga conjurada na praça sumia ao sair.
+    //
+    // **O mundo não precisa dela** (OW-18): quem decide o que o lote grava é a marca (mana, vida, o que
+    // carrega) e os agregados (`#isDirty`), e conjurar mexe nos dois — a magia gasta mana, a runa e a
+    // poção gastam gold (`goldSpent`) e contam `suppliesUsed`. Marcar `dirty` aqui também seria um
+    // extrato a mais por conjuração, sem nada que o lote já não visse.
     if (hosted.session.ruleset.type === 'city') hosted.dirty.add(viewer.characterId);
     // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
     // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
@@ -2670,6 +2724,33 @@ export class SessionHost {
   }
 
   /**
+   * O serviço de Cidade pode ser usado AGORA por este personagem? Devolve o texto da recusa, ou `null`
+   * se pode. É a pergunta do ADR 0052 d.2 respondida em dois níveis (OW-18, ADR 0060 d.4):
+   *
+   * - a SESSÃO oferece serviço? (`offersCityServices`, OW-04) — a Cidade e o mundo sim, a hunt e o treino
+   *   nunca (a `blessing.lua` do Canary trava o santuário em protect zone, e a hunt nunca é uma);
+   * - o TILE aceita? Só o mundo decide por tile (`Ruleset.acceptsCityServices`, OW-13): em PZ sim, fora
+   *   dela não. A Cidade não declara a pergunta, e a sessão inteira dela é PZ.
+   *
+   * `cityText` é a frase da recusa de quem não está num lugar de serviço — a de cada serviço, que
+   * existia antes do mundo. Fora da PZ do mundo a frase é uma só (`SERVICE_ZONE_REFUSAL`).
+   */
+  #cityServiceRefusal(hosted: HostedSession, characterId: string, cityText: string): string | null {
+    if (!offersCityServices(hosted.session.ruleset)) return cityText;
+    return this.#zoneServiceRefusal(hosted, characterId);
+  }
+
+  /**
+   * Só a metade do TILE da pergunta acima: para o serviço que a hunt também aceita (vender da mochila, aprender
+   * magia), onde "a sessão oferece?" não se pergunta. Só o mundo recusa, e só fora da PZ — Cidade e hunt
+   * respondem `null` sempre, como antes de o mundo existir.
+   */
+  #zoneServiceRefusal(hosted: HostedSession, characterId: string): string | null {
+    const { session } = hosted;
+    return session.ruleset.acceptsCityServices?.(session, characterId) === false ? SERVICE_ZONE_REFUSAL : null;
+  }
+
+  /**
    * Promove a vocação escolhida (#566, ADR 0042 decisão 1). Serviço de Cidade: só a sessão de
    * Cidade aceita — o mesmo padrão do ADR 0042 (decisão 1, tela de serviço) e do "obtida na
    * Cidade" do plano de conteúdo. O preço sai por `goldDelta`, liquidado pelo MESMO
@@ -2679,10 +2760,9 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para se promover.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Você precisa estar na Cidade para se promover.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const vocation = character.vocationId === null
@@ -2794,6 +2874,13 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
+    // A tela de aprender magia fica em tile PZ do mundo (OW-18, emenda ao ADR 0058 d.2); na Cidade e na
+    // hunt segue valendo de qualquer lugar.
+    const refusal = this.#zoneServiceRefusal(hosted, character.id);
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
+      return;
+    }
     const spell = (this.#options.spellCatalog ?? EMPTY_SPELLS).get(spellId);
     const result = character.learnSpell(spell);
     if (!result.ok) {
@@ -2921,11 +3008,11 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.shared !== true) {
-      viewer.send({
-        type: 'system-message', level: 'warning',
-        text: 'O nível de hazard só muda na Cidade, antes de entrar na hunt.',
-      });
+    const refusal = this.#cityServiceRefusal(
+      hosted, character.id, 'O nível de hazard só muda na Cidade, antes de entrar na hunt.',
+    );
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     // A zona sai por PROPRIEDADE PRÓPRIA: `zones` é um objeto comum, e `zones['constructor']` ou
@@ -3029,10 +3116,9 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (!offersCityServices(hosted.session.ruleset)) {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'Bênçãos só se compram na Cidade.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Bênçãos só se compram na Cidade.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const blessing = this.#options.blessingCatalog?.get(blessingId);
@@ -3130,8 +3216,9 @@ export class SessionHost {
     const hosted = this.#hostedSession(viewer.characterId);
     const character = this.#ownerOf(viewer.characterId);
     if (hosted === undefined || character === undefined) return;
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({ type: 'system-message', level: 'warning', text: 'Só se compra na Cidade.' });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Só se compra na Cidade.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
@@ -3170,10 +3257,9 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
       return;
     }
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'O livro do offline training só se lê na Cidade.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'O livro do offline training só se lê na Cidade.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const result = character.training.choose(skillId, training);
@@ -3200,10 +3286,9 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem Treino.' });
       return;
     }
-    if (hosted.session.ruleset.type !== 'city') {
-      viewer.send({
-        type: 'system-message', level: 'warning', text: 'Você precisa estar na Cidade para treinar.',
-      });
+    const refusal = this.#cityServiceRefusal(hosted, character.id, 'Você precisa estar na Cidade para treinar.');
+    if (refusal !== null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: refusal });
       return;
     }
     const carried = character.inventory.carried(itemInstanceId);
@@ -3495,6 +3580,15 @@ export class SessionHost {
   #requestLeaveHunt(viewer: Viewer): void {
     const { characterId } = viewer;
     const hosted = this.#hostedSession(characterId);
+    // No MUNDO não há o que sair da caçada (OW-18): o `WorldRuleset` é o `HuntRuleset`, e o `requestExit`
+    // herdado concluiria a saída pelo `onExitFinished` da topologia — um `member-left` que o `#settleOne`
+    // levaria à Cidade, por fora do `canLogout` e da tabela de transições. Quem sai do mundo é o logout
+    // (OW-19, que passa por `canLogout`) e a entrada numa instância (OW-20); aqui o pedido é recusado com
+    // a mesma frase de quem já está no lugar, como na Cidade.
+    if (hosted?.session.ruleset.type === 'world') {
+      viewer.send({ type: 'system-message', level: 'warning', text: REFUSAL_TEXT['same-state'] });
+      return;
+    }
     const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
     if (hosted === undefined || ruleset?.requestExit === undefined || this.#transitions.has(characterId)) {
       void this.#requestTransition(viewer, { to: 'city' });
@@ -3738,8 +3832,8 @@ export class SessionHost {
           continue;
         case 'departure-requested':
         case 'logout-refused':
-          // A saída do MUNDO (OW-14, #835): só a sessão `world` os emite, e o hospedeiro ainda não
-          // a hospeda (o `WorldShard` é a OW-18, atrás de `OPEN_WORLD`). Quem os lê é a presença
+          // A saída do MUNDO (OW-14, #835): só a sessão `world` os emite — o hospedeiro a hospeda desde a
+          // OW-18, atrás de `OPEN_WORLD` —, e ainda não os lê. Quem os lê é a presença
           // no hospedeiro (OW-19): `departure-requested` é gameplay e vale SEM visualizador — o
           // x-log é justamente o caso em que não há —, então o ramo sem visualizador acima também
           // vai ganhar o caso dele; `logout-refused` vira a mensagem do protocolo para quem pediu.
@@ -4203,28 +4297,40 @@ export class SessionHost {
    */
   #presentAnalyzer(hosted: HostedSession): void {
     if (hosted.viewers.size === 0) return;
-    const { notableEvents } = hosted.session;
+    const { session } = hosted;
+    const total = notableEventsTotal(session);
     const party = partySummaryOf(hosted);
     for (const character of hosted.session.participants) {
       if (this.#watchers(hosted, character.id) === 0) continue;
       const aggregates = hosted.session.aggregatesOf(character.id);
       const sent = hosted.sentAnalyzer.get(character.id);
-      if (sent !== undefined
-        && sameAnalyzer(sent, aggregates, notableEvents.length)
-        && samePartySummary(sent.party, party)) continue;
       // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e
       // mandá-la inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo
-      // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo.
-      const since = sent?.eventCount ?? 0;
+      // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo. O cursor é ABSOLUTO
+      // (`notableEventsTotal`); o que o teto do mundo já descartou sai da conta antes de fatiar, e o
+      // que o cursor apontava e já foi descartado vira "do começo da lista" (`Math.max(0, …)`).
+      const since = Math.max(0, (sent?.eventCount ?? 0) - session.notableEventsDropped);
+      // Do que o PERSONAGEM pode ver (OW-13): no mundo cada evento de personagem tem dono, e o
+      // analisador de um estranho não leva o que aconteceu a outro. Na instância é a fatia toda.
+      // Só se lê a lista quando ela andou — o caso comum, de um personagem parado, é uma comparação.
+      const fresh = sent?.eventCount === total ? [] : session.notableEventsFor(character.id, since);
+      if (sent !== undefined && fresh.length === 0
+        && sameAnalyzer(sent, aggregates)
+        && samePartySummary(sent.party, party)) {
+        // Entrou evento na lista, mas de OUTRO personagem: nada novo para este (OW-18). O cursor avança, para
+        // o próximo ciclo não reler o que já foi descartado como alheio — e nenhum `analyzer` sai. Contar o
+        // tamanho da lista mandaria a todos os duzentos do mundo uma mensagem a cada evento de qualquer um.
+        // Na instância todo evento é de todos, `fresh` vazio é lista parada, e este ramo não escreve nada.
+        if (sent.eventCount !== total) hosted.sentAnalyzer.set(character.id, { ...sent, eventCount: total });
+        continue;
+      }
       hosted.sentAnalyzer.set(character.id, {
-        aggregates: { ...aggregates }, eventCount: notableEvents.length, party,
+        aggregates: { ...aggregates }, eventCount: total, party,
       });
       const message: S2CMessage = {
         type: 'analyzer',
         aggregates: { ...aggregates },
-        // Do que o PERSONAGEM pode ver (OW-13): no mundo cada evento de personagem tem dono, e o
-        // analisador de um estranho não leva o que aconteceu a outro. Na instância é a fatia toda.
-        notableEvents: hosted.session.notableEventsFor(character.id, since).map((event) => ({ ...event })),
+        notableEvents: fresh.map((event) => ({ ...event })),
         ...(party === undefined ? {} : { party }),
       };
       this.#sendToViewersOf(hosted, character.id, message);
@@ -4343,7 +4449,8 @@ export class SessionHost {
     // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
     // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
     // transição, porque os dois passam por aqui; a instância é a própria sessão.
-    const { mapId, ambience, huntId, difficulty } = hosted.session.ruleset;
+    const { mapId, ambience } = hosted.session.ruleset;
+    const { huntId, difficulty } = huntIdentityOf(hosted.session.ruleset);
     if (mapId !== undefined) {
       viewer.send({
         type: 'instance-enter', instanceId: hosted.session.id, map: mapId,
@@ -4417,7 +4524,7 @@ export class SessionHost {
     // O `session-state` acabou de levar os agregados DELE: o ciclo seguinte não precisa repetir.
     hosted.sentAnalyzer.set(characterId, {
       aggregates: { ...hosted.session.aggregatesOf(characterId) },
-      eventCount: hosted.session.notableEvents.length,
+      eventCount: notableEventsTotal(hosted.session),
       party: partySummaryOf(hosted),
     });
     // O Follow interrompido sobrevive à desconexão (#401): `#presentMoves` DESCARTA o evento
@@ -6098,6 +6205,7 @@ export class SessionHost {
    */
   #sessionState(hosted: HostedSession, characterId: string): S2CMessage {
     const { session } = hosted;
+    const identity = huntIdentityOf(session.ruleset);
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
     const self = this.#statsOf(this.#participantOf(hosted, characterId));
@@ -6163,8 +6271,8 @@ export class SessionHost {
       type: 'session-state',
       sessionType: session.ruleset.type,
       elapsedMs: session.aggregates.durationMs,
-      ...(session.ruleset.huntId === undefined ? {} : { huntId: session.ruleset.huntId }),
-      ...(session.ruleset.difficulty === undefined ? {} : { difficulty: session.ruleset.difficulty }),
+      ...(identity.huntId === undefined ? {} : { huntId: identity.huntId }),
+      ...(identity.difficulty === undefined ? {} : { difficulty: identity.difficulty }),
       self: {
         creatureId: this.#creatureId(hosted, characterId),
         characterId,
@@ -6347,7 +6455,19 @@ export class SessionHost {
     const session = hostedParty?.session
       ?? resumed?.session
       ?? this.#options.createSession(characterId, initialCharacter, party);
-    await this.#register(characterId, session, accountId);
+    try {
+      await this.#register(characterId, session, accountId);
+    } catch (error) {
+      // A fábrica JÁ pôs o personagem dentro da sessão compartilhada (o shard o admite ao criar), e o
+      // registro foi recusado — a reserva expirou, o diretório mudou de mãos. Sem tirá-lo, ele ficaria
+      // em `participants` de uma sessão que ninguém hospeda por ele: um tile bloqueado que nada explica e,
+      // no mundo, uma vaga do teto que nunca volta, numa sessão que não esvazia (OW-18). Registro
+      // recusado não pode deixar rastro, como o nome, as cores e o contador de versão.
+      if (resumed === null && hostedParty === undefined && leavesOnExit(session.ruleset)) {
+        session.leave(characterId, 'manual-exit');
+      }
+      throw error;
+    }
     // Uma sessão retomada com MAIS de um dono (#194, ADR 0027) traz os outros membros da party
     // dentro: eles precisam do lease e do mapa deste nó antes de qualquer coisa local existir,
     // senão o lease deles expira, o login seguinte resolve para outro nó, e a cópia do

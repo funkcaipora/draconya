@@ -762,3 +762,88 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     expect(await redis.exists(`party:${id}`)).toBe(0);
   });
 });
+
+// Com `OPEN_WORLD` o espaço compartilhado do personagem é o MUNDO, e a party se forma e se larga dele
+// (#839, OW-18) como da Cidade: o `api` só vê o TIPO da sessão no diretório, e `'world'` passa a valer onde
+// só `'city'` valia. O nome da recusa (`not-in-city`, `inviter-in-hunt`) não mudou — o cliente a traduz por ele.
+describe.runIf(available)('o mundo é espaço compartilhado: quem está nele forma e larga a party (#839, OW-18)', () => {
+  const world = () => ({ type: 'world' });
+
+  it('o fluxo inteiro com todo mundo no mundo: criar, convidar, entrar, propor e largar — um ticket por membro', async () => {
+    const { as, issued } = build({ locate: world });
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+
+    // Mutação que mata: comparar só com `'city'` — o convite sairia 409 `inviter-in-hunt` para o líder no mundo.
+    expect((await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' })).statusCode).toBe(200);
+    expect((await as('p2').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'split' });
+    const started = await as('p1').post(`/api/party/${id}/start`);
+
+    expect(started.statusCode).toBe(200);
+    expect(issued.map((entry) => entry.characterId).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('o matchmaking aceita quem está no mundo, e a instância continua recusada', async () => {
+    const { as } = build({
+      locate: (characterId) => (characterId === 'p5' ? { type: 'training' } : { type: 'world' }),
+    });
+    expect((await as('p1').post('/api/matchmaking/join')).json()).toEqual({ party: null });
+    const matched = await as('p2').post('/api/matchmaking/join');
+    expect(matched.statusCode).toBe(200);
+    expect((matched.json() as { party: { leaderId: string } | null }).party?.leaderId).toBe('p1');
+    // A instância (treino, hunt, quest) não forma party: o personagem já está numa sessão exclusiva.
+    expect((await as('p5').post('/api/matchmaking/join')).json()).toEqual({ error: 'not-in-city' });
+  });
+
+  it('o convite social: quem convida e quem aceita podem estar no mundo', async () => {
+    const { as } = build({ locate: world });
+    const sent = await as('p1').post('/api/party/invites/social', { inviteeId: 'p2' });
+    expect(sent.statusCode).toBe(200);
+    const { inviteId } = sent.json() as { inviteId: string };
+    const accepted = await as('p2').post(`/api/party/invites/social/${inviteId}/accept`);
+    expect(accepted.statusCode).toBe(200);
+  });
+
+  it('quem convida de uma instância é recusado, como sempre foi: `inviter-in-hunt`', async () => {
+    const { as } = build({ locate: (characterId) => (characterId === 'p1' ? { type: 'training' } : { type: 'world' }) });
+    const sent = await as('p1').post('/api/party/invites/social', { inviteeId: 'p2' });
+    expect(sent.statusCode).toBe(409);
+    expect(sent.json()).toEqual({ error: 'inviter-in-hunt' });
+  });
+
+  it('largar a party com um membro numa instância é recusado, e quem está no mundo não é', async () => {
+    const { as, issued } = build({
+      locate: (characterId) => (characterId === 'p2' ? { type: 'training' } : { type: 'world' }),
+    });
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'split' });
+
+    const started = await as('p1').post(`/api/party/${id}/start`);
+
+    expect(started.statusCode).toBe(409);
+    expect(started.json()).toEqual({ error: 'not-in-city', characterId: 'p2' });
+    expect(issued).toEqual([]);
+  });
+
+  it('a entrada numa party em curso: quem está no mundo entra, quem está numa hunt não', async () => {
+    const context = build({ locate: (characterId) => (characterId === 'p4' ? { type: 'hunt' } : null) });
+    const { as, locations } = context;
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/configure`, {
+      huntId: 'arena', difficulty: 'bold', minLevel: 1, vocationTargets: { [NO_VOCATION]: 4 },
+    });
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/publish`);
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    const sessionId = (started.json() as { sessionId: string }).sessionId;
+    locations.set('p1', { sessionId, nodeId: 'n1', type: 'hunt' });
+    locations.set('p2', { sessionId, nodeId: 'n1', type: 'hunt' });
+    locations.set('p3', { sessionId: 'world-1', nodeId: 'n1', type: 'world' });
+
+    expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    expect((await as('p4').post(`/api/party/${id}/join`)).json()).toEqual({ error: 'not-in-city' });
+  });
+});
