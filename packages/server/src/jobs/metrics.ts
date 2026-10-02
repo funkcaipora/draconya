@@ -28,6 +28,11 @@ export interface CycleResult {
   readonly slotsReleased: number;
   readonly receiptsWritten: number;
   readonly receiptsFailed: number;
+  /**
+   * Dos `receiptsWritten`, quantos foram aplicados SEM linha de ledger (#838, OW-17): o extrato sem
+   * valor movido, só com `OPEN_WORLD`. Ausente é zero.
+   */
+  readonly receiptsStateOnly?: number;
 }
 
 export class JobsMetrics {
@@ -37,6 +42,7 @@ export class JobsMetrics {
   readonly #slotsReleased: Counter;
   readonly #receiptsWritten: Counter;
   readonly #receiptsFailed: Counter;
+  readonly #receiptsStateOnly: Counter;
   readonly #cycleDuration: Histogram;
   readonly #cycleFailures: Counter;
   readonly #cyclesSkipped: Counter;
@@ -61,7 +67,12 @@ export class JobsMetrics {
     });
     this.#receiptsWritten = new Counter({
       name: 'draconya_jobs_receipts_written_total',
-      help: 'Session receipts that reached the ledger',
+      help: 'Session receipts settled, with or without a ledger row (see receipts_state_only_total)',
+      registers: [this.registry],
+    });
+    this.#receiptsStateOnly = new Counter({
+      name: 'draconya_jobs_receipts_state_only_total',
+      help: 'Session receipts applied as absolute state only, without a ledger row (OPEN_WORLD checkpoints)',
       registers: [this.registry],
     });
     this.#receiptsFailed = new Counter({
@@ -107,6 +118,7 @@ export class JobsMetrics {
     this.#slotsReleased.inc(result.slotsReleased);
     this.#receiptsWritten.inc(result.receiptsWritten);
     this.#receiptsFailed.inc(result.receiptsFailed);
+    this.#receiptsStateOnly.inc(result.receiptsStateOnly ?? 0);
     this.#lastSuccess.set(nowMs / 1000);
   }
 

@@ -104,8 +104,10 @@ const EnvironmentSchema = z.object({
    *
    * Aceita `1`/`true` e `0`/`false`: o plano chama de `OPEN_WORLD=1`. Quem a lê são o `api` (o ticket
    * leva os vitais, a lista de personagens reporta o repouso como `'offline'`) e o `game` (todo
-   * extrato leva a posição, a cidade, a vida, a mana e as condições); o `jobs` não a lê — escreve as
-   * colunas que o extrato trouxer. Tem de ser a MESMA nos dois: um `game` ligado com o `api` desligado
+   * extrato leva a posição, a cidade, a vida, a mana e as condições); o `jobs` escreve as colunas que
+   * o extrato trouxer e a lê só para uma coisa (#838, OW-17): ligada, o extrato versionado sem valor
+   * movido é aplicado como estado absoluto, sem linha de ledger — e a liquidação do ticket, no `api`,
+   * faz o mesmo. Tem de ser a MESMA no `api` e no `game`: um `game` ligado com o `api` desligado
    * emite extratos sobre personagens que nasceram cheios, e é por isso que o extrato só leva o mundo de
    * quem o ticket trouxe (`receiptWorldStateOf`).
    */

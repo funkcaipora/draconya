@@ -5,6 +5,12 @@
 // hipótese, é o desenho: o `game` grava o extrato no Redis, este código insere, e só depois
 // apaga. Morrer entre inserir e apagar custa uma tentativa repetida, e a tentativa repetida é
 // operação nula.
+//
+// **A exceção que não é exceção (#838, OW-17, ADR 0060 d.10.d-e):** o extrato que NÃO move valor —
+// o checkpoint do mundo, só posição e vitais — não é linha de ledger. O invariante 10 fala de
+// movimentação de valor, e aqui nenhum se move: o `jobs` aplica só o estado absoluto, guardado por
+// `characters.durable_version`, e a idempotência vem da versão em vez da chave única. Só com
+// `OPEN_WORLD`, só para o extrato versionado (`movesValue`, `appliesAsStateOnly`).
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
@@ -40,11 +46,32 @@ export interface LedgerSweepOptions {
    * primeiro que falha segura os seguintes SEMPRE, e o ticket é recusado de qualquer jeito.
    */
   readonly failures?: Map<string, number>;
+  /**
+   * A flag `OPEN_WORLD` (#838, OW-17, ADR 0060 d.10.d-e). Ligada, o extrato VERSIONADO sem valor
+   * movido (`movesValue`) é aplicado só como estado absoluto — guardado por `durable_version` —, SEM
+   * linha de ledger: é o checkpoint do mundo, que a 60 s por personagem passaria de 288 mil linhas
+   * por dia por mundo só para dizer onde o jogador está. Desligada (o default), todo extrato grava a
+   * linha, exatamente como antes. O `jobs` e o `api` (a liquidação do ticket) precisam da MESMA
+   * flag do `game`, mas uma divergência é inofensiva: o mesmo extrato aplicado pelos dois caminhos
+   * dá o mesmo estado, com uma linha de ledger a mais ou a menos.
+   */
+  readonly openWorld?: boolean;
 }
 
 export interface LedgerSweepResult {
+  /**
+   * Extratos liquidados e removidos do Redis — com ou sem linha de ledger. Quem a lê pergunta "a linha
+   * do personagem pode ter mudado?" (a lista de personagens relê), e a aplicação só de estado também
+   * muda.
+   */
   readonly written: number;
   readonly failed: number;
+  /**
+   * Quantos dos `written` foram aplicados SEM linha de ledger (#838, OW-17): estado absoluto puro. É o
+   * que o custo do checkpoint mede — `written - stateOnly` é o que de fato cresceu o ledger. Só
+   * existe quando é maior que zero: o resultado com a flag desligada é o de antes, byte a byte.
+   */
+  readonly stateOnly?: number;
 }
 
 /**
@@ -66,6 +93,38 @@ export function creditOf(receipt: SessionReceipt): number {
  * quando (se) ele liquidar entram só os deltas dele: a guarda de versão já subiu.
  */
 export const STUCK_RECEIPT_AFTER = 5;
+
+/**
+ * O extrato MOVEU VALOR? (#838, OW-17, ADR 0060 d.10.d.) Valor é o que a conta do jogador e o
+ * ledger registram: XP (a penalidade de morte entra como negativo), gold ganho e gasto, abates,
+ * mortes, e item que nasceu ou morreu (`acquired`, `removedInstances`). Qualquer um diferente de zero
+ * ou não vazio, e o extrato é uma linha de ledger — com a chave `(session_id, seq)` que faz o retry
+ * não duplicar (invariante 10).
+ *
+ * O que NÃO é valor, de propósito: posição, cidade, vida, mana, condições, postura, estoque de
+ * supply, storages, layout. São ESTADO ABSOLUTO, idempotente pela versão durável, e não têm o que
+ * somar — um ledger com uma linha por passo seria só um log de posição. Os campos monotônicos
+ * (Bestiário, Bosstiary, magias aprendidas, vocação, promoção) também não contam: já são idempotentes
+ * por si (máximo, união, `coalesce`, `OR`) e entram em todo extrato.
+ *
+ * Exportada para o teste.
+ */
+export function movesValue(receipt: SessionReceipt): boolean {
+  const { xpGained, goldGained, goldSpent, kills, deaths } = receipt.aggregates;
+  return xpGained !== 0 || goldGained !== 0 || goldSpent !== 0 || kills !== 0 || deaths !== 0
+    || (receipt.acquired?.length ?? 0) > 0
+    || (receipt.removedInstances?.length ?? 0) > 0;
+}
+
+/**
+ * O extrato é aplicado SEM linha de ledger? Só com a flag, só se for versionado e só se não moveu
+ * valor. O SEM versão não tem a guarda que o torna idempotente — a chave única do ledger é a única
+ * idempotência dele —, então segue o caminho de antes mesmo sem valor (é a degradação de um nó
+ * anterior, ver `applyProgression`).
+ */
+function appliesAsStateOnly(receipt: SessionReceipt, options: LedgerSweepOptions): boolean {
+  return options.openWorld === true && receipt.durableVersion !== undefined && !movesValue(receipt);
+}
 
 /** A identidade de um extrato: a mesma da chave do Redis e do `UNIQUE (session_id, seq)` do ledger. */
 const identityOf = (receipt: SessionReceipt): string =>
@@ -153,6 +212,7 @@ async function writeReceipts(
 ): Promise<LedgerSweepResult> {
   let written = 0;
   let failed = 0;
+  let stateOnly = 0;
   const failedNow = new Set<string>();
 
   // POR PERSONAGEM, em ordem de versão (#823, OW-02): o que o Redis devolve não tem ordem (o
@@ -163,12 +223,23 @@ async function writeReceipts(
   for (const receipts of groupByCharacter(pending)) {
     for (const [position, receipt] of receipts.entries()) {
       const identity = identityOf(receipt);
+      const withoutLedger = appliesAsStateOnly(receipt, options);
       try {
         // Uma transação: ou a linha de ledger e a progressão entram juntas, ou nenhuma das
         // duas. Separadas, uma queda no meio deixaria o gold creditado no ledger sem estar na
         // linha do personagem — e a reconciliação entre os dois é justamente o que o
         // invariante 10 existe para não precisar.
         await options.database.transaction(async (tx) => {
+          // **SEM VALOR MOVIDO (#838, OW-17): só o estado absoluto, sem linha de ledger.** Não há
+          // o que o ledger registrar — o gold, o XP e os itens são zero — e a idempotência que a
+          // chave `(session_id, seq)` daria vem da versão durável: reaplicar o mesmo extrato, ou um
+          // mais velho, encontra `durable_version` já igual ou maior e não escreve nada. O invariante
+          // 10 fala de movimentação de VALOR, e aqui nenhum se move. A trava de linha continua — é ela
+          // que serializa o `jobs` e o `api` (ADR 0024) —, e o que custa o ledger é só a inserção.
+          if (withoutLedger) {
+            await applyProgression(tx, receipt, options.progression, false);
+            return;
+          }
           const inserted = await tx
             .insert(ledger)
             .values({
@@ -194,11 +265,12 @@ async function writeReceipts(
           // Vazio = a linha já existia, este extrato já foi creditado. Aplicar a progressão
           // agora seria creditar duas vezes um delta que a chave única acabou de recusar.
           if (inserted.length === 0) return;
-          await applyProgression(tx, receipt, options.progression);
+          await applyProgression(tx, receipt, options.progression, true);
         });
 
         await options.receipts.remove(receipt.sessionId, receipt.characterId, receipt.seq);
         written += 1;
+        if (withoutLedger) stateOnly += 1;
       } catch (error) {
         // O extrato FICA no Redis. Perder o crédito em silêncio é o defeito que este arquivo
         // existe para não ter; tentar de novo no próximo ciclo não custa nada.
@@ -253,7 +325,7 @@ async function writeReceipts(
     }
   }
 
-  return { written, failed };
+  return { written, failed, ...(stateOnly > 0 ? { stateOnly } : {}) };
 }
 
 /**
@@ -309,6 +381,12 @@ async function applyProgression(
   tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   receipt: SessionReceipt,
   progression: Progression | undefined,
+  /**
+   * O extrato tem linha de ledger? `false` é o extrato SEM valor movido (#838, OW-17): nada de XP,
+   * gold ou level na linha do personagem — não há delta a somar, e reescrever o level derivado de
+   * uma XP que não mudou seria só uma escrita a mais numa coluna econômica.
+   */
+  ledgered: boolean,
 ): Promise<void> {
   // Lê com trava de linha e decide aqui, em vez de montar `case when` no `UPDATE`.
   //
@@ -528,6 +606,30 @@ async function applyProgression(
     }
   }
 
+  // XP, gold e level: SÓ com linha de ledger. O extrato sem valor movido (#838, OW-17) não tem delta
+  // a somar, e o level que `levelForXp` derivaria de uma XP inalterada seria uma escrita a mais numa
+  // coluna econômica. Montado num objeto só, pela mesma razão do `world`: o `set` não aguenta mais
+  // uniões (TS2590).
+  const economy: Partial<typeof characters.$inferInsert> = {};
+  if (ledgered) {
+    economy.xp = xp;
+    economy.gold = gold;
+    // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
+    // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
+    if (progression !== undefined) economy.level = levelForXp(xp, progression);
+  }
+
+  // O extrato sem linha de ledger e MAIS ANTIGO que o aplicado (ou o mesmo, reprocessado) não escreve
+  // nenhum absoluto — e se também não traz nada monotônico, o `UPDATE` ficaria sem coluna nenhuma.
+  // Esta é a "linha de posição mais antiga é ignorada" (#838): não é erro, é operação nula. O
+  // monotônico entra sempre (máximo, união, `coalesce`, `OR`) como no caminho com ledger, porque
+  // aplicá-lo de novo não custa nada e descartá-lo seria a única diferença entre os dois caminhos.
+  if (
+    !ledgered && !absolute
+    && receipt.bestiary === undefined && receipt.bosstiary === undefined && receipt.learnedSpells === undefined
+    && receipt.vocation === undefined && receipt.promoted !== true
+  ) return;
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -594,8 +696,7 @@ async function applyProgression(
   await tx
     .update(characters)
     .set({
-      xp,
-      gold,
+      ...economy,
       ...skills,
       ...bestiary,
       ...bosstiary,
@@ -623,9 +724,6 @@ async function applyProgression(
       ...(receipt.promoted === true
         ? { promoted: sql`${characters.promoted} OR true` }
         : {}),
-      // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
-      // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
-      ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),
       ...stamina,
       // A versão sobe na MESMA transação dos absolutos que ela guarda (#823): só quando o extrato
       // é versionado E foi mais novo — o sem versão não a mexe, e o atrasado nunca a faz descer.

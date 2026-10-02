@@ -9,5 +9,9 @@ export async function settleCharacterState(
 ): Promise<LedgerSweepResult> {
   const written = await settleBotConfig(characterId, options);
   const progress = await settleCharacterProgress(characterId, options);
-  return { written: written + progress.written, failed: progress.failed };
+  return {
+    written: written + progress.written,
+    failed: progress.failed,
+    ...(progress.stateOnly === undefined ? {} : { stateOnly: progress.stateOnly }),
+  };
 }
