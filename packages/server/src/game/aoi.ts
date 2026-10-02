@@ -23,7 +23,7 @@
 //
 // Quem está em andares que o Canary não deixa ver um ao outro não se enxerga, por perto que esteja
 // em x e y. A regra é a de `Spectators::getSpectators` (`canary/src/map/spectators.cpp:125-139`,
-// constantes de `canary/src/map/map_const.hpp:12-15`), a mesma que decide quem recebe o passo de
+// constantes de `canary/src/map/map_const.hpp:17-19`), a mesma que decide quem recebe o passo de
 // uma criatura no Tibia:
 //
 //   - da superfície se veem os andares 0 a 7, e o 6 e o 7 ainda alcançam o subsolo logo abaixo (o 6
@@ -55,11 +55,11 @@
 
 import type { FloorPoint } from '@draconya/sim';
 
-/** `MAP_INIT_SURFACE_LAYER` (`canary/src/map/map_const.hpp:13`): o último andar de superfície. */
+/** `MAP_INIT_SURFACE_LAYER` (`canary/src/map/map_const.hpp:18`): o último andar de superfície. */
 const SURFACE_LAYER = 7;
-/** `MAP_MAX_LAYERS` (`map_const.hpp:12`). Os andares vão de 0 a 15. */
+/** `MAP_MAX_LAYERS` (`map_const.hpp:17`). Os andares vão de 0 a 15. */
 const FLOOR_COUNT = 16;
-/** `MAP_LAYER_VIEW_LIMIT` (`map_const.hpp:14`): do subsolo, quantos andares para cada lado. */
+/** `MAP_LAYER_VIEW_LIMIT` (`map_const.hpp:19`): do subsolo, quantos andares para cada lado. */
 const LAYER_VIEW_LIMIT = 2;
 
 /**

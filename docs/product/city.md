@@ -437,7 +437,7 @@ igual em três cenários (templo de 60, espalhados de 60, templo de 40 sem AOI).
 
 **3. O andar na AOI.** A chave de célula ganhou a **faixa de andar**, pela regra de
 `Spectators::getSpectators` (`canary/src/map/spectators.cpp:125-139`; constantes em
-`canary/src/map/map_const.hpp:12-15`):
+`canary/src/map/map_const.hpp:17-19`):
 
 | o espectador está no andar | ele alcança os andares |
 |---|---|
@@ -460,7 +460,9 @@ ponto sem `z` vale o andar 7.
 **A Thais não tem como mudar de comportamento por isso**: o recorte é z 4 a 7, todo superfície, e a
 regra liga todos os pares. Os vizinhos por jogador abaixo são os mesmos da linha de base, nas seis
 linhas. A regra aparece no subsolo, que o recorte não tem — hoje é coberta por teste (a escada de
-um mapa de teste com os andares 7, 9 e 10) e entra em uso com o mundo inteiro (M51).
+um mapa de teste com os andares 7, 9 e 10) e entra em uso real quando o recorte cresce para o z 8,
+com os esgotos e as escadas da OW-38 e da OW-40 (M50, passo 3 de `docs/open-world-plan.md` §2); o
+tráfego de dois andares aparece ali, e não só no mundo inteiro (M51), que é a geometria por setor.
 
 #### Medido
 
