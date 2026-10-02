@@ -14,6 +14,7 @@
 //   PLAYERS=1000 STEPS=100 pnpm bench:city
 //   MAP=square pnpm bench:city           # a praça sintética do FUN-33, sem a Thais
 //   AOI=both pnpm bench:city             # com AOI e com a transmissão para a sessão inteira
+//   ENCODE=each pnpm bench:city          # o grupo de controle do OW-22: cada visualizador codifica a sua cópia
 //   FORMAT=markdown pnpm bench:city      # a tabela pronta para colar em docs/product/
 //   REPEAT=3 pnpm bench:city             # cada linha é a melhor de 3 rodadas (máquina ocupada)
 //
@@ -40,6 +41,13 @@ const WARMUP = Number(process.env['WARMUP'] ?? 30);
 const MAP = process.env['MAP'] ?? 'thais';
 const THAIS = MAP !== 'square';
 const AOI = process.env['AOI'] ?? 'on';
+/**
+ * `once` (padrão): a mesma mensagem para N visualizadores é codificada uma vez por ciclo (OW-22).
+ * `each`: o grupo de controle — cada visualizador codifica a sua cópia, como na linha de base do
+ * OW-07. Mesmo processo, mesma hora: é a comparação limpa da CPU, sem depender de a máquina estar
+ * igualmente carregada em duas execuções separadas.
+ */
+const ENCODE = process.env['ENCODE'] ?? 'once';
 const FORMAT: TableFormat = process.env['FORMAT'] === 'markdown' ? 'markdown' : 'text';
 /**
  * Rodadas por linha. Numa máquina com outras coisas rodando o p99 mede a máquina, e o que se
@@ -55,13 +63,15 @@ function group(title: string, scenarios: readonly CityScenario[], aoi: boolean):
     let best: CityRun | undefined;
     for (let attempt = 0; attempt < REPEAT; attempt++) {
       const run = runCityScenario(scenario, {
-        steps: STEPS, warmupSteps: WARMUP, aoi, ...(content === undefined ? {} : { content }),
+        steps: STEPS, warmupSteps: WARMUP, aoi, encodeOnce: ENCODE !== 'each',
+        ...(content === undefined ? {} : { content }),
       });
       if (best === undefined || run.summary.cpuUs.p50 < best.summary.cpuUs.p50) best = run;
     }
     return best as CityRun;
   });
-  const mode = aoi ? 'difusão por AOI' : 'difusão para a sessão inteira (grupo de controle)';
+  const mode = (aoi ? 'difusão por AOI' : 'difusão para a sessão inteira (grupo de controle)')
+    + (ENCODE === 'each' ? ', codificação por visualizador (grupo de controle)' : ', codificação única');
   console.log(FORMAT === 'markdown' ? `**${title}** — ${mode}` : `--- ${title} — ${mode} ${'-'.repeat(8)}`);
   console.log('');
   for (const line of reportTable(runs, FORMAT)) console.log(line);
@@ -80,6 +90,7 @@ console.log('--- cenário ------------------------------------------------------
 console.log(`mapa                ${THAIS ? 'Thais real (data/city/city.json)' : 'praça sintética'}`);
 console.log(`passos por jogador  ${STEPS} medidos, ${WARMUP} de aquecimento`);
 console.log(`rodadas por linha   ${REPEAT}${REPEAT > 1 ? ' (vale a de menor p50 de CPU)' : ''}`);
+console.log(`codificação         ${ENCODE === 'each' ? 'cada visualizador a sua (controle)' : 'uma vez por mensagem por ciclo'}`);
 console.log('');
 
 for (const aoi of modes) {

@@ -32,7 +32,7 @@ export function describeMachine(): string[] {
 const COLUMNS = [
   'jogadores', 'vizinhos', 'passos/s',
   'CPU p50 µs', 'CPU p99 µs', 'flush p50 µs', 'p99 / ciclo',
-  'B/vis/s', 'msg/vis/s', 'fila máx', 'quedas',
+  'B/vis/s', 'B cod/vis/s', 'msg/vis/s', 'fila máx', 'quedas',
 ] as const;
 
 /** Uma linha da tabela para cada rodada. */
@@ -53,6 +53,7 @@ export function reportRows(runs: readonly CityRun[]): string[][] {
       formatNumber(summary.flushUs.p50),
       `${formatNumber(summary.cycleBudgetShare * 100, 1)} %`,
       formatNumber(summary.bytesPerViewerPerSecond),
+      formatNumber(summary.encodedBytesPerViewerPerSecond),
       formatNumber(summary.messagesPerViewerPerSecond),
       formatNumber(summary.queue.max),
       formatNumber(summary.drops),
@@ -78,6 +79,9 @@ export function readingGuide(queueLimit: number): string[] {
     '  flush p50     a parte da CPU que codifica e escreve o frame, no p50',
     '  p99 / ciclo   o p99 de CPU como fração dos 100 ms: 100 % é o nó sem folga nenhuma',
     '  B/vis/s       bytes do frame por visualizador por segundo (o uWS não comprime: o frame é o fio)',
+    '  B cod/vis/s   bytes que o hospedeiro SERIALIZOU por visualizador por segundo: o cache de codificação',
+    '                (OW-22) faz a mesma mensagem para N visualizadores custar uma codificação por ciclo,',
+    '                então fica abaixo de B/vis/s; antes do OW-22 era igual a ele, menos o envelope de lote',
     '  msg/vis/s     mensagens por visualizador por segundo, contadas pelo `Viewer`',
     `  fila máx      a maior fila de um visualizador no instante do flush; o teto é ${queueLimit}`,
     '  quedas        visualizadores derrubados pelo teto de fila; diferente de 0, a linha não mede o jogo',
