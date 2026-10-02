@@ -658,3 +658,18 @@ A decisão 10.f manda persistir vida, mana e condições (`characters.health/man
 O `upgrade-existing-schema.sql` não ganha as colunas, como não ganhou a `durable_version` (#823): é o upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a migração `0029` falhar ao rodar depois dele.
 
 **Efeito no que esta decisão escreveu:** nenhum. A decisão 10.f continua valendo; esta emenda só registra o formato das condições, onde a flag nasce e as duas regras de segurança do extrato.
+
+## Emenda — 2026-10-02 (#837, OW-16): o que é "sujo", o extrato que não pousou e a âncora da transição
+
+A decisão 10d manda gravar a cada 60 s, e em saída, transição, morte e drenagem, um lote com todo personagem sujo, num `MULTI` só. A OW-16 o implementou no hospedeiro (`docs/product/open-world.md`, "O checkpoint do mundo") e fechou seis detalhes que a decisão deixava em aberto:
+
+- **"Sujo" é o que o banco ainda não tem**, medido no personagem e na sessão, nunca num visualizador (invariante 3): mudou de posição absoluta, de vida, de mana ou de *chaves* de condição desde o último lote; rendeu algo (qualquer agregado além de `durationMs`, ou uma instância vendida); ou mexeu em estado durável por uma intenção (`dirty`). O prazo de uma condição não suja — encolhe a cada segundo —, e o `goldDelta` também não, porque só é liquidado depois de gravar e um lote que falhou o deixaria sujo para sempre. O parado na PZ, sem render nada, não gera linha.
+- **Toda saída grava uma linha, suja ou não.** A decisão 7 diz que toda saída grava o checkpoint; a saída leva o `reason` e a âncora, e é a única linha que o parado gera.
+- **O extrato que `leave` e `checkpoint` emitem uma vez não pode morar só na pilha de quem falhou.** Os dois zeram o que o extrato leva ao emiti-lo. Se `saveBatch` falha, as linhas voltam inteiras — mesmo `seq`, mesma versão durável — para uma fila do hospedeiro (`CheckpointState.unsaved`) e vão na frente do lote seguinte; um `release` que falha não solta o personagem, e o seguinte as grava antes de soltá-lo. Repetir é seguro pela chave do Redis e pelo `UNIQUE (session_id, seq)` do ledger (invariante 10).
+- **Os lotes de uma sessão são serializados, e o timer não empilha.** O lote seguinte só é montado depois que o anterior terminou, para o que falhou entrar nele e para a saída de um personagem esperar o lote em voo que pode levar o crédito dele.
+- **O motivo da linha periódica é `'checkpoint'`**, só do hospedeiro (`ReceiptReason`): o `EndReason` do `sim` não tem como dizer "ninguém saiu", e acrescentá-lo arrastaria o protocolo e o cliente para uma issue de servidor. Vira o `type` `session-checkpoint` do ledger.
+- **A âncora de saída é lida antes de o destino ser construído.** Numa transição o destino é construído antes de a origem encerrar, com o mesmo `CharacterRuntime` — a decisão 6 já dizia isso —, e depois disso o `position` dele é o da hunt. O checkpoint e a saída leem a posição absoluta de agora e a escrevem em `CharacterRuntime.worldPosition` antes de montar a linha; `#runTransition` a lê antes de `buildSession`.
+
+O lote **não é fatiado**: um `MULTI` com todo o mundo é o que a decisão compra, e o tamanho do comando — cada linha leva o estado absoluto inteiro e o `acquired` da sessão — é número do `bench:world` (OW-35). A cadência é `WORLD_CHECKPOINT_MS` (`docs/runtime-configuration.md`), de 1 s a 1 h.
+
+**Efeito no que esta decisão escreveu:** nenhum. A decisão 10d continua valendo; esta emenda só registra o que "sujo" quer dizer, onde mora o extrato que não pousou, e o que a transição precisa ler antes de construir o destino.

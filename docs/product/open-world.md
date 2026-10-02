@@ -5,10 +5,10 @@ tipo, mapa, cidade, templo e teto, validado no boot), a **regra de zona e de sa�
 (OW-10, #831: `zoneAt`, `hasZoneFlag` e `canLogout`), a **sessão do mundo** (OW-13, #834:
 `createWorldSession`, a topologia de mundo e a entrada na posição salva ou no templo), a **saída do
 Tibia no `sim`** (OW-14, #835: o `logout` por `canLogout` e a perda de conexão, que tenta sair aos
-60 s) e o **personagem em repouso** (OW-15, #836: as colunas de mundo e vitais em `characters`, o
-ticket e o extrato que as levam). Nada hospeda a sessão ainda — o hospedeiro a constrói na OW-18,
-atrás de `OPEN_WORLD` — e a presença no hospedeiro, o checkpoint e a apresentação ainda não saíram
-do papel.
+60 s), o **personagem em repouso** (OW-15, #836: as colunas de mundo e vitais em `characters`, o
+ticket e o extrato que as levam) e o **checkpoint do mundo** no hospedeiro (OW-16, #837: um lote a cada
+60 s e em toda saída, num `MULTI` só). Nada hospeda a sessão ainda — o hospedeiro a constrói na OW-18,
+atrás de `OPEN_WORLD` — e a presença no hospedeiro e a apresentação ainda não saíram do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -19,10 +19,11 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem cinco: o que o mundo **é** como dado, a regra de
+cada peça do plano que sai do papel; hoje existem seis: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
 topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
-que perdeu a conexão, e o personagem em repouso — o que a linha de `characters` guarda dele (OW-15).
+que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) — e o
+checkpoint, que leva o que o mundo rendeu ao Redis (OW-16).
 
 ## O personagem em repouso (OW-15, #836)
 
@@ -92,13 +93,110 @@ coluna `state` guarda por default. O diretório continua mandando: quem está nu
 
 ### O que ainda não existe
 
-- **Quem ESCREVE a âncora.** O extrato leva `owner.worldPosition` como está; quem a atualiza com a posição
-  de agora é o dono da sessão, na saída e no checkpoint (`WorldRuleset#worldPositionOf`, OW-16/OW-20).
-- **O checkpoint do mundo** (OW-16) e a **liquidação sem linha de ledger** para quem só mudou de lugar
-  (OW-17): hoje cada extrato ainda é uma linha de ledger.
+- **A liquidação sem linha de ledger** para quem só mudou de lugar (OW-17): hoje cada extrato ainda é uma
+  linha de ledger. (A âncora já é escrita: o dono da sessão a grava na saída e no checkpoint, ver
+  [o checkpoint do mundo](#o-checkpoint-do-mundo-ow-16-837); o que a OW-20 acrescenta é a volta da hunt.)
 - **A sessão do mundo hospedada** (OW-18): com a flag ligada o login ainda cai na Cidade, que cura ao entrar
   — a vida do ticket só sobrevive numa hunt idle, e na praça é curada.
 - **A escolha do mundo** (`world_id`, OW-50) e a **troca de cidade** (`town_id`): hoje só há `main` e `thais`.
+
+## O checkpoint do mundo (OW-16, #837)
+
+O Canary salva o jogador de hora em hora e no logout (`canary/config.lua.dist:356-362`). O Draconya
+salva o mundo **a cada 60 s e em toda saída** (ADR 0060 d.10d), e o que ele salva chega ao Redis num
+`MULTI` só. É o que faz o progresso do mundo — XP, gold, loot, posição, vida — sobreviver a uma queda
+sem duplicar nada (invariante 10) e sem devolver cada personagem a um instante diferente.
+
+### Quando
+
+| Gatilho | O que acontece |
+|---|---|
+| A cada `WORLD_CHECKPOINT_MS` (padrão 60 000 ms, [configuração](../runtime-configuration.md)) | o hospedeiro grava o lote de todo personagem **sujo** da sessão |
+| Saída (logout, x-log, `member-left`), transição para uma hunt ou o `leave` do `release` | o extrato de quem sai vai **dentro do lote**, junto do checkpoint de todo outro sujo |
+| Drenagem (deploy) | o primeiro `leave` já leva todo sujo; cada saída seguinte grava a sua |
+| Morte no mundo | idem — a saída por dentro do `sim` (`member-left`) passa pelo mesmo funil (a morte em si é a OW-32) |
+
+A saída e a transição **antecipam o lote inteiro**, não só a linha de quem sai: uma queda logo depois
+de alguém sair devolve esse personagem e todos os outros ao mesmo instante.
+
+### Quem entra no lote: o personagem sujo
+
+Um personagem está **sujo** se mudou algo que o banco ainda não tem:
+
+- **moveu** — a coordenada absoluta de agora (`WorldRuleset#worldPositionOf`) difere da que o último
+  lote gravou;
+- **mudou de vida, de mana ou de condições** — as condições pela *chave*, não pelo prazo: uma haste
+  que só envelhece não suja, uma que entra ou sai sim;
+- **rendeu algo** — qualquer agregado da sessão além de `durationMs` (XP, gold, abate, item, morte,
+  suprimento, dano, cura), ou uma instância vendida e ainda não gravada;
+- **mexeu em estado durável por uma intenção** (`dirty`): equipar, comprar, escolher, vender.
+
+**Personagem parado na PZ, sem render nada, não gera linha** — a linha dele seria o estado que o banco
+já tem. A base é o estado com que ele chegou (`#markArrival`: o do ticket, ou o de uma sessão que acabou
+de gravá-lo) e o do último lote que o levou. **A saída é a exceção**: toda saída grava uma linha, suja
+ou não (ADR 0060 d.7), porque ela leva o `reason` e a âncora de onde se saiu.
+
+Nada disto olha um visualizador (invariante 3): o hospedeiro lê o personagem e os agregados da sessão,
+e um mundo sem ninguém olhando grava o mesmo lote.
+
+### O que cada linha leva
+
+A linha é o extrato inteiro de `#persistReceipt` — o `Receipt` do `sim` (`Session.checkpoint`, OW-03:
+delta desde o anterior, `seq` novo) mais o estado absoluto do dono — e, com `OPEN_WORLD`, o mundo e os
+vitais da OW-15: **`worldPosition`, `townId`, `health`, `mana` e `conditions`**. Duas coisas que só o
+checkpoint acrescenta:
+
+- **A âncora é a posição de AGORA, lida antes de o extrato ser montado** (`CharacterRuntime.
+  worldPosition`, escrita pelo dono da sessão). Numa **transição**, o destino é construído *antes* de a
+  origem encerrar e o `CharacterRuntime` é o mesmo objeto, então o `position` dele já é o da hunt: por
+  isso `#runTransition` lê a âncora **antes** de `buildSession`.
+- **`reason: 'checkpoint'`** nas linhas periódicas (o `EndReason` do `sim` não tem como dizer "ninguém
+  saiu"). Vira o `type` `session-checkpoint` da linha de ledger; a saída leva o motivo dela
+  (`manual-exit`, `drain`, `death`).
+
+### Como chega ao Redis
+
+`ReceiptStore.saveBatch` grava **todas as linhas num `MULTI` só**: um `SET`, um `ZADD` e um `PEXPIRE` por
+extrato, enviados e executados de uma vez. Uma queda antes do `EXEC` deixa o Redis com o último lote
+**inteiro** e com nada do seguinte — `receipts.test.ts` simula a conexão caindo no meio, e
+`world-checkpoint.postgres.test.ts` confere o resultado no Postgres. Não há lote fatiado: fatiar devolveria
+a janela em que metade do mundo voltou a um instante e a outra metade a outro, e a atomicidade é o que a
+decisão compra. O custo é o tamanho de um comando, que o `bench:world` (OW-35) mede.
+
+Os lotes de uma sessão rodam **um de cada vez**: o seguinte só é montado depois que o anterior terminou.
+O timer não empilha — um tique que encontra um lote em voo pula o ciclo —, e a saída de um personagem
+espera o lote que pode levar o crédito dele.
+
+### O gold: o canal único (OW-04)
+
+O lote **grava e depois liquida** (`settleGoldDelta`, `#settleLine`). Teste do plano: 100 de loot e 50
+de venda, dois checkpoints e um logout somam exatamente 150 no ledger, três linhas
+(`session-checkpoint` 100, `session-checkpoint` 50, `session-manual-exit` 0), e `characters.gold` = 150.
+O que o personagem ganha **enquanto o lote voa** entra na base também, sem se perder: o saldo é `gold +
+goldDelta`, o mesmo dos dois lados da conta, e o agregado desse ganho vai no extrato seguinte, que é o que
+o ledger credita.
+
+### Quando o Redis cai
+
+`Session.checkpoint` e `leave` emitem o extrato **uma vez** e já zeram o que ele leva. Se a gravação
+falha, o extrato é guardado em memória (`CheckpointState.unsaved`) com o mesmo `seq` e a mesma versão
+durável, e **vai na frente do lote seguinte**: repetir é seguro, porque a chave do Redis é a mesma e o
+ledger recusa o `(session_id, seq)` repetido. O mesmo vale para a **resposta perdida** (o lote gravou e o
+`game` achou que não). Uma saída que falha deixa o `release` falhar sem soltar nada, e o `release`
+seguinte grava o que ficou para trás antes de soltar o personagem. A sessão do mundo não tem snapshot (ADR
+0060 d.10a): o que o `game` perde numa queda *do próprio nó* é o que aconteceu desde o último lote.
+
+### O que ainda não existe
+
+- **Quem hospeda o mundo.** A sessão `world` ainda não é hospedada (o `WorldShard` é a OW-18, atrás de
+  `OPEN_WORLD`): o checkpoint se prova com a sessão real do `sim` em `world-checkpoint-real.test.ts` e com
+  um ruleset de mentira (`world-checkpoint.test.ts`), e entra em produção com o `WorldShard`.
+- **A liquidação sem linha de ledger** para quem só mudou de lugar (OW-17): hoje cada linha do lote ainda
+  vira uma linha de ledger no `jobs`.
+- **A presença** (OW-19): o `departure-requested` que o `sim` emite (logout, x-log) ainda não é lido pelo
+  hospedeiro; quando for, ele chama o mesmo funil de saída, e o lote antecipado vem de graça.
+- **O `use-slot` do mundo** só suja pelo `dirty` na Cidade (`ruleset.type === 'city'`); conjurar no mundo
+  suja pela mana e pelo gold, e trocar essa conferência é da OW-18.
 
 ## O mundo como conteúdo (OW-08, #829)
 
@@ -458,13 +556,13 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 | A flag do mundo aberto | desligada (`OPEN_WORLD=0`) | `packages/server/src/config.ts`, `OPEN_WORLD`; [`docs/runtime-configuration.md`](../runtime-configuration.md) |
 | Mundo e cidade de quem existia antes da migração 0029 | `'main'` e `'thais'`, cheio, sem posição nem condição | `packages/server/migrations/0029_836-world-vitals.sql` |
 | Teto de condições por personagem na linha | 64 | `packages/server/src/world-state.ts`, `MAX_CONDITIONS` |
+| Cadência do checkpoint do mundo | 60 000 ms (entre 1 s e 1 h) | `packages/server/src/config.ts`, `WORLD_CHECKPOINT_MS`; `packages/server/src/game/world-checkpoint.ts`, `WORLD_CHECKPOINT_MS`; [`docs/runtime-configuration.md`](../runtime-configuration.md) |
 
 ## Em aberto
 
-- A presença no hospedeiro, o checkpoint e a apresentação (OW-16 a OW-20): ver o
-  [plano](../open-world-plan.md). É aí que a sessão de mundo ganha quem a hospede, que a âncora é
-  gravada, que o `departure-requested` vira checkpoint e repouso, e que o `logout-refused` chega ao
-  cliente.
+- A presença no hospedeiro e a apresentação (OW-18 a OW-20): ver o [plano](../open-world-plan.md). É aí
+  que a sessão de mundo ganha quem a hospede, que o `departure-requested` vira repouso (o checkpoint
+  que ele grava já existe, OW-16) e que o `logout-refused` chega ao cliente.
 - O `requestExit` que o `WorldRuleset` herda da hunt (a OW-13 o testa) **não é a saída do mundo**:
   ele conclui por `onExitFinished` depois de `exitDelayMs` e da janela de luta, mas não olha o tile —
   um tile de no-logout não o recusa. O hospedeiro do mundo (OW-19) deve rotear o `logout` por

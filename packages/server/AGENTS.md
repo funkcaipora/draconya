@@ -877,15 +877,17 @@ shard não creditava nada, as quatro respostas coincidiam. O mundo aberto é um 
 elas se separam. Cada pergunta agora tem nome em `game/ruleset-traits.ts`, e **o host não lê mais
 `ruleset.shared` nem `ruleset.progress` diretamente** — lê um predicado. A hunt e a Cidade não
 declaram `progress` (ADR 0060 d.10b), então os cinco predicados dão, para elas, exatamente o que
-`shared` dava: a refatoração não muda nada observável.
+`shared` dava: a refatoração não muda nada observável. **Um sexto, `checkpointsProgress`** (OW-16, #837), é
+a conjunção `leavesOnExit && progress === 'checkpointed'` — a sessão que grava por LOTE: só o mundo.
 
 | Predicado | Pergunta | Privada (hunt, treino) | Cidade | Mundo (`shared` + `progress: 'checkpointed'`) |
 |---|---|---|---|---|
 | `leavesOnExit` | sair é `leave` e a sessão continua para quem fica? | não (`end`) | sim | sim |
 | `creditsAggregates` | o gold anda pelo agregado, e o extrato o leva? | sim | **não** | **sim** |
-| `keepsSnapshot` | o host guarda snapshot dela? | sim | não | não (checkpoint, OW-16) |
+| `keepsSnapshot` | o host guarda snapshot dela? | sim | não | não (checkpoint, `checkpointsProgress`, OW-16) |
 | `usesAreaOfInterest` | cada visualizador recebe só a vizinhança? | não | sim | sim |
 | `offersCityServices` | aceita serviço de Cidade (bênção)? | não | sim | sim, e só no tile PZ: `Ruleset.acceptsCityServices` (OW-13) |
+| `checkpointsProgress` | grava o progresso em lote, por timer e na saída? (OW-16) | não | não | **sim** |
 
 **A regra de gold** (`SessionHost#mirrorGold`, e a guarda de `#saveDurableReceipt`):
 
@@ -936,21 +938,88 @@ extrato próprio: `#leaveWithReceipt` espera `exitSaves` (`#awaitExitSaves`), in
 de o `release` soltar diretório, slot e snapshot. É o contrato do `release` concorrente da sessão
 privada (#267), por outro caminho; `gold-channel.test.ts` o prende nas duas variantes.
 
-**Ainda não é o mundo.** Nenhum ruleset declara `progress`, então os ramos de `creditsAggregates &&
-leavesOnExit` (a coluna "Mundo") só rodam em teste, com um ruleset de mentira
-(`game/gold-channel.test.ts`). O que a OW-16 acrescenta é o timer, o lote num `MULTI` e a
-antecipação na saída — e um extrato de saída que sobreviva a uma falha do Redis: `leave` emite o
-extrato uma vez, e se a gravação falhar depois dele o extrato só existe em memória (a saída de
-membro de party, #194, tem a mesma janela). **Perguntas por `ruleset.type === 'city'`** — `promote`,
+**Ainda não é o mundo hospedado.** Só o `WorldRuleset` (OW-13) declara `progress: 'checkpointed'`, e nenhuma
+sessão de mundo é hospedada ainda (OW-18): os ramos de `creditsAggregates && leavesOnExit` (a coluna "Mundo")
+rodam em teste, com um ruleset de mentira (`game/gold-channel.test.ts`, `game/world-checkpoint.test.ts`) e com o
+mundo real (`game/world-checkpoint-real.test.ts`). **A OW-16 (#837) trouxe o timer, o lote num `MULTI` e a
+antecipação na saída**, e fechou a janela que esta seção deixava aberta — o extrato que `leave` emite uma vez e
+que, se a gravação falhasse, só existia em memória — com a fila `CheckpointState.unsaved` (ver "O checkpoint do
+mundo" adiante); a saída de membro de party (#194) tem a mesma janela, e continua sem o remédio. **Perguntas
+por `ruleset.type === 'city'`** — `promote`,
 `buy-item`, o livro do offline training, e a marca `dirty` do `use-slot` — não são ramos de
 `shared`, ficam como estão. O mundo ganhou tipo próprio na OW-13 (`'world'`) e a pergunta do tile
 tem resposta no `sim` (`Ruleset.acceptsCityServices`), mas nenhuma sessão de mundo é hospedada
-ainda: trocar essas conferências por ela é do `WorldShard` (OW-18). **Eventos notáveis por
+ainda: trocar essas conferências por ela é do `WorldShard` (OW-18) — e é por isso que o `use-slot` do mundo
+ainda não marca `dirty` (suja pela mana e pelo agregado, que o checkpoint já enxerga). **Eventos notáveis por
 personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
 `Session.notableEventsFor(characterId, from)`, nunca `session.notableEvents` crua — no mundo cada
 evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
 Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
 na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
+
+## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
+
+A sessão `checkpointed` (o mundo: `checkpointsProgress`) não tem `end` nem snapshot, e o progresso dos donos
+chega ao Redis por **lote**: o extrato de todo personagem SUJO, gravado por `ReceiptStore.saveBatch` num
+`MULTI` só. Quem manda é `SessionHost` (`game/host.ts`); o que não precisa dele — a marca, "sujo", a fila
+dos extratos que não pousaram — mora em `game/world-checkpoint.ts`. `HostedSession.checkpoint` é `null` na
+hunt e na Cidade, que não pagam nada por isso. Produto: `docs/product/open-world.md`, "O checkpoint do mundo".
+
+**O funil é um só: `#saveCheckpointBatch(hosted, departures, everyone)`.** O timer (`checkpointWorlds`, a
+cada `worldCheckpointMs`, `WORLD_CHECKPOINT_MS` = 60 s por padrão), a saída (`#saveReceipt` no ramo
+`checkpoint !== null`: `release`, `drainAll`, `#runTransition`, `#leaveForParty`, e a morte por `member-left`
+em `#settleOne`) e o retry de um extrato que ficou para trás passam todos por ele. Por isso a saída
+**antecipa o lote inteiro** sem cada chamador saber: quem sai leva a linha dele e o checkpoint de todo outro
+sujo. Código novo que tire alguém do mundo grava por `#saveReceipt`/`#leaveWithReceipt`, nunca por
+`#persistReceipt` direto — senão a linha vai sozinha e uma queda logo depois divide o mundo em dois instantes.
+
+Armadilhas, todas com teste que as mata (`world-checkpoint.test.ts`, mutação conferida):
+
+- **"Sujo" é o personagem e a sessão, nunca um visualizador** (invariante 3). `#isDirty`: `dirty` (intenção
+  durável), sem marca, instância vendida, qualquer agregado além de `durationMs` (`hasActivity`), ou a marca
+  (`CheckpointMark`: posição absoluta, vida, mana, `alive`, CHAVES das condições) difere da gravada. Quem
+  gravar `#presentMoves`/`viewers` aqui quebra o mundo desanexado. `durationMs` corre para todo presente e
+  **não** suja — um parado na PZ teria o agregado "não zero" a partir do primeiro segundo. As condições
+  entram pela chave, não pelo prazo (o prazo encolhe sempre). **O `goldDelta` não é sinal**: ele só é
+  liquidado depois de gravar, e um lote que falhou o deixaria sujo para sempre — o agregado é o sinal certo
+  (zera na emissão, não na gravação). A marca nasce na ENTRADA (`#markArrival`, em `#createLocal` e
+  `#replace`): sem ela o primeiro lote gravaria todo mundo.
+- **A saída sempre grava**, suja ou não: ela leva o `reason` e a âncora (ADR 0060 d.7). Só o checkpoint
+  periódico poupa o parado.
+- **A âncora é lida ANTES de o personagem ser movido** (`#anchorWorldPosition`). `#leaveWithReceipt` a lê antes
+  de `leave`; `#runTransition` a lê **antes de `buildSession`** — o construtor leva o MESMO `CharacterRuntime`
+  para o destino, e depois dele o `position` já é o da hunt — e chama `#leaveWithReceipt(..., true)`
+  (`anchored`) para não relê-la. O checkpoint a escreve em `owner.worldPosition` antes de montar a linha
+  (invariante 9: quem escreve é o hospedeiro dono da sessão). `worldPositionOf(ruleset, owner)` consulta o
+  ruleset por FORMA (só o `WorldRuleset` a responde); ausente, o checkpoint segue sem âncora.
+- **Os lotes de uma sessão são SERIALIZADOS** (`CheckpointState.tail`): o seguinte só é MONTADO depois que o
+  anterior terminou, então o que falhou já voltou para `unsaved` e vai nele. O timer não empilha
+  (`state.queued > 0` pula o ciclo). Montar de forma síncrona na chamada (sem fila) deixaria um extrato novo
+  ultrapassar o que falhou, e a saída de um personagem soltaria o que o lote em voo ainda não gravou.
+- **Falha não perde crédito.** `Session.checkpoint` e `leave` zeram o que o extrato leva e o emitem UMA vez; se
+  `saveBatch` lança, as linhas voltam inteiras para `CheckpointState.unsaved` — mesmo `seq`, mesma versão
+  durável — e vão NA FRENTE do próximo lote. Repetir é seguro (chave de Redis igual, ledger `UNIQUE
+  (session_id, seq)`), inclusive a resposta perdida. Um `release` que falha não solta nada, e o seguinte
+  grava o que ficou: `#leaveWithReceipt` com `leave` devolvendo `null` ainda chama
+  `#saveCheckpointBatch(hosted, [], false)`. `false` = só `unsaved`, sem o checkpoint dos outros.
+- **O gold: grava, depois liquida** (`#settleLine`, o canal único da OW-04). O que o personagem ganha enquanto o
+  lote voa entra na base junto (o saldo é `gold + goldDelta`, o mesmo número) e o agregado dele vai no extrato
+  seguinte, que é o que o ledger credita.
+- **`reason: 'checkpoint'`** é só do hospedeiro (`ReceiptReason = EndReason | 'checkpoint'`, `receipts.ts`): o
+  `sim` não tem como dizer "ninguém saiu", e `Session.checkpoint` pede um `EndReason` (passamos
+  `'manual-exit'`, que o hospedeiro descarta). Vira o `type` `session-checkpoint` da linha de ledger.
+- **`saveBatch` é UM `MULTI`, sem fatiar** — a atomicidade é o que a decisão 10d compra. Um comando que falha
+  dentro do `MULTI` não desfaz os outros (o Redis não tem rollback), mas é lançado por `exec` e o lote se
+  repete. Lote vazio não fala com o Redis; sem `receipts` no host o checkpoint não tira nada da sessão
+  (zerar sem gravar perderia o crédito).
+- **Cada linha leva o `acquired` inteiro da sessão**, não só o que caiu desde o último lote: a inserção em
+  `item_instance` é idempotente (`onConflictDoNothing`), então repetir é correto — mas o tamanho do comando
+  cresce com a mochila, e é um dos números que o `bench:world` (OW-35) mede.
+
+Teste: `receipts.test.ts` (o `MULTI`, a queda antes do `EXEC`, no Redis de verdade),
+`game/world-checkpoint.test.ts` (o mecanismo, ruleset de mentira), `game/world-checkpoint-real.test.ts` (a
+Thais real) e `game/world-checkpoint.postgres.test.ts` (do hospedeiro ao ledger: 100 + 50 = 150, a queda
+entre dois lotes, o retry e a resposta perdida).
 
 ## O mundo e os vitais em repouso: coluna → ticket → sessão → extrato → coluna (#836, OW-15, ADR 0060 d.10f)
 
@@ -1028,9 +1097,9 @@ do invariante 8 é o personagem deslogado. O `select` consulta o diretório ante
 upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a `0029` falhar ao rodar
 depois dele (`ADD COLUMN` sem `IF NOT EXISTS`). O banco legado entra pela migração.
 
-**O que NÃO existe ainda.** Nada ESCREVE a âncora no mundo (a saída e o checkpoint são OW-16/OW-20), o
-`jobs` ainda grava uma linha de ledger por extrato mesmo sem valor movido (OW-17), e nenhuma sessão de
-mundo é hospedada (OW-18): hoje o login cai na Cidade, que CURA ao entrar (`city.ts:126-130`), então
+**O que NÃO existe ainda.** A âncora é escrita pelo checkpoint e pela saída desde a OW-16 (ver "O checkpoint do
+mundo"); a volta da hunt para o mundo é a OW-20. O `jobs` ainda grava uma linha de ledger por extrato mesmo sem
+valor movido (OW-17), e nenhuma sessão de mundo é hospedada (OW-18): hoje o login cai na Cidade, que CURA ao entrar (`city.ts:126-130`), então
 a vida do ticket só sobrevive numa hunt idle ou no mundo, nunca na praça. O que existe é o contrato —
 coluna, ticket, sessão, extrato — com teste de ponta a ponta (`jobs/world-vitals.postgres.test.ts`).
 
