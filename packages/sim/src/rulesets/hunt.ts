@@ -1938,7 +1938,12 @@ export interface RunnerState {
 }
 
 export class HuntRuleset implements Ruleset {
-  readonly type = 'hunt' as const;
+  /**
+   * `'hunt'` é a instância, e `'world'` o mundo aberto (OW-13): o mundo é este mesmo ruleset com a
+   * topologia de mundo, e é `WorldRuleset` (`rulesets/world.ts`) quem o declara. Nenhum outro
+   * código escolhe o valor — a hunt, solo e party, é sempre `'hunt'`.
+   */
+  readonly type: 'hunt' | 'world' = 'hunt';
 
   readonly #options: HuntRulesetOptions;
   /**
@@ -2050,6 +2055,17 @@ export class HuntRuleset implements Ruleset {
 
   /** Até que instante lógico o tempo de sessão já foi cobrado (stamina e comida). Ver `#chargeElapsedTime`. */
   #staminaAnchorMs = 0;
+
+  /**
+   * O `lootSeq` com que cada personagem que SAIU deixou a sessão, para quem volta pelo mesmo id
+   * continuar dali (`namesOwnerInItemIds`, o mundo). Um login novo constrói um `CharacterRuntime`
+   * com `lootSeq` 0, e `${session.id}:${character.id}:0` já é o id de um item que o mesmo
+   * personagem ganhou antes de sair — o `item_instance` o descartaria em silêncio. Vazio na
+   * instância (nunca escrito) e sem snapshot no mundo (ADR 0060 d.10a). Um número por personagem
+   * que já saiu da encarnação do mundo — o `onLeave` seguinte o reescreve —, e a encarnação acaba
+   * no save diário, então o mapa tem o teto de quem passou por ela.
+   */
+  readonly #lootSeqOfDeparted = new Map<string, number>();
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
@@ -2191,6 +2207,15 @@ export class HuntRuleset implements Ruleset {
   /** O mapa da instância (FUN-120): é o que o cliente busca para desenhar a hunt. */
   get mapId(): string {
     return this.#world.map.id;
+  }
+
+  /**
+   * Os eventos notáveis têm dono e cada personagem lê só os dele? É da topologia
+   * (`SessionTopology.scopesEventsToOwner`): a instância não, o mundo sim. Quem lê é
+   * `Session.record`, que só grava o dono onde isto é `true`.
+   */
+  get scopesEventsToOwner(): boolean {
+    return this.#topology.scopesEventsToOwner;
   }
 
   get huntId(): string {
@@ -2715,7 +2740,7 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Housekeeping, subject: interactableId,
       });
     }
-    session.record('tile-used', `${current.kind}:${interactableId}`);
+    session.record('tile-used', `${current.kind}:${interactableId}`, character?.id);
 
     // Sem `content`, não há `appearanceKey`/posição para montar a mudança — não deveria
     // acontecer (todo id de `#byId` tem uma entrada em `#contentOf`, escritas juntas em
@@ -2781,22 +2806,20 @@ export class HuntRuleset implements Ruleset {
       // Conteúdo com referência solta — o mapa é importado antes do catálogo de itens estar
       // completo (#573/#754), então isto é esperado até lá, nunca um erro do jogador. Registrado
       // (não só recusado) para o extrato acusar qual baú aponta item que ainda não existe.
-      session.record('chest-unknown-item', `${interactableId}:${reward.itemId}`);
+      session.record('chest-unknown-item', `${interactableId}:${reward.itemId}`, character.id);
       return { ok: false, reason: 'unknown-item' };
     }
     // Sem reserva de bolsa de party: o prêmio é PESSOAL, atribuído a quem usou o baú — não é
     // loot de abate compartilhável, então a capacidade disponível é a do personagem inteira.
     const wearer = withReservedCapacity(character, 0);
-    const instanceId = this.#party !== undefined
-      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-      : `${session.id}:${String(character.lootSeq++)}`;
+    const instanceId = this.#newInstanceId(session, character);
     const carried: CarriedItem = { instanceId, itemId: reward.itemId, quantity: reward.quantity };
     if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
       return { ok: false, reason: 'no-capacity' };
     }
     character.setStorageValue(storageKey, 1);
     session.credit(character.id, 'itemsLooted', carried.quantity);
-    session.record('chest-looted', interactableId);
+    session.record('chest-looted', interactableId, character.id);
     return { ok: true, changes: [] };
   }
 
@@ -3113,6 +3136,30 @@ export class HuntRuleset implements Ruleset {
     if (this.#party !== undefined && session.participants.length > this.#options.party.maxMembers) {
       throw new PartyFullError(this.#options.hunt.id, this.#options.party.maxMembers);
     }
+    // Quem entra começa SEM fila (OW-13). O `onLeave` não cancela os eventos de quem saiu — eles
+    // "vencem, não encontram o personagem e não fazem nada" —, e isso só é verdade até o mesmo id
+    // voltar: o mundo nunca acaba, o login seguinte do MESMO personagem reentra na MESMA sessão, e
+    // o passo, a regeneração e o bot que ficaram na fila achariam o `CharacterRuntime` novo por id,
+    // aplicariam um pulso e se reagendariam — uma cadeia a mais por relogue rápido, e a regeneração
+    // a 2×, 3×… Cancelar aqui, antes de agendar o que a entrada agenda, é o `resolveDeath` de quem
+    // chega: o subject é o id, e a fila dele é a desta entrada. Na instância é um no-op — o id de
+    // quem entra nunca esteve na fila (o primeiro nasce com ela; o de party é um id novo) —, e não
+    // consome `seq` nem toca em evento de ninguém.
+    session.cancelEvents(character.id);
+    // A âncora do tempo cobrado acompanha o ÚLTIMO EVENTO, e o mundo pode ficar sem evento nenhum
+    // (vazio, e sem monstro dormente enquanto a OW-30 não chega): com ninguém dentro o relógio
+    // anda e a âncora fica parada no último evento. O primeiro evento de quem chega depois cobraria
+    // dele a comida (`fedMs`, persistida) de TODO o intervalo em que ele nem estava no jogo — uma
+    // hora de mundo vazio zeraria a refeição do primeiro a entrar. Cobra-se aqui o que é de quem JÁ
+    // estava (o intervalo decorrido) e a âncora vai para agora, antes de o entrante contar. Só o
+    // mundo: na instância o relógio nunca corre sem ninguém, e o entrante tardio de uma party
+    // continua pagando como sempre pagou (byte a byte).
+    if (this.type === 'world') this.#chargeElapsedTime(session, character);
+    // O id de item novo é `${session.id}:${character.id}:${lootSeq}` onde a topologia nomeia o dono
+    // (o mundo), e um personagem que volta traz `lootSeq` 0 de um ticket novo: continua de onde o
+    // anterior parou. Nunca recua o que o personagem já traz (um que veio de outra sessão).
+    const resumedSeq = this.#lootSeqOfDeparted.get(character.id);
+    if (resumedSeq !== undefined && character.lootSeq < resumedSeq) character.lootSeq = resumedSeq;
     // Um `Runner` por participante (#203): o caminhante, o bot e o resto do que era campo da
     // classe quando a hunt hospedava um só. O bot é o DELE — por id, ou o da opção solo para
     // o primeiro a entrar.
@@ -3161,7 +3208,9 @@ export class HuntRuleset implements Ruleset {
       runnerCount: this.#runners.size, huntId: this.#options.hunt.id,
     });
     this.#occupancyStale = false;
-    session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
+    // O mundo não "entra numa hunt": a linha do extrato diz de QUEM foi a entrada, como a Cidade.
+    if (this.type === 'world') session.record('entered-world', character.id, character.id);
+    else session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
 
     // A fila inicial. Tudo começa PRONTO — vencendo agora —, que é o comportamento que os
     // cooldowns tinham (FUN-25) e a razão continua a mesma: entrar numa hunt e ficar meio
@@ -3228,7 +3277,9 @@ export class HuntRuleset implements Ruleset {
    * Um participante saiu de uma hunt que continua (#203, ADR 0027): desfaz o que a entrada fez.
    * O tile é liberado; o `Runner` some — os eventos dele ainda na fila vencem, não encontram o
    * personagem e não fazem nada, como os de um morto. Quem o tinha como alvo perde o alvo no
-   * próximo passo, porque a mira é recalculada a cada vencimento.
+   * próximo passo, porque a mira é recalculada a cada vencimento. **Isso vale enquanto o id não
+   * voltar:** o mundo reentra o mesmo id na mesma sessão, e quem o limpa é o `onEnter`
+   * (`cancelEvents`) — deixar a instância como está é o que a mantém byte a byte.
    */
   onLeave(session: Session, character: CharacterRuntime): void {
     // REMONTA a ocupação no próximo evento, em vez de liberar `character.position`: numa
@@ -3236,6 +3287,8 @@ export class HuntRuleset implements Ruleset {
     // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
+    // O `lootSeq` fica com a sessão: quem voltar pelo mesmo id continua dele (ver `onEnter`).
+    if (this.#topology.namesOwnerInItemIds) this.#lootSeqOfDeparted.set(character.id, character.lootSeq);
     // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
     // no próximo `#holdFollow` — porque depois do `splice` de `Session.leave` morte e saída
     // manual ficam indistinguíveis por presença, e `character.alive` só é confiável antes dele.
@@ -3508,14 +3561,20 @@ export class HuntRuleset implements Ruleset {
    * inclusive onde a chave é `false`: uma refeição que nunca acaba seria bug do mundo, e o
    * `fedMs` é persistido. A âncora avança nos dois casos; um segundo acumulador para a mesma
    * grandeza contínua é o que `food.ts` explica que não vale a pena.
+   *
+   * **A âncora anda com o evento, não com o relógio.** Enquanto há alguém dentro, sempre há evento
+   * (o passo do personagem se reagenda a cada passo, parado ou não) e o intervalo é curto. O mundo
+   * vazio não tem nenhum, e é por isso que `onEnter` cobra o intervalo dos que já estavam e leva a
+   * âncora para agora — `entering` é quem acabou de entrar e fica de fora da cobrança.
    */
-  #chargeElapsedTime(session: Session): void {
+  #chargeElapsedTime(session: Session, entering?: CharacterRuntime): void {
     const dtMs = session.nowMs - this.#staminaAnchorMs;
     if (dtMs <= 0) return;
     this.#staminaAnchorMs = session.nowMs;
     const burnsStamina = this.#topology.burnsStaminaByTime;
     for (const character of session.participants) {
-      if (!character.alive) continue;
+      // O que entra agora (`onEnter` do mundo) não estava aqui durante `dtMs`: não paga por ele.
+      if (!character.alive || character === entering) continue;
       const exhausted = burnsStamina && drainStamina(character, dtMs, this.#options.stamina);
       // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
       // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
@@ -3527,7 +3586,7 @@ export class HuntRuleset implements Ruleset {
       // Vale a linha no extrato: daqui para a frente a hunt queima supply sem gerar nada, e
       // descobrir isso só pelo gold que sumiu é como o modo idle perde a confiança de quem
       // deixou o personagem rendendo.
-      session.record('stamina-exhausted', character.id);
+      session.record('stamina-exhausted', character.id, character.id);
     }
   }
 
@@ -3638,16 +3697,16 @@ export class HuntRuleset implements Ruleset {
     // até a próxima compra na Cidade.
     if (blessings > 0) {
       character.blessings = 0;
-      session.record('blessings-consumed', String(blessings));
+      session.record('blessings-consumed', String(blessings), character.id);
     }
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
       // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.
       session.credit(character.id, 'xpGained', -penalty.xpLost);
-      session.record('xp-penalty', String(penalty.xpLost));
+      session.record('xp-penalty', String(penalty.xpLost), character.id);
     }
     if (penalty.levelChange !== null) {
-      session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`);
+      session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`, character.id);
       // Descer de level reescreve `maxHealth` pela tabela (`retarget`), e a barra é anunciada
       // de TODO lugar que a escreve (FUN-109). A vida é zero — ele morreu —, mas o máximo
       // mudou, e o cliente que só recebeu o golpe fatal ficaria com um "0 / máximo do level
@@ -3657,9 +3716,11 @@ export class HuntRuleset implements Ruleset {
     // Skill (magic inclusive — é ela quem carrega a perda de mana gasta, ver `DeathPenalty` em
     // `progression.ts`) que perdeu tries: um registro por skill afetada (#569).
     for (const loss of penalty.skillLosses) {
-      session.record('skill-penalty', `${loss.skillId}/${String(loss.triesLost)}`);
+      session.record('skill-penalty', `${loss.skillId}/${String(loss.triesLost)}`, character.id);
       if (loss.levelChange !== null) {
-        session.record('skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`);
+        session.record(
+          'skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`, character.id,
+        );
       }
     }
     // O Amulet of Loss é gasto DEPOIS da penalidade (#571): no Canary a conferência do colar lê o
@@ -3668,7 +3729,7 @@ export class HuntRuleset implements Ruleset {
     const spentAmulet = consumeLossAmulet(character, {
       progression: this.#options.progression, items: this.#options.items,
     });
-    if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId);
+    if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId, character.id);
 
     // O que a morte faz com a SESSÃO é da topologia (OW-12). Na instância: solo — ou party que
     // virou solo — encerra (§26.1), como sempre; em party (#193, ADR 0027 decisão 7) o morto SAI
@@ -3706,27 +3767,35 @@ export class HuntRuleset implements Ruleset {
       session.record(
         'item-lost-on-death',
         `${item.itemId}/${String(item.quantity)}/${item.instanceId}/${character.id}`,
+        character.id,
       );
     }
     if (outcome.protectedBy === 'amulet') {
       const amulet = character.inventory.equippedAt('neck');
-      session.record('item-loss-protected', amulet?.itemId ?? 'amulet');
+      session.record('item-loss-protected', amulet?.itemId ?? 'amulet', character.id);
     } else if (outcome.protectedBy === 'blessings') {
-      session.record('item-loss-protected', 'blessings');
+      session.record('item-loss-protected', 'blessings', character.id);
     }
-    if (outcome.replacement !== null) session.record('backpack-replaced', outcome.replacement.itemId);
+    if (outcome.replacement !== null) {
+      session.record('backpack-replaced', outcome.replacement.itemId, character.id);
+    }
   }
 
   /**
    * O id de uma instância NOVA criada por esta sessão para o personagem (`lootSeq`): o prefixo
    * `${session.id}:` é o que `acquiredBy` filtra para virar linha de `item_instance`, e em party
-   * o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam. Mesmo formato de
-   * `#instantiateCorpseItems` e `#useChest`; o critério é o TIPO de sessão, não a contagem.
+   * o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam. É o ÚNICO ponto que cunha
+   * id (o loot de cadáver, o baú de quest e a bolsa de reposição da morte passam por aqui); o
+   * critério é o TIPO de sessão, não a contagem de presentes: party (`partyOptions`) ou uma
+   * topologia que o declare (`namesOwnerInItemIds` — o mundo, sempre: não tem party e é a sessão
+   * onde muitos personagens, e o mesmo em logins seguidos, cunham ids). A instância solo fica no
+   * `${session.id}:${seq}` de sempre.
    */
   #newInstanceId(session: Session, character: CharacterRuntime): string {
-    return this.#party !== undefined
-      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-      : `${session.id}:${String(character.lootSeq++)}`;
+    const seq = String(character.lootSeq++);
+    return this.#party !== undefined || this.#topology.namesOwnerInItemIds
+      ? `${session.id}:${character.id}:${seq}`
+      : `${session.id}:${seq}`;
   }
 
   /**
@@ -3752,7 +3821,7 @@ export class HuntRuleset implements Ruleset {
       const runner = this.#runners.get(member.id);
       if (runner === undefined) continue;
       if (!runner.exitRules.some((rule) => rule.id === 'party-member-lost')) continue;
-      session.record('exit-rule', 'party-member-lost');
+      session.record('exit-rule', 'party-member-lost', member.id);
       const departure = session.leave(member.id, 'exit-rule');
       if (departure === null) continue;
       // O `onLeave` deste marcou pendência de novo; a cascata É este laço, então a limpa.
@@ -5040,7 +5109,7 @@ export class HuntRuleset implements Ruleset {
         runner.walker.hold();
         if (!runner.routeBlockedWarned) {
           runner.routeBlockedWarned = true;
-          session.record('route-blocked', character.id);
+          session.record('route-blocked', character.id, character.id);
         }
         return null;
       }
@@ -6869,7 +6938,7 @@ const slots = bot.groups.get(group);
         instanceId: this.#newInstanceId(session, character), itemId, quantity: 1,
       };
       if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
-        session.record('food-not-carried', itemId);
+        session.record('food-not-carried', itemId, character.id);
       }
     }
     session.emit({ kind: 'equipment-changed', characterId: character.id });
@@ -8557,7 +8626,7 @@ const slots = bot.groups.get(group);
       const runner = this.#runnerOf(character.id);
       if (!runner.warnedNoGold) {
         runner.warnedNoGold = true;
-        session.record('supply-unaffordable', supply.id);
+        session.record('supply-unaffordable', supply.id, character.id);
       }
     }
     return result;
@@ -9003,7 +9072,7 @@ const slots = bot.groups.get(group);
           // A automação voltou a agir: o aviso saiu da transição, e a próxima vez que ela
           // bloquear no mesmo motivo volta a valer como notícia.
           runner.automationWarned.delete(automation.model);
-          session.record(outcome.event, outcome.detail);
+          session.record(outcome.event, outcome.detail, character.id);
         } else if (outcome.kind === 'blocked') {
           // Só a TRANSIÇÃO registra (#420): uma automação bloqueada por 8 h é UMA linha no
           // extrato, não uma por ciclo. Sem isto, `notableEvents` crescia sem teto e era
@@ -9011,7 +9080,7 @@ const slots = bot.groups.get(group);
           const key = `${outcome.reason}:${outcome.itemId}`;
           if (runner.automationWarned.get(automation.model) !== key) {
             runner.automationWarned.set(automation.model, key);
-            session.record('automation-blocked', `${automation.model}:${key}`);
+            session.record('automation-blocked', `${automation.model}:${key}`, character.id);
           }
         } else {
           // `idle`: a automação saiu do bloqueio sem agir (o alvo vivo, o HP voltou). Limpa o
@@ -9244,7 +9313,7 @@ const slots = bot.groups.get(group);
     const definition = this.#options.items.get(equipped.itemId);
     if (definition?.durationMs === undefined) return;
     character.inventory.destroy(slot);
-    session.record('item-expired', equipped.itemId);
+    session.record('item-expired', equipped.itemId, characterId);
     session.emit({ kind: 'equipment-changed', characterId });
     // O slot esvaziou: a renovação (AB-08) acontece no MESMO despacho, via `#armAutomations`.
     this.#armAutomations(session, characterId);
@@ -9282,7 +9351,7 @@ const slots = bot.groups.get(group);
       || (definition.absorb?.[damageType]?.percent ?? 0) > 0;
     if (!protects) return;
     if (character.inventory.consumeCharge(slot, definition.charges) > 0) return;
-    session.record(recordType, equipped.itemId);
+    session.record(recordType, equipped.itemId, character.id);
     session.emit({ kind: 'equipment-changed', characterId: character.id });
   }
 
@@ -10950,7 +11019,7 @@ const slots = bot.groups.get(group);
         if (!rule.when(view)) continue;
         // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
         // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
-        session.record('exit-rule', rule.id);
+        session.record('exit-rule', rule.id, character.id);
         this.#beginExit(session, character.id, 'exit-rule');
         break;
       }
@@ -11424,7 +11493,7 @@ const slots = bot.groups.get(group);
         if (damager.hazard.maxLevelOf(zoneId, zone) !== points) continue;
         if (!damager.hazard.levelUp(zoneId, zone)) continue;
         const detail = `${zoneId}/${String(damager.hazard.maxLevelOf(zoneId, zone))}`;
-        session.record('hazard-level-up', namesOwner ? `${damager.id}/${detail}` : detail);
+        session.record('hazard-level-up', namesOwner ? `${damager.id}/${detail}` : detail, damager.id);
       }
     }
 
@@ -12213,7 +12282,7 @@ const slots = bot.groups.get(group);
     // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
     const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
     if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
-      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
+      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`, character.id);
     }
   }
 
@@ -12674,7 +12743,7 @@ const slots = bot.groups.get(group);
       const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
       if (recorded.levelReached !== null) {
         const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
-        session.record('bosstiary-level', namesOwner ? `${member.id}/${detail}` : detail);
+        session.record('bosstiary-level', namesOwner ? `${member.id}/${detail}` : detail, member.id);
       }
     }
   }
@@ -12737,7 +12806,9 @@ const slots = bot.groups.get(group);
       // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo. Quem
       // decide se nomeia o dono é a topologia (`namesOwnerInEvents`, OW-12).
       if (change !== null) {
-        session.record('level-up', namesOwner ? `${member.id}/${String(change.to)}` : String(change.to));
+        session.record(
+          'level-up', namesOwner ? `${member.id}/${String(change.to)}` : String(change.to), member.id,
+        );
         // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
         // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
         // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
@@ -12759,7 +12830,7 @@ const slots = bot.groups.get(group);
         const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
         if (reached.milestoneReached !== null) {
           const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
-          session.record('bestiary-milestone', namesOwner ? `${member.id}/${detail}` : detail);
+          session.record('bestiary-milestone', namesOwner ? `${member.id}/${detail}` : detail, member.id);
         }
       }
     }
@@ -13173,10 +13244,8 @@ const slots = bot.groups.get(group);
       if (this.#options.items.get(rolled.itemId) === undefined) continue;
       // Em party (#191) o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam; em
       // solo o formato é o de sempre. O critério é o TIPO de sessão (DT-03, #397), não a
-      // contagem de presentes.
-      const instanceId = this.#party !== undefined
-        ? `${session.id}:${recipient.id}:${String(recipient.lootSeq++)}`
-        : `${session.id}:${String(recipient.lootSeq++)}`;
+      // contagem de presentes — e mora em `#newInstanceId`, que o mundo também usa.
+      const instanceId = this.#newInstanceId(session, recipient);
       carried.push({ instanceId, itemId: rolled.itemId, quantity: rolled.quantity });
     }
     return carried;
@@ -13264,7 +13333,7 @@ const slots = bot.groups.get(group);
       const runner = this.#runnerOf(character.id);
       if (runner.warnedFullBackpack) continue;
       runner.warnedFullBackpack = true;
-      session.record('backpack-full', character.id);
+      session.record('backpack-full', character.id, character.id);
     }
     return remaining;
   }
@@ -14486,6 +14555,45 @@ function hazardOptionOf(content: Content, hunt: Hunt): Pick<HuntRulesetOptions, 
   return { hazard: { zoneId: hunt.hazardZoneId, zone, config: content.hazard } };
 }
 
+/**
+ * O que um ruleset de hunt lê do CONTEÚDO, igual para a instância e para o mundo (OW-13): os
+ * catálogos e as tabelas de balanceamento. Fica fora o que é da hunt (`hunt`, `route`, o Hazard
+ * da zona dela) e o que é de quem monta (bot, party, topologia). Extraído de `createHuntRuleset`
+ * sem mudar o que ele monta — o mundo o reutiliza, e um catálogo novo que a hunt passe a ler
+ * entra nos dois por este lugar só, em vez de um dos dois o esquecer.
+ */
+export function contentOptionsOf(
+  content: Content,
+): Omit<HuntRulesetOptions, 'hunt' | 'difficulty' | 'map' | 'route' | 'hazard'> {
+  return {
+    monsters: content.monsters,
+    combat: content.combat,
+    progression: content.progression,
+    stamina: content.stamina,
+    ...(content.training === undefined ? {} : { training: content.training }),
+    vocations: content.vocations,
+    skills: content.skills,
+    items: content.items,
+    weaponFamilies: content.weaponFamilies,
+    unarmed: content.unarmed,
+    // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
+    // `exactOptionalPropertyTypes`.
+    party: content.party,
+    ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
+    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
+    charms: content.charms,
+    skinning: content.skinning,
+    targetSearchRadius: content.bot.targetSearchRadius,
+    spells: content.spells,
+    supplies: content.supplies,
+    ammunition: content.ammunition,
+    player: { ...content.combat.player },
+    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
+    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
+    botCooldownMs: content.bot.categoryCooldownMs,
+  };
+}
+
 export function createHuntRuleset(
   content: Content,
   huntId: string,
@@ -14513,29 +14621,8 @@ export function createHuntRuleset(
     difficulty,
     map,
     route,
-    monsters: content.monsters,
-    combat: content.combat,
-    progression: content.progression,
-    stamina: content.stamina,
-    ...(content.training === undefined ? {} : { training: content.training }),
-    vocations: content.vocations,
-    skills: content.skills,
-    items: content.items,
-    weaponFamilies: content.weaponFamilies,
-    unarmed: content.unarmed,
-    // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
-    // `exactOptionalPropertyTypes`.
-    party: content.party,
-    ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
-    ...(content.bosstiary === undefined ? {} : { bosstiary: content.bosstiary }),
-    charms: content.charms,
-    skinning: content.skinning,
+    ...contentOptionsOf(content),
     ...hazardOptionOf(content, hunt),
-    targetSearchRadius: content.bot.targetSearchRadius,
-    spells: content.spells,
-    supplies: content.supplies,
-    ammunition: content.ammunition,
-    player: { ...content.combat.player },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),
@@ -14544,9 +14631,6 @@ export function createHuntRuleset(
     ...(actuator === undefined ? {} : { actuator }),
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
     ...(topology === undefined ? {} : { topology }),
-    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
-    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
-    botCooldownMs: content.bot.categoryCooldownMs,
   });
 }
 

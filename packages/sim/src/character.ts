@@ -244,6 +244,21 @@ export interface CharacterState {
    */
   readonly direction?: Direction;
   /**
+   * Onde o personagem está no MUNDO, em coordenada ABSOLUTA do Tibia (OW-13, ADR 0060 d.3.b) — a
+   * mesma que `characters.world_x/y/z` persiste, e não o tile local do recorte em que a sessão
+   * corre (`position`). É o que o mundo lê ao colocá-lo (`worldTopology.placeOnEnter`): o login
+   * volta ao tile onde se saiu, e cai no templo se ele não existe, não tem chão ou está fora do
+   * recorte (`canary/src/creatures/players/player.cpp:12332-12336`, `protocolgame.cpp:1056`).
+   *
+   * **É uma âncora, não uma posição ao vivo**: ninguém a reescreve a cada passo. Quem a grava é o
+   * dono da sessão, no instante em que ela vale — a saída do mundo e o checkpoint
+   * (`WorldRuleset#worldPositionOf` traduz o `position` de agora). Atravessa a hunt idle como
+   * está, e é por ela que o personagem volta ao mesmo tile (ADR 0060 d.6). Ausente é quem nunca
+   * esteve no mundo, ou o `0,0,0` do Canary (`iologindata_load_player.cpp:207-210`): o templo.
+   * Opcional, então o `SNAPSHOT_FORMAT_VERSION` não subiu.
+   */
+  readonly worldPosition?: Point;
+  /**
    * Haste, postura, magic shield e cura ao longo do tempo (#155), com vencimento LÓGICO. O
    * evento que as faz vencer está na fila da sessão, que também vai no snapshot. Ausente é
    * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`. O `expiresAtMs` é do relógio da sessão que o
@@ -536,6 +551,11 @@ export class CharacterRuntime {
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
+  /**
+   * A âncora do mundo, em coordenada absoluta (OW-13). `null` é "nunca esteve" — o templo. Só o
+   * dono da sessão a escreve (invariante 9). Ver `CharacterState.worldPosition`.
+   */
+  worldPosition: Point | null;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions`. */
   readonly conditions: Conditions;
   /**
@@ -643,6 +663,7 @@ export class CharacterRuntime {
     this.storages = new Map(Object.entries(readCharacterStorage(state.storages) ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
+    this.worldPosition = state.worldPosition ?? null;
     this.conditions = Conditions.fromState(state.conditions);
     // A trava de stairhop de um snapshot anterior ao #622 (ver `CharacterState.attackLockedUntil`):
     // vira a condição `pacified`, e uma que JÁ existe (o snapshot novo) manda mais.
@@ -1045,6 +1066,9 @@ export class CharacterRuntime {
       storages: Object.fromEntries(this.storages),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
+      // Omitida quando ausente, como `conditions`: a hunt, que nunca esteve no mundo, não ganha
+      // uma chave que o construtor já repõe sozinho.
+      ...(this.worldPosition === null ? {} : { worldPosition: this.worldPosition }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
       // Como `conditions`: omitido quando ainda vale `FULL_BLOCK_CHARGE` (nunca bloqueou), para
       // não inflar todo snapshot existente com dois zeros que o construtor já repõe sozinho.

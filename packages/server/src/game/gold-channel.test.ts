@@ -33,9 +33,10 @@ const HUNT: Ruleset = { type: 'hunt', ...QUIET };
 /** A Cidade de hoje: shard que não credita, e não declara `progress`. */
 const CITY: Ruleset = { type: 'city', shared: true, ...QUIET };
 /**
- * O mundo (OW-13/OW-18): shard que credita. O `type` dele ainda não existe — o que o hospedeiro lê
- * é `shared` e `progress`, e os serviços de Cidade conferem `type === 'city'`; por isso o `type` é
- * o da Cidade, e a diferença entre os dois é UMA linha.
+ * O mundo (OW-13/OW-18): shard que credita. O `type` `'world'` existe desde a OW-13, mas o que o
+ * hospedeiro lê aqui é `shared` e `progress`, e os serviços de Cidade ainda conferem `type ===
+ * 'city'` (a troca por `acceptsCityServices` é da OW-18); por isso o `type` é o da Cidade, e a
+ * diferença entre os dois é UMA linha.
  */
 const WORLD: Ruleset = { ...CITY, progress: 'checkpointed' };
 

@@ -4085,7 +4085,9 @@ export class SessionHost {
       const message: S2CMessage = {
         type: 'analyzer',
         aggregates: { ...aggregates },
-        notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
+        // Do que o PERSONAGEM pode ver (OW-13): no mundo cada evento de personagem tem dono, e o
+        // analisador de um estranho não leva o que aconteceu a outro. Na instância é a fatia toda.
+        notableEvents: hosted.session.notableEventsFor(character.id, since).map((event) => ({ ...event })),
         ...(party === undefined ? {} : { party }),
       };
       for (const viewer of hosted.viewers) {
@@ -5732,7 +5734,8 @@ export class SessionHost {
       },
       // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.
       aggregates: { ...session.aggregatesOf(characterId) },
-      notableEvents: session.notableEvents.map((event) => ({ ...event })),
+      // Os do PERSONAGEM (OW-13): ver `#presentAnalyzer`.
+      notableEvents: session.notableEventsFor(characterId).map((event) => ({ ...event })),
       // A party (#196): quem está nela e a bolsa, do estado do ruleset. Ausente em solo.
       ...this.#partyBlock(hosted),
       ...(partySummary === undefined ? {} : { partySummary }),

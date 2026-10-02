@@ -776,7 +776,7 @@ declaram `progress` (ADR 0060 d.10b), então os cinco predicados dão, para elas
 | `creditsAggregates` | o gold anda pelo agregado, e o extrato o leva? | sim | **não** | **sim** |
 | `keepsSnapshot` | o host guarda snapshot dela? | sim | não | não (checkpoint, OW-16) |
 | `usesAreaOfInterest` | cada visualizador recebe só a vizinhança? | não | sim | sim |
-| `offersCityServices` | aceita serviço de Cidade (bênção)? | não | sim | sim (no tile PZ, OW-13) |
+| `offersCityServices` | aceita serviço de Cidade (bênção)? | não | sim | sim, e só no tile PZ: `Ruleset.acceptsCityServices` (OW-13) |
 
 **A regra de gold** (`SessionHost#mirrorGold`, e a guarda de `#saveDurableReceipt`):
 
@@ -805,7 +805,7 @@ depois do commit que o ADR 0060 mediu):
 | `#requestSellItems` | agregado só fora de shard | `creditsAggregates` (`#mirrorGold`) | credita o agregado |
 | `#requestCharmRemove` | idem | idem | idem |
 | `#requestLearnSpell` (#624) | idem | idem | idem |
-| `#requestBuyBlessing` | recusa fora de shard | `offersCityServices` (+ `#mirrorGold` no débito) | aceita em tile PZ (OW-13), debita pelos dois canais |
+| `#requestBuyBlessing` | recusa fora de shard | `offersCityServices` (+ `#mirrorGold` no débito) | aceita em tile PZ (`acceptsCityServices`, OW-13), debita pelos dois canais |
 | `#interestManaged` | shard + opção do nó | `usesAreaOfInterest` | liga |
 | `#runTransition`, origem shard (#631) | estado durável se `dirty` | `leavesOnExit`, `creditsAggregates` | `leave` + extrato de delta, gravado ANTES de o diretório trocar |
 | `#runTransition`, origem privada | `end`/`leave` + extrato + `session-ended` | `leavesOnExit` (o `else`) | — |
@@ -834,7 +834,14 @@ antecipação na saída — e um extrato de saída que sobreviva a uma falha do 
 extrato uma vez, e se a gravação falhar depois dele o extrato só existe em memória (a saída de
 membro de party, #194, tem a mesma janela). **Perguntas por `ruleset.type === 'city'`** — `promote`,
 `buy-item`, o livro do offline training, e a marca `dirty` do `use-slot` — não são ramos de
-`shared`, ficam como estão, e são da OW-13/OW-16 quando o mundo ganhar tipo próprio.
+`shared`, ficam como estão. O mundo ganhou tipo próprio na OW-13 (`'world'`) e a pergunta do tile
+tem resposta no `sim` (`Ruleset.acceptsCityServices`), mas nenhuma sessão de mundo é hospedada
+ainda: trocar essas conferências por ela é do `WorldShard` (OW-18). **Eventos notáveis por
+personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
+`Session.notableEventsFor(characterId, from)`, nunca `session.notableEvents` crua — no mundo cada
+evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
+Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
+na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 

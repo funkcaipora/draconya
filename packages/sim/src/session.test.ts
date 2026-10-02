@@ -661,6 +661,8 @@ describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)',
       fedMs: 'none', attackPractice: 'none',
       // O bônus de Loyalty é um percentual fixado no ticket (#628): não ancora num relógio.
       loyaltyBonusPercent: 'none',
+      // A âncora do mundo é uma COORDENADA absoluta (OW-13): nenhum instante, nada a traduzir.
+      worldPosition: 'none',
     };
 
     interface StampField {

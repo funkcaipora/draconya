@@ -57,3 +57,4 @@ export * from './rulesets/city.js';
 export * from './rulesets/hunt.js';
 export * from './rulesets/topology.js';
 export * from './rulesets/training.js';
+export * from './rulesets/world.js';

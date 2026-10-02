@@ -113,7 +113,13 @@ export interface SessionSnapshot {
   readonly ruleset?: unknown;
 }
 
-export type SessionType = 'city' | 'hunt' | 'training' | 'quest' | 'boss' | 'guild-war';
+/**
+ * O tipo da sessão. **`'world'` é o mundo aberto** (OW-13, ADR 0060 d.2): uma sessão compartilhada,
+ * com relógio e sem fim, em que o personagem anda e caça com outros. É o `HuntRuleset` com a
+ * topologia de mundo (`worldTopology`, `rulesets/world.ts`), e nada a cria atrás da flag
+ * `OPEN_WORLD` ainda — o hospedeiro a hospeda na OW-18.
+ */
+export type SessionType = 'city' | 'hunt' | 'world' | 'training' | 'quest' | 'boss' | 'guild-war';
 
 export type EndReason =
   | 'manual-exit'
@@ -132,6 +138,19 @@ export interface NotableEvent {
   readonly atMs: number;
   readonly type: string;
   readonly detail?: string;
+  /**
+   * DE QUEM é o evento — só onde a sessão o escopa ao dono (`Ruleset.scopesEventsToOwner`, o
+   * mundo). Ausente é "de todos": o evento da sessão (`advance-truncated`) e, na instância, TODO
+   * evento — a party compartilha a lista, e a hunt solo tem um dono só. Um extrato (`Receipt`) e o
+   * analisador ao vivo levam os eventos sem dono e os do próprio personagem: num mundo de
+   * estranhos, a morte e a perda de XP de um não podem aparecer na tela de retorno de outro.
+   */
+  readonly characterId?: string;
+}
+
+/** O evento é visível a `characterId`? Sem dono é de todos; com dono, só do dono. */
+export function isNotableEventVisibleTo(event: NotableEvent, characterId: string): boolean {
+  return event.characterId === undefined || event.characterId === characterId;
 }
 
 /**
@@ -278,6 +297,19 @@ export interface Ruleset {
   readonly shared?: boolean;
 
   /**
+   * Os eventos notáveis desta sessão têm DONO (`NotableEvent.characterId`) e cada personagem vê só
+   * os seus (OW-13)? Ausente é `false`, o de sempre: a lista é da sessão e quem a lê vê tudo — a
+   * hunt solo tem um dono só, e a party compartilha a lista de propósito (cada membro lê o que o
+   * grupo fez). O mundo é de estranhos: o extrato de um não leva a morte, a perda de XP ou a
+   * subida de skill de outro.
+   *
+   * Decide só se `Session.record` GRAVA o dono que o ruleset informa; o filtro de quem lê é
+   * `isNotableEventVisibleTo`, e um evento sem dono passa em qualquer filtro — por isso a instância
+   * (que nunca grava dono) continua byte a byte a de antes.
+   */
+  readonly scopesEventsToOwner?: boolean;
+
+  /**
    * O que a sessão faz com o PROGRESSO dos donos — XP, gold, abates, itens (ADR 0060 d.10b).
    *
    * - `'none'`: não credita. O que os donos rendem não vira linha de ledger (a Cidade).
@@ -322,6 +354,18 @@ export interface Ruleset {
   hz(attached: boolean): number;
 
   onEnter(session: Session, character: CharacterRuntime): void;
+
+  /**
+   * Esta sessão aceita, AGORA, as intenções de serviço de Cidade (ADR 0052 d.2) deste personagem —
+   * loja, depósito, promoção, aprender magia, livro do treino? Ausente é "o ruleset não decide":
+   * o hospedeiro cai no que sempre fez, que é aceitar só na sessão `city`.
+   *
+   * O mundo responde pelo TILE em que o personagem pisa: só em protect zone (OW-13, ADR 0060 d.4;
+   * no Tibia as lojas e os santuários vivem em PZ). É a pergunta, e não a ação: quem recusa a
+   * intenção, e diz ao jogador por quê, é o hospedeiro (OW-18). Só lê — não toca o personagem nem
+   * sorteia.
+   */
+  acceptsCityServices?(session: Session, characterId: string): boolean;
 
   /**
    * O personagem saiu de uma sessão que CONTINUA viva (FUN-71). Só acontece em shard.
@@ -848,7 +892,7 @@ export class Session implements SessionClock {
       seq: ++this.ledgerSeq,
       aggregates: { ...this.aggregatesOf(character.id) },
       notableEvents: (since === 0 ? this.notableEvents : this.notableEvents.slice(since))
-        .filter((event) => event.atMs >= joinedAtMs),
+        .filter((event) => event.atMs >= joinedAtMs && isNotableEventVisibleTo(event, character.id)),
       removedInstances: character.drainRemovedInstances(),
     };
   }
@@ -977,17 +1021,25 @@ export class Session implements SessionClock {
     character.alive = false;
     character.health = 0;
     this.credit(character.id, 'deaths', 1);
-    this.record('death', character.id);
+    this.record('death', character.id, character.id);
     resolveDeath(this, { kind: 'character', character });
   }
 
-  /** Lista curta para a tela de retorno (§16.2). Não é log: guarda só o que vale contar. */
-  record(type: string, detail?: string): void {
-    this.notableEvents.push(
-      detail === undefined
-        ? { atMs: this.#logicalNowMs, type }
-        : { atMs: this.#logicalNowMs, type, detail },
-    );
+  /**
+   * Lista curta para a tela de retorno (§16.2). Não é log: guarda só o que vale contar.
+   *
+   * `characterId` é o DONO do evento, quando ele tem um (o que aconteceu COM um personagem, e não
+   * com a sessão). Só é gravado onde o ruleset escopa os eventos ao dono
+   * (`Ruleset.scopesEventsToOwner`): nos demais é ignorado, e a lista continua `{ atMs, type,
+   * detail }`, como sempre foi.
+   */
+  record(type: string, detail?: string, characterId?: string): void {
+    const owner = this.ruleset.scopesEventsToOwner === true ? characterId : undefined;
+    this.notableEvents.push({
+      atMs: this.#logicalNowMs, type,
+      ...(detail === undefined ? {} : { detail }),
+      ...(owner === undefined ? {} : { characterId: owner }),
+    });
     const perCharacter = this.#maxNotableEventsPerCharacter;
     if (perCharacter === undefined) return;
     const excess = this.notableEvents.length - perCharacter * Math.max(1, this.participants.length);
@@ -995,6 +1047,16 @@ export class Session implements SessionClock {
       this.notableEvents.splice(0, excess);
       this.#notableEventsDropped += excess;
     }
+  }
+
+  /**
+   * Os eventos notáveis que `characterId` pode ver, a partir da posição `from` da lista (o
+   * "já mandei até aqui" do analisador ao vivo). É o que o hospedeiro lê no lugar de
+   * `notableEvents` crua onde fala com UM personagem: o analisador e o `session-state`. Sem dono
+   * nos eventos (a instância) devolve a fatia inteira, como a leitura crua devolvia.
+   */
+  notableEventsFor(characterId: string, from = 0): NotableEvent[] {
+    return this.notableEvents.slice(from).filter((event) => isNotableEventVisibleTo(event, characterId));
   }
 
   /**
