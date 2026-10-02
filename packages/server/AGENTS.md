@@ -1212,7 +1212,14 @@ fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entr
   `removedInstances`, zerados por `settleGoldDelta`/`drainRemovedInstances`), que não pode ser
   arrastado para o de hazard. O de hazard leva só o registro, com agregados zerados, e vai no fluxo
   próprio `<sessionId>:hazard` (`HAZARD_RECEIPT_STREAM`), que nunca encosta no extrato do
-  personagem. (2) **Nada se
+  personagem. **Ele CLAMA a versão durável do personagem** (`#claimDurableVersion`, síncrono antes
+  do `await`) como todo extrato: sem versão iria para o score 0 do índice do `ReceiptStore`, à
+  frente de todo extrato versionado pendente — que carrega o registro de ANTES e desfaria a
+  escolha. O custo conhecido: ele é versionado mas NÃO é o estado inteiro, então se um extrato
+  mais velho do mesmo personagem ainda estiver pendente por falha de Redis (o de uma hunt que
+  acabou de terminar, retentado com a MESMA versão), a coluna sobe para a do hazard e o retry cai
+  como atrasado — janela estreita (Redis fora E escolha de hazard antes do retry), e é o lado
+  seguro frente ao score 0. (2) **Nada se
   liquida nem se "limpa" nele**: se o Redis falha, `#markDirty` deixa o registro para o extrato do
   logout; se der certo, o logout não o repete. (3) **A zona resolve por propriedade PRÓPRIA**
   (`Object.hasOwn`): `zones` é um objeto comum, e `zones['constructor']` não é zona. Escolher o nível

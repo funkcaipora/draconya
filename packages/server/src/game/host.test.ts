@@ -5602,10 +5602,12 @@ describe('o nível de Hazard pelo socket (M44-14, #632, ADR 0052 d.1/d.5)', () =
     socket.received().filter((m): m is S2CMessage & { type: 'hazard' } => m.type === 'hazard');
 
   /** Um personagem na praça, com o teto do Hazard já subido até `max` (o que o chefe da zona faz). */
-  async function inCity(max = 1, receipts?: ReceiptStore) {
+  async function inCity(max = 1, receipts?: ReceiptStore, durableVersion?: number) {
     const { host, sessions } = buildHost(shard, { hazard, ...(receipts === undefined ? {} : { receipts }) });
     // O extrato durável precisa da conta do personagem (`prepare`), como nos testes de postura.
-    if (receipts !== undefined) await host.prepare('p1', undefined, 'a1');
+    if (receipts !== undefined) {
+      await host.prepare('p1', durableVersion === undefined ? undefined : { level: 8, xp: 0, durableVersion }, 'a1');
+    }
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
@@ -5750,6 +5752,22 @@ describe('o nível de Hazard pelo socket (M44-14, #632, ADR 0052 d.1/d.5)', () =
     await host.release('p1', 1000, 'logout');
     expect(saved).toHaveLength(1);
     expect(hero.hazard.currentLevelOf('gardens', ZONE)).toBe(2);
+  });
+
+  it('o extrato de hazard leva a versão durável do personagem (#823): sobe com o contador, na ordem das escolhas', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, viewer } = await inCity(3, receipts, 7);
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 1 });
+    host.flush();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    // Sem versão o extrato iria para o score 0 do índice do `ReceiptStore`, à frente de todo extrato
+    // versionado pendente — e o registro de ANTES dele o sobrescreveria. Mutação que mata: omitir a
+    // versão aqui. A segunda escolha leva a versão seguinte, e é a que vale.
+    expect(saved.map((receipt) => receipt['durableVersion'])).toEqual([8, 9]);
   });
 
   it('escolher o nível em que já estava não grava nada', async () => {

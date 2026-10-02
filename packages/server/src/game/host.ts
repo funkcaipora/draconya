@@ -2915,6 +2915,12 @@ export class SessionHost {
       return;
     }
     hosted.session.ledgerSeq += 1;
+    // A versão durável (#823), SÍNCRONA e antes do `await`, como em `#saveDurableReceipt`: o índice
+    // do `ReceiptStore` ordena por ela, e um extrato sem versão iria para o score 0 — à FRENTE de
+    // todo extrato versionado pendente do personagem, que carrega o registro de ANTES e o
+    // sobrescreveria, desfazendo a escolha que acabou de ser feita. Com a versão, o `jobs` também
+    // descarta este extrato se um mais novo já foi aplicado.
+    const durableVersion = this.#claimDurableVersion(characterId);
     try {
       await receipts.save({
         sessionId: `${hosted.session.id}${HAZARD_RECEIPT_STREAM}`,
@@ -2922,6 +2928,7 @@ export class SessionHost {
         accountId,
         reason: 'manual-exit',
         seq: hosted.session.ledgerSeq,
+        ...(durableVersion === undefined ? {} : { durableVersion }),
         aggregates: EMPTY_AGGREGATES,
         notableEvents: [],
         hazard: owner.hazard.getState(),

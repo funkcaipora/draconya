@@ -1097,6 +1097,61 @@ describe.runIf(ready)('o Hazard chega ao Postgres pelo extrato (M44-14, #632, AD
       hazard: { maxLevel: { gardens: 3 }, currentLevel: { gardens: 2 } },
     });
   });
+
+  it('a escolha de hazard leva a versão durável: um extrato de estado mais velho, ainda pendente, não a desfaz (#823)', async () => {
+    // Sem a versão o extrato de hazard iria para o score 0 do índice do `ReceiptStore`, à FRENTE do
+    // extrato versionado pendente, que carrega o registro de ANTES e o sobrescreveria.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    const receipts = new ReceiptStore(redis);
+    const content = testContent();
+    const hazard: Hazard = {
+      id: 'baseline', criticalIntervalMs: 2000, criticalChance: 750, criticalMultiplier: 25,
+      damageMultiplier: 200, defenseMultiplier: 0, dodgeMultiplier: 85, expBonusMultiplier: 2,
+      lootBonusMultiplier: 2, podDropMultiplier: 87, plunderSpawnMultiplier: 25,
+      zones: {
+        gardens: {
+          name: 'Gnomprona Gardens', minLevel: 1, maxLevel: 12,
+          crit: true, dodge: true, damageBoost: true, defenseBoost: true,
+        },
+      },
+    };
+    const zone = hazard.zones['gardens'] as Hazard['zones'][string];
+    // O extrato de estado de uma sessão anterior (versão 1), ainda na fila do Redis, com o hazard de antes.
+    await receipts.save(receiptOf(randomUUID(), characterId, {
+      seq: 1, durableVersion: 1,
+      hazard: { maxLevel: { gardens: 3 }, currentLevel: { gardens: 1 }, version: 1 } satisfies HazardState,
+    }));
+    const host = new SessionHost({
+      nodeId: 'hazard-versioned', contentVersion: content.version, logger, receipts, hazard,
+      createSession: createCitySessionFactory(content),
+    });
+    await host.prepare(characterId, { level: 1, xp: 0, durableVersion: 1 }, owner.accountId);
+    const hero = host.sessionFor(characterId)?.participants[0] as CharacterRuntime;
+    for (let level = 1; level < 3; level += 1) {
+      hero.hazard.select('gardens', zone, level);
+      hero.hazard.levelUp('gardens', zone);
+    }
+    hero.hazard.select('gardens', zone, 1);
+    const viewer = host.attach(new FakeSocket(), characterId);
+    host.flush();
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 3 });
+    await vi.waitFor(async () => { expect(await receipts.pendingFor(characterId)).toHaveLength(2); });
+    expect((await receipts.pendingFor(characterId)).map((receipt) => receipt.durableVersion)).toEqual([1, 2]);
+
+    expect(await writePendingReceipts({ database: database.database.db, receipts, logger, progression }))
+      .toEqual({ written: 2, failed: 0 });
+    expect(await characterRow(database, characterId)).toMatchObject({
+      hazard: { currentLevel: { gardens: 3 } },
+    });
+    const [versioned] = await database.database.db
+      .select({ version: characters.durableVersion }).from(characters).where(eq(characters.id, characterId));
+    expect(versioned?.version).toBe(2);
+  });
 });
 
 describe.runIf(ready)('pontos de alma chegam ao Postgres pelo extrato (#593)', () => {
