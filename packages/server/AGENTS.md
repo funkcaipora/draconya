@@ -511,6 +511,34 @@ Três coisas que seguem disso:
   recém-chegado com o id no lugar do nome, e o teste da FUN-71 não via porque usa os dois
   iguais. O da FUN-104 usa nomes diferentes dos ids de propósito.
 
+## A aparência emprestada é resolvida AQUI, pela tabela (#621, M44-03)
+
+O `sim` emite `creature-look-changed { creatureId, look | null }` — QUEM vestiu o quê, como
+`{ monsterId } | { itemId } | { objectKey }`, nunca um id de arte (invariante 6) — e o hospedeiro o
+traduz em `creature-update` (S2C 51): `monsterId` → `outfitId` do `monsterCatalog`, `itemId` →
+`appearanceId` do `itemCatalog`, `objectKey` → `appearances.looks`; `object: true` marca o registro
+de OBJETO (a criatura virou uma coisa). Quem mexe aqui precisa saber quatro coisas:
+
+- **`#lookFor(hosted, key)` é a fonte ÚNICA do que uma criatura mostra agora** — `creature-appear`,
+  a lista do `session-state` (personagens E monstros) e o `creature-update` leem dele, que pergunta
+  a `HuntRuleset#lookOf` e cai na aparência PRÓPRIA (o outfit do monstro, ou `playerOutfitId` com as
+  cores do ticket). Duas montagens divergem na primeira regra nova, e o reanexado no meio da
+  ilusão precisa ver o mesmo que quem nunca saiu — o estado mora na condição do `sim`, nunca num
+  campo daqui (invariante 3).
+- **Aparência SEM linha na tabela é MUDA**, e o silêncio vale nas duas pontas: a troca não sai, e a
+  volta (`look: null`) sai como a aparência própria, redundante e inofensiva. A condição vale no
+  `sim` do mesmo jeito.
+- **A volta manda a aparência própria, não "a original"**: o cliente não guarda a aparência
+  anterior para voltar a ela, e o `creature-update` do personagem que volta leva as `colors` do
+  ticket de novo. **As cores e os addons do monstro (#620) são parte do outfit**: `#lookFor` os
+  devolve do monstro dono (`monsterOutfitOf`) e do monstro imitado (`#resolveLook`), e o
+  `session-state` espalha só a `monsterPresentationOf` (raça, luz e falas) depois dele — o
+  `monsterLookOf` inteiro trocaria as cores do outfit emprestado pelas do dono.
+- **`use-slot`/`use-item`/`use-item-on` aceitam `target: { instanceId }`** (a Chameleon Rune): o
+  host só traduz para `UseSlotTarget { kind: 'item' }` (`#resolveUseSlotTarget`); se a instância
+  existe e é do personagem é do `sim` (`not-illusionable`, "Não é possível."). O catálogo marca o
+  suprimento `chameleon` com `targets: 'item'` e os monstros ilusionáveis com `illusionable`.
+
 ## O Bestiário viaja como as skills: ticket → runtime → extrato → ledger (FUN-113)
 
 `characters.bestiary` é `jsonb` nulável (`{ monsterId: kills }`), e percorre o MESMO caminho
@@ -575,10 +603,11 @@ shard levar) e manda de volta o estado novo — nunca uma mensagem "sucesso" sep
 toda recusa do kit (FUN-73).
 
 **3. Gold pelos canais que já existem, nunca um novo.** Debitar (remover um Charm, comprar
-Imbuement) é `character.goldDelta -= custo` MAIS `hosted.session.credit(id, 'goldSpent', custo)`
-quando a sessão não é compartilhada (`ruleset.shared !== true`) — a mesma regra de
-`#requestSellItems` para o gold entrar na sessão certa: hunt privada credita no agregado, Cidade
-(shard) só no `goldDelta`, drenado pelo extrato de estado durável. **Confira o saldo ANTES de
+Imbuement) é `character.goldDelta -= custo` MAIS `this.#mirrorGold(hosted, id, -custo)` — o canal
+único da sessão (OW-04, seção "Um canal de gold por sessão" abaixo): a sessão que
+`creditsAggregates` (hunt, mundo) soma também o agregado `goldSpent`, e a Cidade (shard que não
+credita) só mexe no `goldDelta`, drenado pelo extrato de estado durável. **Nunca** `if
+(ruleset.shared)` nem `session.credit` à mão. **Confira o saldo ANTES de
 mexer no `sim`**: `character.gold + character.goldDelta >= custo`, e só then chama o método que
 aplica o efeito — nunca aplicar e desfazer se não pagar.
 
@@ -651,10 +680,10 @@ nunca invocou), e é por isso que o vazio (`isEmptyFamiliarState`) não é escri
   da migração. Um registro novo com essa propriedade (nunca desce) segue a união, como o
   Bestiário segue o máximo; revogar é migração de dado versionada, nunca efeito do extrato.
 - **A intenção é aceita em Cidade E hunt, e o gold segue a regra 3** (`goldDelta` mais
-  `credit('goldSpent')` só fora do shard). Idempotência é estrutural: `CharacterRuntime
-  .learnSpell` recusa `already-learned` ANTES do débito, então um retry nunca cobra duas vezes; o
-  ledger só recusa o mesmo `(session_id, seq)`. Na hunt o host ainda acorda o bot
-  (`HuntRuleset#rearmBot`).
+  `#mirrorGold`, que soma o agregado `goldSpent` só onde a sessão credita por agregado).
+  Idempotência é estrutural: `CharacterRuntime.learnSpell` recusa `already-learned` ANTES do
+  débito, então um retry nunca cobra duas vezes; o ledger só recusa o mesmo `(session_id, seq)`.
+  Na hunt o host ainda acorda o bot (`HuntRuleset#rearmBot`).
 
 O catálogo de magias entra como mapa (`spellCatalog: content.spells`, regra 4).
 
@@ -730,6 +759,89 @@ nada sai sem extrato. **Limite:** a Cidade não tem snapshot (ADR 0023) — nó 
 perde o que a praça mudou, como já perdia. `#creditUnrestorable` passou a levar `vocation`,
 `equipment`, `acquired` e `lootBox` (o buraco de antes: item equipado numa sessão
 irrestaurável se perdia).
+
+## Um canal de gold por sessão, e os predicados do ruleset (OW-04, ADR 0060 d.10c)
+
+O hospedeiro respondia quatro perguntas diferentes com uma só, "este ruleset é shard?"
+(`ruleset.shared`), em treze lugares de `game/host.ts`. Enquanto a Cidade era o único shard, e o
+shard não creditava nada, as quatro respostas coincidiam. O mundo aberto é um shard que **credita**:
+elas se separam. Cada pergunta agora tem nome em `game/ruleset-traits.ts`, e **o host não lê mais
+`ruleset.shared` nem `ruleset.progress` diretamente** — lê um predicado. A hunt e a Cidade não
+declaram `progress` (ADR 0060 d.10b), então os cinco predicados dão, para elas, exatamente o que
+`shared` dava: a refatoração não muda nada observável.
+
+| Predicado | Pergunta | Privada (hunt, treino) | Cidade | Mundo (`shared` + `progress: 'checkpointed'`) |
+|---|---|---|---|---|
+| `leavesOnExit` | sair é `leave` e a sessão continua para quem fica? | não (`end`) | sim | sim |
+| `creditsAggregates` | o gold anda pelo agregado, e o extrato o leva? | sim | **não** | **sim** |
+| `keepsSnapshot` | o host guarda snapshot dela? | sim | não | não (checkpoint, OW-16) |
+| `usesAreaOfInterest` | cada visualizador recebe só a vizinhança? | não | sim | sim |
+| `offersCityServices` | aceita serviço de Cidade (bênção)? | não | sim | sim, e só no tile PZ: `Ruleset.acceptsCityServices` (OW-13) |
+
+**A regra de gold** (`SessionHost#mirrorGold`, e a guarda de `#saveDurableReceipt`):
+
+- sessão com `creditsAggregates` move o gold pelo agregado (`Session.credit`) **e** pelo
+  `goldDelta`, e liquida o `goldDelta` (`settleGoldDelta`) depois de gravar o extrato
+  (`#persistReceipt`);
+- sessão sem ele manda o `goldDelta` como agregado do extrato de estado (`#saveDurableReceipt`),
+  que também o liquida;
+- **nunca as duas coisas.** O agregado da Cidade é cumulativo e nunca zerado por extrato de estado:
+  somar nele re-creditaria a venda no logout seguinte. E `#saveDurableReceipt` **lança** se a sessão
+  credita por agregado — ali o mesmo gold já estaria no agregado, e creditá-lo de novo não seria
+  barrado por retry, porque cada extrato tem o seu `seq`.
+
+**Todo serviço que move gold fora do loot passa por `#mirrorGold(hosted, characterId, delta)`**
+depois de mexer em `goldDelta` — `delta` com o sinal do `goldDelta`. Serviço novo (loja, depósito,
+imbuement…) faz o mesmo; escrever `if (shared)` ou `credit(...)` à mão é o defeito que esta seção
+existe para impedir.
+
+**A auditoria dos ramos de `ruleset.shared`** (treze, não onze: o #624 e o #631 acrescentaram dois
+depois do commit que o ADR 0060 mediu):
+
+| Ramo em `game/host.ts` | Hoje | Predicado | No mundo |
+|---|---|---|---|
+| `#leaveForParty`, origem shard | Cidade: estado durável + `leave`; privada: `leave`/`end` com extrato | `leavesOnExit`, `creditsAggregates` (`#departFromSharedSession`) | `leave` com extrato de delta, gravado |
+| `release` | idem | idem | idem |
+| `#requestSellItems` | agregado só fora de shard | `creditsAggregates` (`#mirrorGold`) | credita o agregado |
+| `#requestCharmRemove` | idem | idem | idem |
+| `#requestLearnSpell` (#624) | idem | idem | idem |
+| `#requestBuyBlessing` | recusa fora de shard | `offersCityServices` (+ `#mirrorGold` no débito) | aceita em tile PZ (`acceptsCityServices`, OW-13), debita pelos dois canais |
+| `#interestManaged` | shard + opção do nó | `usesAreaOfInterest` | liga |
+| `#runTransition`, origem shard (#631) | estado durável se `dirty` | `leavesOnExit`, `creditsAggregates` | `leave` + extrato de delta, gravado ANTES de o diretório trocar |
+| `#runTransition`, origem privada | `end`/`leave` + extrato + `session-ended` | `leavesOnExit` (o `else`) | — |
+| `#replace`, origem shard | `leave`, extrato descartado | `leavesOnExit` | o extrato já foi gravado em `#runTransition`; este `leave` acha o personagem fora (devolve `null`) |
+| `#replace`, chegada | shard apaga snapshot | `keepsSnapshot` | apaga (sem snapshot) |
+| `drainAll` | shard: estado durável; depois `release` | `leavesOnExit`, `creditsAggregates` | `leave` + extrato de delta; o `release` seguinte acha o personagem fora |
+| `saveAll` | pula shard | `keepsSnapshot` | pula; o checkpoint tem timer próprio (OW-16) |
+
+**`#saveReceipt` e a sessão que sai por personagem.** O voo pendente e `credited` (uma marca por
+sessão e personagem) servem a quem sai UMA vez. No mundo o personagem volta à mesma sessão e sai de
+novo, e cada saída tem o extrato e o `seq` dela — `#saveReceipt` grava direto, sem deduplicar, para
+`leavesOnExit`. O ledger só recusa o MESMO `(session_id, seq)`.
+
+**Mas quem sai de novo ESPERA o voo.** Sem a vaga única de `receiptSaves`, o voo de cada saída fica
+em `hosted.exitSaves` (um `Set` de promessas por personagem). `leave` tira o personagem de
+`participants` antes de o extrato pousar, então uma segunda saída concorrente — a drenagem, o
+`#collectResting`, um segundo logout — acha o personagem fora (`leave` devolve `null`) e não tem
+extrato próprio: `#leaveWithReceipt` espera `exitSaves` (`#awaitExitSaves`), inclusive a falha, antes
+de o `release` soltar diretório, slot e snapshot. É o contrato do `release` concorrente da sessão
+privada (#267), por outro caminho; `gold-channel.test.ts` o prende nas duas variantes.
+
+**Ainda não é o mundo.** Nenhum ruleset declara `progress`, então os ramos de `creditsAggregates &&
+leavesOnExit` (a coluna "Mundo") só rodam em teste, com um ruleset de mentira
+(`game/gold-channel.test.ts`). O que a OW-16 acrescenta é o timer, o lote num `MULTI` e a
+antecipação na saída — e um extrato de saída que sobreviva a uma falha do Redis: `leave` emite o
+extrato uma vez, e se a gravação falhar depois dele o extrato só existe em memória (a saída de
+membro de party, #194, tem a mesma janela). **Perguntas por `ruleset.type === 'city'`** — `promote`,
+`buy-item`, o livro do offline training, e a marca `dirty` do `use-slot` — não são ramos de
+`shared`, ficam como estão. O mundo ganhou tipo próprio na OW-13 (`'world'`) e a pergunta do tile
+tem resposta no `sim` (`Ruleset.acceptsCityServices`), mas nenhuma sessão de mundo é hospedada
+ainda: trocar essas conferências por ela é do `WorldShard` (OW-18). **Eventos notáveis por
+personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
+`Session.notableEventsFor(characterId, from)`, nunca `session.notableEvents` crua — no mundo cada
+evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
+Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
+na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 
@@ -1004,3 +1116,28 @@ padrão de 16 (0–15) faria `SELECT 16` cair no banco 0 em silêncio.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.
+- **O Hazard (#632) segue o padrão dos Charms e tem UMA diferença: a escolha do nível na Cidade grava
+  um extrato SÓ de hazard NA HORA.** `set-hazard-level` só é aceita na sessão de Cidade (`shared`) e
+  na hunt é recusada — o nível é fixo na entrada. O registro `characters.hazard` (migração `0027`) é
+  `jsonb`, ABSOLUTO e última-escrita-vence (a escolha desce e sobe — fundir pelo maior a desfaria),
+  lido no ticket (`isHazardState`, torto vira AUSENTE) e escrito pelo ledger. A diferença: o ticket
+  de uma party (#195) é emitido pela `api` a partir da LINHA do banco, então um nível que só saísse
+  no `release` não chegaria ao ticket do membro; por isso `#requestSetHazardLevel` chama
+  `#saveHazardChoice` logo depois de uma escolha que MUDOU o nível (ADR 0052, emenda 2026-09-30).
+  **Três armadilhas.** (1) **Esse extrato NUNCA é o `#saveDurableReceipt`**: o `ReceiptStore` guarda
+  UM extrato por `(sessionId, characterId)` (a chave não leva o `seq` até o #823 entrar), a Cidade é
+  uma sessão compartilhada, e o extrato de estado inteiro leva valor que só sai uma vez
+  (`goldDelta`, `removedInstances`, zerados por `settleGoldDelta`/`drainRemovedInstances`) — um
+  segundo extrato na mesma chave antes da varredura (até 10 s) o sobrescreveria e a compra de uma
+  bênção sairia de graça. O de hazard leva só o registro, com agregados zerados, e vai no fluxo
+  próprio `<sessionId>:hazard` (`HAZARD_RECEIPT_STREAM`): sobrescrever outro DELE é inofensivo
+  (absoluto, última escrita vence), e ele nunca encosta no extrato do personagem. (2) **Nada se
+  liquida nem se "limpa" nele**: se o Redis falha, `#markDirty` deixa o registro para o extrato do
+  logout; se der certo, o logout não o repete. (3) **A zona resolve por propriedade PRÓPRIA**
+  (`Object.hasOwn`): `zones` é um objeto comum, e `zones['constructor']` não é zona. Escolher o nível
+  em que já estava não grava nada (`HazardProgress.revision`). `#presentHazard` reenvia `hazard`
+  quando a hunt sobe o teto (compara `revision`, um inteiro). Um serviço de Cidade novo que a party
+  leia pelo ticket precisa da mesma coisa — e do mesmo cuidado com a chave. Quando o #823 (extrato
+  por `seq` e versão durável, PR #896) entrar, `hazard` precisa entrar na lista dos campos
+  ABSOLUTOS que ele guarda por versão: `applyProgression` o escreve sem guarda hoje.
+

@@ -11,7 +11,8 @@
 //     `packages/content/data/items/generated/*.json` já usa (ADR 0038 decisão 2);
 //   - `bestiary` vira uma linha em `packages/content/data/bestiary/baseline.json` (`entries`);
 //   - `outfitId` vira uma linha em `packages/content/data/appearances/baseline.json`
-//     (`monsters`).
+//     (`monsters`); `objectLooks` (#621, o `appearanceId` de cada `outfitItem`) vira as linhas de
+//     `looks` do mesmo arquivo — a condição `outfit` só carrega a chave.
 //
 // Loot é validado contra o catálogo de itens REAL — `packages/content/data/items`, o que
 // `loadContent` de fato carrega hoje. Desde a promoção de itens (#748, `promote-items.ts`) isso
@@ -49,6 +50,7 @@ import { repoRootFrom } from './env.js';
 import {
   formatGeneratedSlice, listGeneratedSlices, writeGeneratedSlice, type CatalogEntity,
 } from './generated-writer.js';
+import { stripUnknownOutfits } from './monster-abilities.js';
 
 /** Rat, Rotworm, Dragon e Dragon Lord — regenerados só pelo #581, nunca por esta promoção. Desde
  *  o #581 eles JÁ VIVEM em `generated/<fatia>.json` (`preserveHandAuthored` os mantém lá); este
@@ -90,6 +92,10 @@ export interface PromotionResult {
   readonly slices: ReadonlyMap<string, CatalogEntity[]>;
   readonly bestiaryEntries: ReadonlyMap<string, Record<string, unknown>>;
   readonly appearanceEntries: ReadonlyMap<string, number>;
+  /** `chave de objeto → appearanceId` (#621): as linhas de `appearances.looks`. */
+  readonly lookEntries: ReadonlyMap<string, number>;
+  /** Monstro → quantas entradas `outfit` saíram porque o monstro imitado não foi promovido (#621). */
+  readonly strippedOutfits: ReadonlyMap<string, number>;
   readonly skipped: readonly SkippedPromotion[];
   readonly droppedLootLines: readonly DroppedLootLine[];
   /** A apresentação que o `staging/` traz para cada id de `HAND_AUTHORED_MONSTER_IDS` (#620). */
@@ -235,6 +241,7 @@ export function computePromotion(repoRoot: string): PromotionResult {
   const slices = new Map<string, CatalogEntity[]>();
   const bestiaryEntries = new Map<string, Record<string, unknown>>();
   const appearanceEntries = new Map<string, number>();
+  const lookEntries = new Map<string, number>();
   const skipped: SkippedPromotion[] = [];
   const droppedLootLines: DroppedLootLine[] = [];
   const handAuthoredLook = new Map<string, Record<string, unknown>>();
@@ -266,8 +273,15 @@ export function computePromotion(repoRoot: string): PromotionResult {
         });
         continue;
       }
-      const { bestiary, outfitId, ...monster } = entity;
+      const { bestiary, outfitId, objectLooks, ...monster } = entity;
       if (typeof outfitId === 'number') appearanceEntries.set(id, outfitId);
+      for (const [key, appearanceId] of Object.entries((objectLooks ?? {}) as Record<string, number>)) {
+        const existing = lookEntries.get(key);
+        if (existing !== undefined && existing !== appearanceId) {
+          throw new Error(`appearances.looks "${key}": dois monstros pedem ids diferentes (${String(existing)} e ${String(appearanceId)})`);
+        }
+        lookEntries.set(key, appearanceId);
+      }
       if (bestiary !== undefined && typeof bestiary === 'object') {
         bestiaryEntries.set(id, bestiary as Record<string, unknown>);
       }
@@ -277,8 +291,24 @@ export function computePromotion(repoRoot: string): PromotionResult {
     slices.set(slice, promoted);
   }
 
+  // O `outfit` de monstro nomeia o monstro imitado por id, e o boot recusa id que não existe
+  // (#621): o conjunto que existe DEPOIS da promoção é o promovido mais os quatro autorais (que já
+  // moram em `generated/` e nunca saem daqui). A entrada cujo alvo ficou de fora sai — só ela, e a
+  // contagem vai para o relatório —, porque a troca é puramente visual.
+  const known = new Set<string>(HAND_AUTHORED_MONSTER_IDS);
+  for (const entities of slices.values()) for (const entity of entities) known.add(entity.id);
+  const strippedOutfits = new Map<string, number>();
+  for (const entities of slices.values()) {
+    for (const entity of entities) {
+      const record = entity as unknown as Record<string, unknown>;
+      const removed = stripUnknownOutfits(record, known);
+      if (removed > 0) strippedOutfits.set(entity.id, removed);
+    }
+  }
+
   return {
-    slices, bestiaryEntries, appearanceEntries, skipped, droppedLootLines, handAuthoredLook,
+    slices, bestiaryEntries, appearanceEntries, lookEntries, strippedOutfits, skipped, droppedLootLines,
+    handAuthoredLook,
   };
 }
 
@@ -332,6 +362,25 @@ function formatReport(repoRoot: string, result: PromotionResult): string {
     lines.push('| id | motivo |', '|---|---|');
     for (const item of [...result.skipped].sort((a, b) => a.id.localeCompare(b.id))) {
       lines.push(`| ${item.id} | ${item.reason} |`);
+    }
+  }
+  lines.push(
+    '',
+    `## Entradas \`outfit\` removidas (${[...result.strippedOutfits.values()].reduce((sum, n) => sum + n, 0)})`,
+    '',
+  );
+  if (result.strippedOutfits.size === 0) {
+    lines.push('Nenhuma — todo monstro imitado por um `outfit` foi promovido.');
+  } else {
+    lines.push(
+      'Ataque/defesa `outfit` cujo monstro imitado não foi promovido (#621): a condição o nomeia por id, '
+        + 'e o boot recusa id que não existe. Sai só a entrada — a troca é puramente visual.',
+      '',
+      '| monstro | entradas removidas |',
+      '|---|---|',
+    );
+    for (const [id, count] of [...result.strippedOutfits.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      lines.push(`| ${id} | ${count} |`);
     }
   }
   lines.push(
@@ -435,6 +484,11 @@ export function writePromotion(repoRoot: string): PromotionResult {
     join(repoRoot, 'packages/content/data/appearances/baseline.json'),
     'monsters',
     result.appearanceEntries,
+  );
+  mergeJsonMap(
+    join(repoRoot, 'packages/content/data/appearances/baseline.json'),
+    'looks',
+    result.lookEntries,
   );
   const reportPath = join(repoRoot, 'docs/reference/catalog/monsters-promotion-report.md');
   mkdirSync(join(reportPath, '..'), { recursive: true });

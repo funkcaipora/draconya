@@ -40,6 +40,8 @@ export function loadContent(dir: string): Content {
     skinning: readJsonDir(join(dir, 'skinning')),
     boosted: readJsonDir(join(dir, 'boosted')),
     loyalty: readJsonDir(join(dir, 'loyalty')),
+    // O Hazard (M44-14, #632): os multiplicadores do Canary e a zona `gnomprona-gardens`.
+    hazard: readJsonDir(join(dir, 'hazard')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
     // Suprimentos e munição ABSTRATOS (ADR 0026 d.3): poção, runa e flecha não são itens — o

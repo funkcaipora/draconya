@@ -24,6 +24,11 @@ import type { SessionType } from '@draconya/sim';
 const ALLOWED: Readonly<Record<SessionType, readonly SessionType[]>> = {
   city: ['hunt', 'training', 'quest', 'boss', 'guild-war'],
   hunt: ['city'],
+  // O mundo (OW-13, ADR 0060 d.6) tem sessão desde a OW-13, mas ninguém o hospeda: o hospedeiro o
+  // constrói na OW-18, atrás de `OPEN_WORLD`, e é a OW-20 que o põe no CENTRO deste grafo (mundo ↔
+  // hunt idle, sob `canLogout`). Até lá nenhuma transição o toca, e a entrada vazia é só o que o
+  // `Record<SessionType, …>` exige para compilar — nenhum estado de hoje passa a poder ir a ele.
+  world: [],
   training: ['city'],
   quest: ['city'],
   boss: ['city'],

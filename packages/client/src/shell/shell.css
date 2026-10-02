@@ -892,6 +892,9 @@ div.hunt-pill-pending { cursor: default; }
 .hunts-modal-sprite { position: relative; width: 42px; height: 42px; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
+/* O seletor de nível de hazard (#632): sob a lista, só nas hunts de zona de hazard. */
+.hunts-modal-hazard { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 2px 0; border-top: 1px solid var(--ash-5); margin-top: 6px; }
 
 /* ---- O Treino (#631, M44-13, ADR 0059) --------------------------------------------------- */
 /* O pill "Treino" na Cidade e o estado do Treino em curso reusam `.hunt-pill`; só o botão de

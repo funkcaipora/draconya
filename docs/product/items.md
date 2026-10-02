@@ -171,8 +171,10 @@ durationMs }` — `durationMs` é `value × 12` segundos em milissegundos, o mec
 contador `CharacterRuntime.fedMs` (`packages/sim/src/food.ts`, `feed`/`drainFedMs`), capado em
 `FOOD_CAP_MS` (1.200.000 ms); comer no teto recusa `you-are-full` **sem consumir** o item. O
 contador drena pelo TEMPO DE HUNT decorrido (o mesmo `dtMs` que já drena a stamina em
-`#burnStamina`), nunca por tick (invariante 2), e não recupera fora de hunt — a Cidade não anda
-(ADR 0004/0023).
+`#chargeElapsedTime`), nunca por tick (invariante 2), e não recupera fora de hunt — a Cidade não anda
+(ADR 0004/0023). Drena **sempre** que há sessão de hunt, inclusive numa topologia cuja stamina não
+queima por tempo (`burnsStaminaByTime: false`, o mundo): a comida é a `CONDITION_REGENERATION`, que o
+Canary conta com o jogador no jogo em qualquer modo.
 
 | Item | `durationMs` | Canary (`foods.lua`, valor × 12s) | Arquivo |
 |---|---|---|---|

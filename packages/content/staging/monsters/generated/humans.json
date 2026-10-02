@@ -809,6 +809,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 172,
     "aggroRadius": 11,
@@ -1048,6 +1049,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 180,
     "aggroRadius": 11,
@@ -2460,6 +2462,59 @@
         "presentation": {
           "missileKey": "smallstone"
         }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 3
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "explosion"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "cyclops"
+            }
+          }
+        }
+      },
+      {
+        "id": "outfit-2",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 11,
+          "area": {
+            "shape": "circle",
+            "radius": 4,
+            "centered": "caster"
+          }
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "table"
+            }
+          }
+        }
       }
     ],
     "defenses": [
@@ -2473,6 +2528,22 @@
         },
         "presentation": {
           "impactKey": "magic-green"
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.05,
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 3000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "green-frog"
+            }
+          }
         }
       }
     ],
@@ -2539,7 +2610,10 @@
       "stars": 2,
       "occurrence": 0
     },
-    "outfitId": 133
+    "outfitId": 133,
+    "objectLooks": {
+      "table": 2324
+    }
   },
   {
     "id": "dark-carnisylvan",
@@ -3016,6 +3090,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 230,
     "aggroRadius": 11,
@@ -5123,6 +5198,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 210,
     "aggroRadius": 11,
@@ -5416,6 +5492,31 @@
         "kind": "melee"
       },
       {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 7
+        },
+        "power": 0,
+        "damageType": "physical",
+        "presentation": {
+          "missileKey": "snowball",
+          "impactKey": "blueshimmer"
+        },
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 4000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "objectKey": "snowman"
+            }
+          }
+        }
+      },
+      {
         "id": "icewave",
         "cadenceMs": 2000,
         "chance": 0.1,
@@ -5558,7 +5659,10 @@
       "stars": 3,
       "occurrence": 0
     },
-    "outfitId": 149
+    "outfitId": 149,
+    "objectLooks": {
+      "snowman": 7172
+    }
   },
   {
     "id": "infernalist",
@@ -6696,6 +6800,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 240,
     "aggroRadius": 11,
@@ -6874,6 +6979,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 240,
     "aggroRadius": 11,
@@ -7908,6 +8014,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -8133,6 +8240,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 220,
     "aggroRadius": 11,
@@ -8334,6 +8442,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 214,
     "aggroRadius": 11,
@@ -8532,6 +8641,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 200,
     "aggroRadius": 11,
@@ -8716,6 +8826,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 198,
     "aggroRadius": 11,
@@ -8891,6 +9002,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 170,
     "aggroRadius": 11,
@@ -9567,6 +9679,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 176,
     "aggroRadius": 11,
@@ -10133,6 +10246,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 176,
     "aggroRadius": 11,
@@ -10564,6 +10678,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": false,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 190,
     "aggroRadius": 11,
@@ -10728,6 +10843,7 @@
     "canWalkOnFire": false,
     "canWalkOnPoison": false,
     "canWalkOnEnergy": true,
+    "illusionable": true,
     "attackIntervalMs": 2000,
     "speed": 204,
     "aggroRadius": 11,
@@ -10916,6 +11032,27 @@
               "durationMs": 98000
             }
           ]
+        }
+      },
+      {
+        "id": "outfit",
+        "cadenceMs": 2000,
+        "chance": 0.01,
+        "target": {
+          "range": 5
+        },
+        "power": 0,
+        "damageType": "physical",
+        "condition": {
+          "key": "outfit",
+          "merge": "strongest",
+          "durationMs": 2000,
+          "effect": {
+            "kind": "outfit",
+            "look": {
+              "monsterId": "green-frog"
+            }
+          }
         }
       }
     ],

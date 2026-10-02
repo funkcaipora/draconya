@@ -35,13 +35,39 @@ export interface MonsterLook {
  *   como o default.
  */
 export function monsterLookOf(definition: Monster | undefined): MonsterLook {
+  return { ...monsterOutfitOf(definition), ...monsterPresentationOf(definition) };
+}
+
+/**
+ * A parte do outfit que o cliente pinta junto do `appearanceId`: as cores e os addons. É o que o
+ * Canary guarda em `Outfit_t` — e por isso VAI JUNTO da aparência emprestada (#621): quem veste o
+ * outfit de outro monstro veste também as cores e os addons dele, e quem volta ao próprio os
+ * recebe de volta (`Creature::setCurrentOutfit` troca o `Outfit_t` inteiro). Sem definição (host de
+ * teste sem catálogo) não há nada a dizer.
+ */
+export function monsterOutfitOf(
+  definition: Monster | undefined,
+): { colors?: OutfitColors; addons?: number } {
   if (definition === undefined) return {};
   const outfit = definition.outfit ?? NEUTRAL_MONSTER_OUTFIT;
-  const race = definition.race ?? DEFAULT_MONSTER_RACE;
-  const { light, voices } = definition;
   return {
     colors: { head: outfit.head, body: outfit.body, legs: outfit.legs, feet: outfit.feet },
     ...(outfit.addons > 0 ? { addons: outfit.addons } : {}),
+  };
+}
+
+/**
+ * O que é da CRIATURA, não do outfit: a raça, a luz e as falas. Não acompanham a aparência
+ * emprestada — o Canary os guarda no tipo do monstro, e nenhum deles no `Outfit_t` —, então é este
+ * recorte que o `session-state` espalha depois de `#lookFor`, que já traz o outfit.
+ */
+export function monsterPresentationOf(
+  definition: Monster | undefined,
+): { race?: MonsterRace; light?: CreatureLight; voices?: CreatureVoices } {
+  if (definition === undefined) return {};
+  const race = definition.race ?? DEFAULT_MONSTER_RACE;
+  const { light, voices } = definition;
+  return {
     ...(race === DEFAULT_MONSTER_RACE ? {} : { race }),
     ...(light === undefined ? {} : { light: { level: light.level, color: light.color } }),
     ...(voices === undefined

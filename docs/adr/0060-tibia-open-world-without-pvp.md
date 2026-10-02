@@ -276,6 +276,9 @@ No mundo, um índice de espectadores no `sim` decide a dormência. Ele usa setor
 - A hunt idle não muda e não precisa de nova linha de base. Levar a dormência a ela é outra decisão.
 - O monstro dormente continua materializado. Virar registro `{slot, hp}` só se o `bench:world` pedir memória.
 - A fila ganha cancelamento preguiçoso sem mudar a ordem.
+  - **Só acima de 1.024 eventos, que é o mundo (#827).** O índice de pares custa ~100 bytes por par e um acesso a `Map` por evento; ligado também na hunt, o `bench:hunts` mediu +12% de memória por sessão e +25% a +50% no custo da própria fila, sem ganho, porque uma hunt cancela pouco. A fila pequena remove direto e fica como era.
+  - A "geração" do par é o próprio `seq`: cancelar grava no slot o próximo `seq`, e o evento com `seq` menor é lápide. O evento não ganha campo.
+  - `docs/product/hunt.md`, seção "A fila por dentro".
 - `MAX_EVENTS_PER_ADVANCE` (`session.ts:71`) e `MAX_PENDING_DOMAIN_EVENTS` (`session.ts:42`) viram limites por sessão.
 - `notableEvents` (`session.ts:788-794`) é limitado no mundo.
 
@@ -626,3 +629,15 @@ Mudam também:
 | **5** | não muda | mensagens novas só em `messages.ts` |
 | **6** | não muda | zona é geometria, não arte; o artefato do continente tem ADR próprio |
 | **10** | não muda | o checkpoint é o mesmo ledger com `(session_id, seq)`, e agora também em ordem por personagem |
+
+## Emenda — 2026-10-01 (#833, OW-12): a costura tem quatorze membros, e a auditoria dos usos de `session.participants` mora em documento próprio
+
+A decisão 4 lista o que a `SessionTopology` isola. A OW-12 a implementou (`packages/sim/src/rulesets/topology.ts`) e classificou cada uso de `session.participants` do `HuntRuleset`: **150 ocorrências do texto** em `00c70359` (a decisão contava 125 em `733a4e0c`; o arquivo cresceu), das quais 135 são código. A tabela, as quatro classes e o que ficou aberto estão em [`docs/session-topology-audit.md`](../session-topology-audit.md).
+
+**Decisão da emenda:**
+- **Os onze itens da decisão 4 entram como estão**: `creditKill`, `rewardEligible`, `lootRecipient`, `onEmpty`, `onLeaderGone`, `startsInstanceSchedules`, `placeOnEnter`, `onCharacterDied` e as chaves `runsRouteWalker`, `runsExitRules` e `burnsStaminaByTime`.
+- **A auditoria achou três perguntas a mais**, que decidiam por "quantos estão aqui" e que a lista da decisão não nomeava: `leaderOf` (o líder presente, ou o mais antigo — a outra metade da liderança), `onExitFinished` (a saída concluída decide o que a morte decide, pela outra porta) e `namesOwnerInEvents` (o formato do `level-up`, do `bestiary-milestone`, do `bosstiary-level` e do `hazard-level-up` no extrato dependia de haver um só presente, e no mundo o número de presentes não pode decidir o que vai para o ledger).
+- **`instanceTopology` é o código de antes, sem tocar numa condição**, e é o default. A topologia não vai no snapshot nem muda o formato dele.
+- **A costura não estende a topologia a todo o roster.** Os usos de roster que só rodam com `partyOptions`, bolsa compartilhada, votação, rota ou líder ficam no ruleset, guardados — o mundo não os passa. Dez usos são roster de party **sem guarda** e ficam abertos, cada um com dono: a XP pelo roster e os `killers` do Bosstiary na OW-28; o alvo de cura de party, as magias de party, o teto de medo, o nível de hazard da party e o custo por golpe de `#armHealersOf` na OW-43. A extração do resto é a dívida registrada na decisão 4, nas OW-61 a OW-65.
+
+**Efeito no que esta decisão escreveu:** nenhum. A decisão 4 continua valendo; esta emenda só registra que a lista de perguntas cresceu em três e onde mora a auditoria.

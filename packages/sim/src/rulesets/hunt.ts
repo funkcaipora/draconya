@@ -18,23 +18,24 @@
 
 import {
   BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, DRUNK_CONDITION_KEY,
-  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, PACIFIED_CONDITION_KEY,
+  FEARED_CONDITION_KEY, INVISIBLE_CONDITION_KEY, ITEM_SLOTS, OUTFIT_CONDITION_KEY, PACIFIED_CONDITION_KEY,
   ROOTED_CONDITION_KEY, SPELL_SKILL_WEAPON, fieldStagesOf, floorChangeAt,
   floorChangeToward, isBlocked, migrateBotConfigV1,
 } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, BotLoot, Charm, Combat,
-  CompiledWeaponFamily, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hunt,
+  CompiledWeaponFamily, ConditionSpec, Content, DamageModifiers, DamageType, FieldSpec, FieldStage, Hazard, HazardZone, Hunt,
   Item, ItemSlot, Monster, MonsterAbility, MonsterDefense, MonsterSummonEntry, MonsterTargetChange,
-  PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea, SpellEffect,
-  SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
+  OutfitLook, PartyConfig, Point, Progression, Regen, ResolvedWeapon, Route, Skill, Skinning, Spell, SpellArea,
+  SpellEffect, SpawnPoint, Stamina, Supply, Tilemap, Training, Vocation, WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, FORWARD, isSelfOrigin, tileKey } from '../area.js';
 import type { AreaSource, Direction } from '../area.js';
 import {
-  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS, actionExhaustKey,
-  balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
+  HAS_SUMMONS, NOT_ENOUGH_ROOM, NOT_IN_CATALOG, NOT_ILLUSIONABLE, NOT_POSSIBLE, NOT_SUMMONABLE, TOO_MANY_SUMMONS,
+  actionExhaustKey, balanceOf, castSpell, executeHealing, groupCooldownKey, ownPurse, spellCooldownKey,
+  supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type {
   CastRefused, CastResult, CastSuccess, Purse, SpellAim, SpellScaling, SpellTarget, UtilityRefusal,
@@ -53,7 +54,10 @@ import { chestStorageKeyOf, isDoorKind, isToggleable, TileOverrides } from '../t
 import type { InteractableKind, InteractableTool, TileOverrideState } from '../tile-overrides.js';
 import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import { hasCharmStage, hasSkinningStage } from '../combat/profile.js';
+import { hasCharmStage, hasHazardStage, hasSkinningStage } from '../combat/profile.js';
+import {
+  applyHazardToMonsterHit, applyHazardToPlayerHit, hazardExperience, hazardLootRolls,
+} from '../combat/hazard.js';
 import {
   ADRENALINE_BURST_CONDITION, ActionCritical, CHARM_PARALYZE_CONDITION, CLEANSE_IMMUNITY_MS,
   FATAL_HOLD_MS, carnageCharmDamage, charmAttackBonus, charmChance, cleanseTypeOfCondition,
@@ -139,7 +143,7 @@ import {
   containerRulesFor, equipmentAbsorb, equipmentCleavePercent, equipmentReflect, immunitiesOnly,
 } from '../inventory.js';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, relocate, swapPlaces,
+  TileOccupancy, canOccupy, move, movementDuration, place, relocate, swapPlaces,
   tilesAround,
 } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
@@ -147,7 +151,7 @@ import type { RouteState } from '../route/walker.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier, skillFactorFor } from '../skills.js';
-import { drainStamina, isExhausted } from '../stamina.js';
+import { drainStamina } from '../stamina.js';
 import { drainFedMs, feed as feedCharacter, FOOD_CAP_MS } from '../food.js';
 import { findRelation, levitateDestination, ropeDestination } from '../utility-spells.js';
 import { blessingCount } from '../blessings.js';
@@ -157,6 +161,8 @@ import { RouteWalker } from '../route/walker.js';
 import { boundedPath, isAdjacentTo, isExactly } from '../route/pathfind.js';
 import { Session } from '../session.js';
 import type { Aggregates, EndReason, Receipt, Ruleset, SessionSnapshot } from '../session.js';
+import { instanceTopology } from './topology.js';
+import type { KillContext, SessionTopology, TopologyHost } from './topology.js';
 
 /**
  * Os eventos da hunt. Uma cadência, um tipo — e cada um reagenda a si mesmo.
@@ -213,6 +219,12 @@ const monsterSummonSubject = (id: number, monsterId: string): string =>
  * desta entrada tenta de novo, como o respawn adiado do Spawner.
  */
 const SUMMON_SPAWN_RADIUS = 1;
+/**
+ * Até onde o Plunder Patriarch procura um tile livre ao nascer da morte de um monstro de hazard:
+ * o `maxRadius` 4 do `player:getClosestFreePosition(monster:getPosition(), 4, true)` de
+ * `hazard_primal.lua` (#632).
+ */
+const PLUNDER_SPAWN_RADIUS = 4;
 /**
  * O teto de invocações VIVAS por PERSONAGEM (#598, M38-01, ADR 0057 decisão 3): "Teto de 2" —
  * `summon_creature.lua` do Canary confere `player:getSummonCount() >= 2` antes de invocar,
@@ -506,6 +518,12 @@ export type UseSlotTarget =
   | { readonly kind: 'character'; readonly characterId: string }
   | { readonly kind: 'position'; readonly position: FloorPoint }
   /**
+   * Um item que o PERSONAGEM carrega, apontado pela instância (#621, Chameleon Rune: o "usar com"
+   * de `chameleon.lua` sobre um item do container ou do corpo). Só a runa `chameleon` o lê; para
+   * qualquer outra ação é ruído, ignorado como um `character` numa ação de dano (RF-12).
+   */
+  | { readonly kind: 'item'; readonly instanceId: string }
+  /**
    * O `creatureId` do fio não resolveu para NENHUM personagem/monstro conhecido do host
    * (criatura já saiu de vista/sessão). Distinto de "ausente" (`undefined`): o jogador MIROU
    * algo, e isso precisa recusar `no-target` numa ação mirável — não cair em silêncio no
@@ -590,7 +608,13 @@ export type SlotRefusal =
    * monstro fiendish (`no-creatures-around`) — as do `RETURNVALUE_*` do Canary.
    */
   | 'not-possible' | 'too-many-summons'
-  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around';
+  | 'not-enough-room' | 'person-not-found' | 'no-creatures-around'
+  /**
+   * A ilusão (#621, M44-03, Creature Illusion/Chameleon Rune): sem `monsterId`, monstro fora do
+   * catálogo ou não `illusionable`; na runa, sem item apontado (ou item que o personagem não
+   * carrega).
+   */
+  | 'not-illusionable';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
 export type SlotOutcome =
@@ -725,6 +749,7 @@ export function refusalOf(result: CastRefused): SlotRefusal {
     case 'attack-locked': return 'attack-locked';
     case 'feared': return 'feared';
     case 'not-summonable': return 'not-summonable';
+    case 'not-illusionable': return 'not-illusionable';
     case 'has-summons': return 'has-summons';
     case 'not-enough-room': return 'not-enough-room';
     case 'spell-not-learned': return 'not-learned';
@@ -935,9 +960,6 @@ const MANUAL_WALK_HOLD_MS = 10_000;
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
-/** Até onde o segundo participante procura tile livre ao entrar (#203): o anel de `placeNear`. */
-const ENTRY_RADIUS = 3;
-
 function targetingOf(runner: Runner | undefined): Targeting {
   return runner?.bot?.targeting ?? DEFAULT_TARGETING;
 }
@@ -1186,6 +1208,14 @@ export interface HuntRulesetOptions {
    * faz nada — o conteúdo de teste que não fala de esfola.
    */
   readonly skinning?: ReadonlyMap<string, Skinning>;
+  /**
+   * O Hazard desta hunt (M44-14, #632, ADR 0052 d.7): a zona que `hunt.hazardZoneId` aponta e os
+   * multiplicadores do Canary. Só o `combat-v4` (`hasHazardStage`) o roda; ausente é uma hunt sem
+   * nível de perigo — todas as que existiam antes da issue. O nível de cada jogador vem do
+   * `CharacterRuntime.hazard` (escolhido na Cidade, fixo enquanto a hunt dura), e o da party é o
+   * MENOR entre os membros.
+   */
+  readonly hazard?: { readonly zoneId: string; readonly zone: HazardZone; readonly config: Hazard };
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -1237,6 +1267,14 @@ export interface HuntRulesetOptions {
    * efeito aplica.
    */
   readonly boostedMonsterId?: string;
+  /**
+   * O que hoje supõe "sessão = party" (OW-12, ADR 0060 d.4): crédito do abate, elegibilidade,
+   * destinatário do loot, líder, fim da sessão, morte, saída, spawn inicial, colocação na
+   * entrada, rota, regras de saída e queima de stamina por tempo. Ausente é `instanceTopology`,
+   * o código de sempre — a hunt, solo e party. Não entra no snapshot: é identidade de QUEM
+   * monta o ruleset, como o `huntId`, e a sessão retomada pelo mesmo caminho volta com a mesma.
+   */
+  readonly topology?: SessionTopology;
 }
 
 /**
@@ -1900,9 +1938,26 @@ export interface RunnerState {
 }
 
 export class HuntRuleset implements Ruleset {
-  readonly type = 'hunt' as const;
+  /**
+   * `'hunt'` é a instância, e `'world'` o mundo aberto (OW-13): o mundo é este mesmo ruleset com a
+   * topologia de mundo, e é `WorldRuleset` (`rulesets/world.ts`) quem o declara. Nenhum outro
+   * código escolhe o valor — a hunt, solo e party, é sempre `'hunt'`.
+   */
+  readonly type: 'hunt' | 'world' = 'hunt';
 
   readonly #options: HuntRulesetOptions;
+  /**
+   * O que supõe "sessão = party" (OW-12): ver `SessionTopology`. Sempre presente — o default é a
+   * `instanceTopology`, o código de antes da costura —, e fixo pela vida do ruleset.
+   */
+  readonly #topology: SessionTopology;
+  /**
+   * O que a topologia pode pedir ao ruleset: sair com extrato. Montado UMA vez — as duas portas
+   * de saída (morte e saída concluída) passam por ele, e um objeto por morte seria alocação à toa.
+   */
+  readonly #topologyHost: TopologyHost = {
+    depart: (session, characterId, reason) => { this.#depart(session, characterId, reason); },
+  };
   /** Um `Runner` por participante presente (#203). Ver `Runner`. */
   readonly #runners = new Map<string, Runner>();
   /** A party (#191): modo e líder. `undefined` é solo. Vem das opções ou do snapshot. */
@@ -1998,8 +2053,19 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #tileOverrides: TileOverrides;
 
-  /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
+  /** Até que instante lógico o tempo de sessão já foi cobrado (stamina e comida). Ver `#chargeElapsedTime`. */
   #staminaAnchorMs = 0;
+
+  /**
+   * O `lootSeq` com que cada personagem que SAIU deixou a sessão, para quem volta pelo mesmo id
+   * continuar dali (`namesOwnerInItemIds`, o mundo). Um login novo constrói um `CharacterRuntime`
+   * com `lootSeq` 0, e `${session.id}:${character.id}:0` já é o id de um item que o mesmo
+   * personagem ganhou antes de sair — o `item_instance` o descartaria em silêncio. Vazio na
+   * instância (nunca escrito) e sem snapshot no mundo (ADR 0060 d.10a). Um número por personagem
+   * que já saiu da encarnação do mundo — o `onLeave` seguinte o reescreve —, e a encarnação acaba
+   * no save diário, então o mapa tem o teto de quem passou por ela.
+   */
+  readonly #lootSeqOfDeparted = new Map<string, number>();
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
@@ -2094,6 +2160,7 @@ export class HuntRuleset implements Ruleset {
     // (#583, ADR 0039 — fim do pull por dificuldade): o campo é aceito e IGNORADO, guardado só
     // para o snapshot/`changeDifficulty` continuarem redondos enquanto o protocolo o mandar.
     this.#options = options;
+    this.#topology = options.topology ?? instanceTopology;
     this.#party = normalizePartyOptions(options.partyOptions);
     if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
     this.#injectedExitRules = options.exitRules ?? [];
@@ -2140,6 +2207,15 @@ export class HuntRuleset implements Ruleset {
   /** O mapa da instância (FUN-120): é o que o cliente busca para desenhar a hunt. */
   get mapId(): string {
     return this.#world.map.id;
+  }
+
+  /**
+   * Os eventos notáveis têm dono e cada personagem lê só os dele? É da topologia
+   * (`SessionTopology.scopesEventsToOwner`): a instância não, o mundo sim. Quem lê é
+   * `Session.record`, que só grava o dono onde isto é `true`.
+   */
+  get scopesEventsToOwner(): boolean {
+    return this.#topology.scopesEventsToOwner;
   }
 
   get huntId(): string {
@@ -2195,8 +2271,9 @@ export class HuntRuleset implements Ruleset {
     const recipient = resolved?.ok === true && resolved.recipient !== undefined
       ? resolved.recipient : character;
     const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+    const itemInstanceId = resolved?.ok === true ? resolved.itemInstanceId : undefined;
 
-    const result = this.#perform(session, character, entry.do, recipient, explicit);
+    const result = this.#perform(session, character, entry.do, recipient, explicit, itemInstanceId);
     if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
     // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
     this.#armBot(session, characterId);
@@ -2333,8 +2410,9 @@ export class HuntRuleset implements Ruleset {
     const recipient = resolved?.ok === true && resolved.recipient !== undefined
       ? resolved.recipient : character;
     const explicit = resolved?.ok === true ? resolved.explicit : undefined;
+    const itemInstanceId = resolved?.ok === true ? resolved.itemInstanceId : undefined;
 
-    const result = this.#useSupply(session, character, supplyId, recipient, explicit);
+    const result = this.#useSupply(session, character, supplyId, recipient, explicit, itemInstanceId);
     if (!result.ok) return refuseItem(refusalOf(result), result.retryInMs);
     character.cooldowns.start(actionExhaustKey(), session.nowMs, MANUAL_ITEM_EXHAUST_MS);
     return { ok: true };
@@ -2662,7 +2740,7 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Housekeeping, subject: interactableId,
       });
     }
-    session.record('tile-used', `${current.kind}:${interactableId}`);
+    session.record('tile-used', `${current.kind}:${interactableId}`, character?.id);
 
     // Sem `content`, não há `appearanceKey`/posição para montar a mudança — não deveria
     // acontecer (todo id de `#byId` tem uma entrada em `#contentOf`, escritas juntas em
@@ -2728,22 +2806,20 @@ export class HuntRuleset implements Ruleset {
       // Conteúdo com referência solta — o mapa é importado antes do catálogo de itens estar
       // completo (#573/#754), então isto é esperado até lá, nunca um erro do jogador. Registrado
       // (não só recusado) para o extrato acusar qual baú aponta item que ainda não existe.
-      session.record('chest-unknown-item', `${interactableId}:${reward.itemId}`);
+      session.record('chest-unknown-item', `${interactableId}:${reward.itemId}`, character.id);
       return { ok: false, reason: 'unknown-item' };
     }
     // Sem reserva de bolsa de party: o prêmio é PESSOAL, atribuído a quem usou o baú — não é
     // loot de abate compartilhável, então a capacidade disponível é a do personagem inteira.
     const wearer = withReservedCapacity(character, 0);
-    const instanceId = this.#party !== undefined
-      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-      : `${session.id}:${String(character.lootSeq++)}`;
+    const instanceId = this.#newInstanceId(session, character);
     const carried: CarriedItem = { instanceId, itemId: reward.itemId, quantity: reward.quantity };
     if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
       return { ok: false, reason: 'no-capacity' };
     }
     character.setStorageValue(storageKey, 1);
     session.credit(character.id, 'itemsLooted', carried.quantity);
-    session.record('chest-looted', interactableId);
+    session.record('chest-looted', interactableId, character.id);
     return { ok: true, changes: [] };
   }
 
@@ -3060,6 +3136,30 @@ export class HuntRuleset implements Ruleset {
     if (this.#party !== undefined && session.participants.length > this.#options.party.maxMembers) {
       throw new PartyFullError(this.#options.hunt.id, this.#options.party.maxMembers);
     }
+    // Quem entra começa SEM fila (OW-13). O `onLeave` não cancela os eventos de quem saiu — eles
+    // "vencem, não encontram o personagem e não fazem nada" —, e isso só é verdade até o mesmo id
+    // voltar: o mundo nunca acaba, o login seguinte do MESMO personagem reentra na MESMA sessão, e
+    // o passo, a regeneração e o bot que ficaram na fila achariam o `CharacterRuntime` novo por id,
+    // aplicariam um pulso e se reagendariam — uma cadeia a mais por relogue rápido, e a regeneração
+    // a 2×, 3×… Cancelar aqui, antes de agendar o que a entrada agenda, é o `resolveDeath` de quem
+    // chega: o subject é o id, e a fila dele é a desta entrada. Na instância é um no-op — o id de
+    // quem entra nunca esteve na fila (o primeiro nasce com ela; o de party é um id novo) —, e não
+    // consome `seq` nem toca em evento de ninguém.
+    session.cancelEvents(character.id);
+    // A âncora do tempo cobrado acompanha o ÚLTIMO EVENTO, e o mundo pode ficar sem evento nenhum
+    // (vazio, e sem monstro dormente enquanto a OW-30 não chega): com ninguém dentro o relógio
+    // anda e a âncora fica parada no último evento. O primeiro evento de quem chega depois cobraria
+    // dele a comida (`fedMs`, persistida) de TODO o intervalo em que ele nem estava no jogo — uma
+    // hora de mundo vazio zeraria a refeição do primeiro a entrar. Cobra-se aqui o que é de quem JÁ
+    // estava (o intervalo decorrido) e a âncora vai para agora, antes de o entrante contar. Só o
+    // mundo: na instância o relógio nunca corre sem ninguém, e o entrante tardio de uma party
+    // continua pagando como sempre pagou (byte a byte).
+    if (this.type === 'world') this.#chargeElapsedTime(session, character);
+    // O id de item novo é `${session.id}:${character.id}:${lootSeq}` onde a topologia nomeia o dono
+    // (o mundo), e um personagem que volta traz `lootSeq` 0 de um ticket novo: continua de onde o
+    // anterior parou. Nunca recua o que o personagem já traz (um que veio de outra sessão).
+    const resumedSeq = this.#lootSeqOfDeparted.get(character.id);
+    if (resumedSeq !== undefined && character.lootSeq < resumedSeq) character.lootSeq = resumedSeq;
     // Um `Runner` por participante (#203): o caminhante, o bot e o resto do que era campo da
     // classe quando a hunt hospedava um só. O bot é o DELE — por id, ou o da opção solo para
     // o primeiro a entrar.
@@ -3100,20 +3200,17 @@ export class HuntRuleset implements Ruleset {
     // As condições que o personagem TRAZ de outra sessão (#812): `Session.enter` já as traduziu
     // para o relógio desta, mas o vencimento e o próximo tique moravam na fila da anterior.
     this.#armConditions(session, character);
-    // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
-    // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
-    const at = runner.walker.current;
-    const refused = this.#runners.size === 1
-      ? place(this.#world, character, at)
-      : placeNear(this.#world, character, at, ENTRY_RADIUS);
-    if (refused !== null) {
-      throw new Error(
-        `não dá para entrar na hunt "${this.#options.hunt.id}": o primeiro tile da rota ` +
-          `(${at.x},${at.y}) foi recusado — ${refused}`,
-      );
-    }
+    // A topologia decide ONDE (OW-12): na instância, o primeiro entra NO tile inicial da rota e o
+    // segundo em diante no livre mais próximo — tile é exclusivo, e o `rejoinNearest` do primeiro
+    // passo o põe na rota (#203).
+    this.#topology.placeOnEnter({
+      world: this.#world, character, routeStart: runner.walker.current,
+      runnerCount: this.#runners.size, huntId: this.#options.hunt.id,
+    });
     this.#occupancyStale = false;
-    session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
+    // O mundo não "entra numa hunt": a linha do extrato diz de QUEM foi a entrada, como a Cidade.
+    if (this.type === 'world') session.record('entered-world', character.id, character.id);
+    else session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
 
     // A fila inicial. Tudo começa PRONTO — vencendo agora —, que é o comportamento que os
     // cooldowns tinham (FUN-25) e a razão continua a mesma: entrar numa hunt e ficar meio
@@ -3146,13 +3243,15 @@ export class HuntRuleset implements Ruleset {
     // uma morte (`#onMonsterDied` agenda `SPAWN`, o evento gated). Sem essa distinção, um
     // monstro `blockable` nunca nasceria numa hunt pequena onde o personagem já entra à vista
     // do ponto, e um não bloqueável levaria 4200 ms mesmo na primeira vez.
-    if (this.#runners.size === 1) {
+    if (this.#topology.startsInstanceSchedules(this.#runners.size)) {
       for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
         session.scheduleIn(SPAWN_INITIAL, 0, { priority: EventPriority.Spawn, subject: String(slot) });
       }
-      session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
-        priority: EventPriority.Housekeeping,
-      });
+      if (this.#topology.runsExitRules) {
+        session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
+          priority: EventPriority.Housekeeping,
+        });
+      }
     }
     // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
     // nada, e os eventos por grupo só existem para quem de fato configurou.
@@ -3178,7 +3277,9 @@ export class HuntRuleset implements Ruleset {
    * Um participante saiu de uma hunt que continua (#203, ADR 0027): desfaz o que a entrada fez.
    * O tile é liberado; o `Runner` some — os eventos dele ainda na fila vencem, não encontram o
    * personagem e não fazem nada, como os de um morto. Quem o tinha como alvo perde o alvo no
-   * próximo passo, porque a mira é recalculada a cada vencimento.
+   * próximo passo, porque a mira é recalculada a cada vencimento. **Isso vale enquanto o id não
+   * voltar:** o mundo reentra o mesmo id na mesma sessão, e quem o limpa é o `onEnter`
+   * (`cancelEvents`) — deixar a instância como está é o que a mantém byte a byte.
    */
   onLeave(session: Session, character: CharacterRuntime): void {
     // REMONTA a ocupação no próximo evento, em vez de liberar `character.position`: numa
@@ -3186,6 +3287,8 @@ export class HuntRuleset implements Ruleset {
     // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
+    // O `lootSeq` fica com a sessão: quem voltar pelo mesmo id continua dele (ver `onEnter`).
+    if (this.#topology.namesOwnerInItemIds) this.#lootSeqOfDeparted.set(character.id, character.lootSeq);
     // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
     // no próximo `#holdFollow` — porque depois do `splice` de `Session.leave` morte e saída
     // manual ficam indistinguíveis por presença, e `character.alive` só é confiável antes dele.
@@ -3237,20 +3340,15 @@ export class HuntRuleset implements Ruleset {
   #flushLoss(session: Session, reason: 'death' | 'exit-rule' | 'manual-exit'): void {
     if (!this.#lossPending) return;
     this.#lossPending = false;
-    const cascaded = this.#onMemberLost(session);
+    // A cascata é uma regra de saída do bot (`party-member-lost`): vale onde as regras valem.
+    const cascaded = this.#topology.runsExitRules ? this.#onMemberLost(session) : 0;
     if (session.participants.length === 0) {
-      // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele.
-      if (session.ended === null) session.end(cascaded > 0 ? 'exit-rule' : reason);
+      // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele. O que se faz
+      // com uma sessão vazia é da topologia: a instância acaba, o mundo nunca.
+      this.#topology.onEmpty(session, cascaded > 0 ? 'exit-rule' : reason);
       return;
     }
-    const party = this.#party;
-    if (party !== undefined && !session.participants.some((p) => p.id === party.leaderId)) {
-      const next = session.participants[0];
-      if (next !== undefined) {
-        party.leaderId = next.id;
-        session.record('leader-changed', next.id);
-      }
-    }
+    this.#topology.onLeaderGone(session, this.#party);
     this.#emitPartyState(session);
     // A saída pode ter completado o "sim de todos" (#432): quem ficou e já tinha aprovado
     // encerra agora, depois do extrato de quem saiu.
@@ -3400,7 +3498,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
     // Saída pelo socket (#193): a cascata roda no primeiro evento depois dela.
     this.#flushLoss(session, 'manual-exit');
-    this.#burnStamina(session);
+    this.#chargeElapsedTime(session);
 
     switch (event.kind) {
       case PLAYER_STEP: return this.#onPlayerStep(session, event.subject);
@@ -3447,21 +3545,37 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Stamina cai 1:1 com o tempo de hunt, e zerar NÃO encerra nada (§10.2). É a regra que mais
-   * parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
+   * Cobra o TEMPO de sessão decorrido: a stamina cai 1:1 com o tempo de hunt, e a comida
+   * (`fedMs`, #726) drena pelo mesmo `dtMs`. Zerar a stamina NÃO encerra nada (§10.2) — é a regra
+   * que mais parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
    * continua caçando, matando e apanhando — só para de ganhar XP.
    *
    * Cobrada pelo tempo LÓGICO decorrido desde a última cobrança, e não por um evento próprio:
    * é uma grandeza contínua, e um evento periódico daria a ela uma granularidade que ela não
    * tem. Assim a conta é exata em qualquer cadência, e o custo é uma subtração.
+   *
+   * **São duas grandezas com regras diferentes, numa âncora só.** A stamina queima por tempo só
+   * onde `topology.burnsStaminaByTime` diz (a instância; o mundo a queima ao ganhar XP, OW-46), e
+   * também só então vale o aviso `stamina-exhausted`. A comida é a `CONDITION_REGENERATION` do
+   * Canary, que conta o tempo com o jogador no jogo em qualquer modo — por isso drena SEMPRE,
+   * inclusive onde a chave é `false`: uma refeição que nunca acaba seria bug do mundo, e o
+   * `fedMs` é persistido. A âncora avança nos dois casos; um segundo acumulador para a mesma
+   * grandeza contínua é o que `food.ts` explica que não vale a pena.
+   *
+   * **A âncora anda com o evento, não com o relógio.** Enquanto há alguém dentro, sempre há evento
+   * (o passo do personagem se reagenda a cada passo, parado ou não) e o intervalo é curto. O mundo
+   * vazio não tem nenhum, e é por isso que `onEnter` cobra o intervalo dos que já estavam e leva a
+   * âncora para agora — `entering` é quem acabou de entrar e fica de fora da cobrança.
    */
-  #burnStamina(session: Session): void {
+  #chargeElapsedTime(session: Session, entering?: CharacterRuntime): void {
     const dtMs = session.nowMs - this.#staminaAnchorMs;
     if (dtMs <= 0) return;
     this.#staminaAnchorMs = session.nowMs;
+    const burnsStamina = this.#topology.burnsStaminaByTime;
     for (const character of session.participants) {
-      if (!character.alive) continue;
-      const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      // O que entra agora (`onEnter` do mundo) não estava aqui durante `dtMs`: não paga por ele.
+      if (!character.alive || character === entering) continue;
+      const exhausted = burnsStamina && drainStamina(character, dtMs, this.#options.stamina);
       // A comida drena pelo MESMO tempo de hunt decorrido (#726) — nunca por tick, e sem
       // relógio próprio: é o mesmo argumento de `drainStamina`, e reaproveitar o `dtMs` já
       // calculado aqui evita um segundo acumulador para a mesma grandeza contínua.
@@ -3472,7 +3586,7 @@ export class HuntRuleset implements Ruleset {
       // Vale a linha no extrato: daqui para a frente a hunt queima supply sem gerar nada, e
       // descobrir isso só pelo gold que sumiu é como o modo idle perde a confiança de quem
       // deixou o personagem rendendo.
-      session.record('stamina-exhausted', character.id);
+      session.record('stamina-exhausted', character.id, character.id);
     }
   }
 
@@ -3583,16 +3697,16 @@ export class HuntRuleset implements Ruleset {
     // até a próxima compra na Cidade.
     if (blessings > 0) {
       character.blessings = 0;
-      session.record('blessings-consumed', String(blessings));
+      session.record('blessings-consumed', String(blessings), character.id);
     }
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
       // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.
       session.credit(character.id, 'xpGained', -penalty.xpLost);
-      session.record('xp-penalty', String(penalty.xpLost));
+      session.record('xp-penalty', String(penalty.xpLost), character.id);
     }
     if (penalty.levelChange !== null) {
-      session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`);
+      session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`, character.id);
       // Descer de level reescreve `maxHealth` pela tabela (`retarget`), e a barra é anunciada
       // de TODO lugar que a escreve (FUN-109). A vida é zero — ele morreu —, mas o máximo
       // mudou, e o cliente que só recebeu o golpe fatal ficaria com um "0 / máximo do level
@@ -3602,9 +3716,11 @@ export class HuntRuleset implements Ruleset {
     // Skill (magic inclusive — é ela quem carrega a perda de mana gasta, ver `DeathPenalty` em
     // `progression.ts`) que perdeu tries: um registro por skill afetada (#569).
     for (const loss of penalty.skillLosses) {
-      session.record('skill-penalty', `${loss.skillId}/${String(loss.triesLost)}`);
+      session.record('skill-penalty', `${loss.skillId}/${String(loss.triesLost)}`, character.id);
       if (loss.levelChange !== null) {
-        session.record('skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`);
+        session.record(
+          'skill-down', `${loss.skillId}/${loss.levelChange.from} → ${loss.levelChange.to}`, character.id,
+        );
       }
     }
     // O Amulet of Loss é gasto DEPOIS da penalidade (#571): no Canary a conferência do colar lê o
@@ -3613,16 +3729,13 @@ export class HuntRuleset implements Ruleset {
     const spentAmulet = consumeLossAmulet(character, {
       progression: this.#options.progression, items: this.#options.items,
     });
-    if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId);
+    if (spentAmulet !== null) session.record('loss-amulet-consumed', spentAmulet.itemId, character.id);
 
-    // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
-    // (#193, ADR 0027 decisão 7) o morto SAI com o próprio extrato — penalidade dentro, e a
-    // cota do settlement (`onLeave`) — e a sessão continua para os outros.
-    if (session.participants.length <= 1) {
-      session.end('death');
-      return;
-    }
-    this.#depart(session, character.id, 'death');
+    // O que a morte faz com a SESSÃO é da topologia (OW-12). Na instância: solo — ou party que
+    // virou solo — encerra (§26.1), como sempre; em party (#193, ADR 0027 decisão 7) o morto SAI
+    // com o próprio extrato — penalidade dentro, e a cota do settlement (`onLeave`) — e a sessão
+    // continua para os outros.
+    this.#topology.onCharacterDied(session, character, this.#topologyHost);
   }
 
   /**
@@ -3654,27 +3767,35 @@ export class HuntRuleset implements Ruleset {
       session.record(
         'item-lost-on-death',
         `${item.itemId}/${String(item.quantity)}/${item.instanceId}/${character.id}`,
+        character.id,
       );
     }
     if (outcome.protectedBy === 'amulet') {
       const amulet = character.inventory.equippedAt('neck');
-      session.record('item-loss-protected', amulet?.itemId ?? 'amulet');
+      session.record('item-loss-protected', amulet?.itemId ?? 'amulet', character.id);
     } else if (outcome.protectedBy === 'blessings') {
-      session.record('item-loss-protected', 'blessings');
+      session.record('item-loss-protected', 'blessings', character.id);
     }
-    if (outcome.replacement !== null) session.record('backpack-replaced', outcome.replacement.itemId);
+    if (outcome.replacement !== null) {
+      session.record('backpack-replaced', outcome.replacement.itemId, character.id);
+    }
   }
 
   /**
    * O id de uma instância NOVA criada por esta sessão para o personagem (`lootSeq`): o prefixo
    * `${session.id}:` é o que `acquiredBy` filtra para virar linha de `item_instance`, e em party
-   * o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam. Mesmo formato de
-   * `#instantiateCorpseItems` e `#useChest`; o critério é o TIPO de sessão, não a contagem.
+   * o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam. É o ÚNICO ponto que cunha
+   * id (o loot de cadáver, o baú de quest e a bolsa de reposição da morte passam por aqui); o
+   * critério é o TIPO de sessão, não a contagem de presentes: party (`partyOptions`) ou uma
+   * topologia que o declare (`namesOwnerInItemIds` — o mundo, sempre: não tem party e é a sessão
+   * onde muitos personagens, e o mesmo em logins seguidos, cunham ids). A instância solo fica no
+   * `${session.id}:${seq}` de sempre.
    */
   #newInstanceId(session: Session, character: CharacterRuntime): string {
-    return this.#party !== undefined
-      ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
-      : `${session.id}:${String(character.lootSeq++)}`;
+    const seq = String(character.lootSeq++);
+    return this.#party !== undefined || this.#topology.namesOwnerInItemIds
+      ? `${session.id}:${character.id}:${seq}`
+      : `${session.id}:${seq}`;
   }
 
   /**
@@ -3700,7 +3821,7 @@ export class HuntRuleset implements Ruleset {
       const runner = this.#runners.get(member.id);
       if (runner === undefined) continue;
       if (!runner.exitRules.some((rule) => rule.id === 'party-member-lost')) continue;
-      session.record('exit-rule', 'party-member-lost');
+      session.record('exit-rule', 'party-member-lost', member.id);
       const departure = session.leave(member.id, 'exit-rule');
       if (departure === null) continue;
       // O `onLeave` deste marcou pendência de novo; a cascata É este laço, então a limpa.
@@ -4961,6 +5082,13 @@ export class HuntRuleset implements Ruleset {
       return posture;
     }
 
+    // Sem rota (a topologia decide: o mundo não a tem, ADR 0060 d.4), o personagem fez tudo o que
+    // podia — combate, andar-até, follow e postura — e, sem alvo, fica onde está.
+    if (!this.#topology.runsRouteWalker) {
+      this.#armPlayerAttack(session, character);
+      return null;
+    }
+
     // Ninguém ao alcance: anda. Com postura `stand` o personagem NÃO persegue — ele percorre a
     // rota e deixa o monstro vir. É o que dispensa pathfinding dos dois lados (ADR 0009).
     runner.walker.resume();
@@ -4981,7 +5109,7 @@ export class HuntRuleset implements Ruleset {
         runner.walker.hold();
         if (!runner.routeBlockedWarned) {
           runner.routeBlockedWarned = true;
-          session.record('route-blocked', character.id);
+          session.record('route-blocked', character.id, character.id);
         }
         return null;
       }
@@ -6249,6 +6377,8 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, action: BotAction | BotActionV2,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /** O item que a Chameleon Rune aponta (#621) — só a runa `chameleon` o lê. */
+    itemInstanceId?: string,
   ): CastResult {
     switch (action.kind) {
       // `monsterId` (#598, M38-01, ADR 0057 decisão 4) só existe no vocabulário v2 — a v1 não
@@ -6257,7 +6387,9 @@ const slots = bot.groups.get(group);
         session, character, action.spellId, recipient, explicit,
         'monsterId' in action ? action.monsterId : undefined,
       );
-      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient, explicit);
+      case 'supply': return this.#useSupply(
+        session, character, action.supplyId, recipient, explicit, itemInstanceId,
+      );
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -6297,8 +6429,19 @@ const slots = bot.groups.get(group);
    */
   #resolveManualTarget(
     session: Session, character: CharacterRuntime, action: BotAction, target: UseSlotTarget | undefined,
-  ): { ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint }
-    | { ok: false; reason: SlotRefusal } | null {
+  ): {
+    ok: true; recipient?: CharacterRuntime; explicit?: MonsterRuntime | FloorPoint;
+    itemInstanceId?: string;
+  } | { ok: false; reason: SlotRefusal } | null {
+    // A Chameleon Rune (#621) mira um ITEM do personagem, nunca criatura nem tile: o único alvo que
+    // ela lê é `{ kind: 'item' }`. Qualquer outra mira (ou nenhuma) não a recusa aqui — `useSupply`
+    // devolve `not-illusionable` ("item nenhum apontado"), o `RETURNVALUE_NOTPOSSIBLE` do Lua.
+    if (action.kind === 'supply'
+      && this.#options.supplies.get(action.supplyId)?.effect.kind === 'chameleon') {
+      return target?.kind === 'item' ? { ok: true, itemInstanceId: target.instanceId } : null;
+    }
+    // Um item apontado numa ação que não é a Chameleon é ruído (RF-12), ignorado sem recusa.
+    if (target?.kind === 'item') return null;
     // Find Person (#623): o "nome" do Canary é o personagem que o jogador MIROU. O alvo vira o
     // `recipient` — o mesmo canal da cura de amigo —, e qualquer outra mira (monstro, tile, criatura
     // que já saiu de vista, ninguém) é o nome que `getPlayerByNameWildcard` não acha. Essa recusa
@@ -6456,6 +6599,15 @@ const slots = bot.groups.get(group);
       if (summonMonster === undefined || !summonMonster.summonable) return NOT_SUMMONABLE;
       if (this.#playerSummonCountOf(character.id) >= PLAYER_SUMMON_CAP) return NOT_SUMMONABLE;
     }
+    // A ilusão (#621, Creature Illusion): o PARÂMETRO é o monstro a imitar, e a conferência é a de
+    // `creature_illusion.lua` — o monstro existe (`MonsterType(variant:getString())`) e é
+    // `illusionable` (`monsterType:isIllusionable()`, sem a exceção `PlayerFlag_CanIllusionAll`,
+    // que é do GM). Recusa ANTES da mana, dentro de `castSpell` (`illusionLook` ausente).
+    let illusionLook: OutfitLook | undefined;
+    if (spell.effect.kind === 'illusion') {
+      const illusionMonster = monsterId === undefined ? undefined : this.#options.monsters.get(monsterId);
+      if (illusionMonster?.illusionable === true) illusionLook = { monsterId: illusionMonster.id };
+    }
 
     // O familiar (#599, M38-02, ADR 0057 d.3; `Player:CreateFamiliarSpell`): o cooldown de PAREDE é
     // conferido primeiro — no Canary é a `CONDITION_SPELLCOOLDOWN`, que o framework confere antes
@@ -6521,6 +6673,7 @@ const slots = bot.groups.get(group);
       undefined, summonMonster?.manaCost, precondition,
       // As utilitárias (#623) recusam pelo que só este ruleset vê — mapa, overlay e sessão.
       this.#utilityRefusalOf(character, spell.effect, recipient, session.nowMs),
+      illusionLook,
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4) — o custo REAL: o do
@@ -6785,7 +6938,7 @@ const slots = bot.groups.get(group);
         instanceId: this.#newInstanceId(session, character), itemId, quantity: 1,
       };
       if (!character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) {
-        session.record('food-not-carried', itemId);
+        session.record('food-not-carried', itemId, character.id);
       }
     }
     session.emit({ kind: 'equipment-changed', characterId: character.id });
@@ -6938,12 +7091,15 @@ const slots = bot.groups.get(group);
       // comentário acima. Ela nunca zera `alive` ao sumir, então a checagem certa é presença no
       // índice vivo da instância, não `monster.alive`.
       if (this.#monsterBySubject.get(monster.subject) !== monster) continue;
-      const outcome = hitOutcomes[i];
+      const resolved = hitOutcomes[i];
       // Defensivo: `hitOutcomes` nasce do MESMO laço que `hits` em `castSpell`/`useSupply`, os
       // dois sempre do mesmo tamanho — mas um índice sem outcome não aplica nada, em vez de
       // arriscar `undefined` em `applyDamageOutcome`.
-      if (outcome === undefined) continue;
-      const damage = hits[i] ?? 0;
+      if (resolved === undefined) continue;
+      // O Hazard (#632), por alvo: a esquiva do monstro de zona some com o golpe inteiro dele — e o
+      // recorde da magia conta o que de fato saiu, como o `bestSpellHit` já contava o resolvido.
+      const outcome = this.#hazardOnPlayerHit(session, monster, resolved);
+      const damage = outcome === resolved ? hits[i] ?? 0 : outcome.resolvedDamage;
       // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
       session.credit(character.id, 'bestSpellHit', damage);
@@ -7315,6 +7471,33 @@ const slots = bot.groups.get(group);
     if (condition.key === INVISIBLE_CONDITION_KEY && previous === null) {
       this.#scheduleVisibilityThinks(session, target);
     }
+    // A aparência emprestada (#621, `ConditionOutfit::startCondition`/`addCondition`): a criatura
+    // muda de aparência AGORA — na primeira aplicação e em toda que vence a anterior (`strongest`
+    // manteve a dela: a saída acima, sem evento, como `updateCondition` devolvendo `false`).
+    if (condition.key === OUTFIT_CONDITION_KEY && condition.look !== undefined) {
+      this.#emitLook(session, target, condition.look);
+    }
+  }
+
+  /**
+   * A criatura trocou de aparência (#621): `look` é o que ela veste AGORA, ou `null` quando volta
+   * à dela. Só apresentação — nenhuma conta de combate lê o outfit (`ConditionOutfit` não mexe
+   * em número nenhum) —, então nada aqui muda o resultado de quem não assiste (invariante 3).
+   */
+  #emitLook(session: Session, target: ConditionTarget, look: OutfitLook | null): void {
+    session.emit({ kind: 'creature-look-changed', creatureId: this.#subjectOf(target), look });
+  }
+
+  /**
+   * A aparência emprestada de uma criatura agora (#621), ou `null` quando ela veste a dela —
+   * `creatureId` é o `subject` do monstro (`m:<id>`) ou o `characterId`. É a leitura do HOSPEDEIRO
+   * para quem entra na tela no meio de uma ilusão (`creature-appear`/`session-state`): o estado
+   * mora na condição, nunca num campo de apresentação que dependeria de haver alguém olhando.
+   */
+  lookOf(session: Session, creatureId: string): OutfitLook | null {
+    const monster = this.#monsterBySubject.get(creatureId);
+    if (monster !== undefined) return monster.alive ? monster.conditions.look() : null;
+    return findById(session.participants, creatureId)?.conditions.look() ?? null;
   }
 
   /**
@@ -7445,8 +7628,11 @@ const slots = bot.groups.get(group);
   #onConditionExpire(session: Session, subject: string): void {
     const separator = subject.lastIndexOf('/');
     if (separator < 0) return;
-    this.#conditionTargetOf(session, subject.slice(0, separator))
-      ?.conditions.remove(subject.slice(separator + 1));
+    const target = this.#conditionTargetOf(session, subject.slice(0, separator));
+    if (target === null) return;
+    const removed = target.conditions.remove(subject.slice(separator + 1));
+    // A ilusão acabou (#621, `ConditionOutfit::endCondition`): a criatura volta à aparência dela.
+    if (removed?.look !== undefined) this.#emitLook(session, target, null);
   }
 
   /**
@@ -7495,11 +7681,18 @@ const slots = bot.groups.get(group);
       // morreu não tem atacante.
       const owner = condition.sourceId === undefined
         ? undefined : this.#monsterBySubject.get(condition.sourceId);
-      const charmed = owner !== undefined && owner.alive && this.#charmStage()
+      //
+      // O Hazard (#632) também vale no tique de um monstro de hazard VIVO (`ConditionDamage::
+      // doDamage` chama o mesmo `combatChangeHealth`), antes dos charms — e, como no golpe, o que
+      // ele marca como extensão não rola charm defensivo.
+      const hazardTick = owner !== undefined && owner.alive
+        ? this.#hazardOnMonsterHit(session, owner, target, resolved)
+        : { outcome: resolved, extension: false };
+      const charmed = owner !== undefined && owner.alive && this.#charmStage() && !hazardTick.extension
         ? this.#rollDefensiveCharms(
-          session, owner, target, intent.damageType, tick.amount, resolved,
+          session, owner, target, intent.damageType, tick.amount, hazardTick.outcome,
         )
-        : resolved;
+        : hazardTick.outcome;
       // O Parry pode matar o dono do tique: a morte é resolvida DEPOIS do golpe, como em
       // `#executeMonsterAbility`.
       const resolveOwnerDeath = (): void => {
@@ -7529,10 +7722,16 @@ const slots = bot.groups.get(group);
       resolveOwnerDeath();
       return;
     }
-    const outcome = resolveDamage(
+    const resolvedTick = resolveDamage(
       intent, this.#monsterDefender(target), 'pve', this.#options.combat, session.rng,
       session.nowMs,
     );
+    // O Hazard (#632) vale para o tique cujo dono é um PERSONAGEM (`ConditionDamage::doDamage` com o
+    // jogador como atacante): a esquiva do monstro de zona. Tique de campo ou de monstro não.
+    const outcome = condition.sourceId !== undefined
+      && findById(session.participants, condition.sourceId) !== null
+      ? this.#hazardOnPlayerHit(session, target, resolvedTick)
+      : resolvedTick;
     // O tique de condição/campo também passa pelo cano único do dano no monstro — um monstro
     // preso que leva dano de um campo em que PODE pisar (ex.: fogo, enquanto preso atrás de um
     // de veneno) ganha a passagem temporária pelo campo que o prende, e o invisível que leva
@@ -7582,7 +7781,14 @@ const slots = bot.groups.get(group);
    */
   #cancelConditions(session: Session, target: ConditionTarget): void {
     this.#cancelConditionEvents(session, target);
-    for (const condition of target.conditions.getState()) target.conditions.remove(condition.key);
+    for (const condition of target.conditions.getState()) {
+      target.conditions.remove(condition.key);
+      // O personagem que morre disfarçado volta à aparência dele (#621); o monstro que morreu some
+      // da tela de qualquer jeito, e um `creature-update` a mais só sujaria o fio.
+      if (condition.look !== undefined && target instanceof CharacterRuntime) {
+        this.#emitLook(session, target, null);
+      }
+    }
   }
 
   /**
@@ -7666,7 +7872,8 @@ const slots = bot.groups.get(group);
       const subject = conditionSubject(id, type);
       session.cancelEvent(CONDITION_EXPIRE, subject);
       session.cancelEvent(CONDITION_TICK, subject);
-      target.conditions.remove(type);
+      const removed = target.conditions.remove(type);
+      if (removed?.look !== undefined) this.#emitLook(session, target, null);
       // O `endCondition` do medo (M44-04, #622): a caminhada forçada para e a imunidade de 10 s
       // começa, seja qual for quem removeu a condição — o Cleanse, uma cura ou uma magia.
       if (type === FEARED_CONDITION_KEY && target instanceof CharacterRuntime) {
@@ -8259,6 +8466,12 @@ const slots = bot.groups.get(group);
     session: Session, character: CharacterRuntime, supplyId: string,
     recipient: CharacterRuntime = character,
     explicit?: MonsterRuntime | FloorPoint,
+    /**
+     * O item que a Chameleon Rune aponta (#621): a INSTÂNCIA que o personagem carrega, resolvida
+     * aqui em `{ itemId }` — só o ruleset enxerga o inventário (invariante 1). Uma instância que
+     * ele não tem é item nenhum apontado, e `useSupply` recusa `not-illusionable`.
+     */
+    itemInstanceId?: string,
   ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
@@ -8302,9 +8515,12 @@ const slots = bot.groups.get(group);
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
     const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
+    const pointedItemId = itemInstanceId === undefined || supply.effect.kind !== 'chameleon'
+      ? null : character.inventory.itemIdOf(itemInstanceId);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
       recipient, session.nowMs, this.#attackerModifiers(character), summonRune?.check,
+      pointedItemId === null ? undefined : { itemId: pointedItemId },
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -8410,7 +8626,7 @@ const slots = bot.groups.get(group);
       const runner = this.#runnerOf(character.id);
       if (!runner.warnedNoGold) {
         runner.warnedNoGold = true;
-        session.record('supply-unaffordable', supply.id);
+        session.record('supply-unaffordable', supply.id, character.id);
       }
     }
     return result;
@@ -8856,7 +9072,7 @@ const slots = bot.groups.get(group);
           // A automação voltou a agir: o aviso saiu da transição, e a próxima vez que ela
           // bloquear no mesmo motivo volta a valer como notícia.
           runner.automationWarned.delete(automation.model);
-          session.record(outcome.event, outcome.detail);
+          session.record(outcome.event, outcome.detail, character.id);
         } else if (outcome.kind === 'blocked') {
           // Só a TRANSIÇÃO registra (#420): uma automação bloqueada por 8 h é UMA linha no
           // extrato, não uma por ciclo. Sem isto, `notableEvents` crescia sem teto e era
@@ -8864,7 +9080,7 @@ const slots = bot.groups.get(group);
           const key = `${outcome.reason}:${outcome.itemId}`;
           if (runner.automationWarned.get(automation.model) !== key) {
             runner.automationWarned.set(automation.model, key);
-            session.record('automation-blocked', `${automation.model}:${key}`);
+            session.record('automation-blocked', `${automation.model}:${key}`, character.id);
           }
         } else {
           // `idle`: a automação saiu do bloqueio sem agir (o alvo vivo, o HP voltou). Limpa o
@@ -9097,7 +9313,7 @@ const slots = bot.groups.get(group);
     const definition = this.#options.items.get(equipped.itemId);
     if (definition?.durationMs === undefined) return;
     character.inventory.destroy(slot);
-    session.record('item-expired', equipped.itemId);
+    session.record('item-expired', equipped.itemId, characterId);
     session.emit({ kind: 'equipment-changed', characterId });
     // O slot esvaziou: a renovação (AB-08) acontece no MESMO despacho, via `#armAutomations`.
     this.#armAutomations(session, characterId);
@@ -9135,7 +9351,7 @@ const slots = bot.groups.get(group);
       || (definition.absorb?.[damageType]?.percent ?? 0) > 0;
     if (!protects) return;
     if (character.inventory.consumeCharge(slot, definition.charges) > 0) return;
-    session.record(recordType, equipped.itemId);
+    session.record(recordType, equipped.itemId, character.id);
     session.emit({ kind: 'equipment-changed', characterId: character.id });
   }
 
@@ -9539,6 +9755,13 @@ const slots = bot.groups.get(group);
     session: Session, monster: MonsterRuntime, ability: MonsterAbility,
     primary: CharacterRuntime | MonsterRuntime,
   ): void {
+    // O ataque `outfit` (#621) não é um golpe: sem dano, sem defesa, sem sorteio — é uma condição
+    // NÃO agressiva, e o que ela atinge é outro conjunto de criaturas. Sai aqui, antes do
+    // pipeline de dano.
+    if (ability.condition?.effect.kind === 'outfit') {
+      this.#executeOutfitAbility(session, monster, ability, ability.condition, primary);
+      return;
+    }
     const subject = monster.subject;
     // O conjunto de presas de uma ability em ÁREA (#598, ADR 0057 decisão 1): estendido pelas
     // invocações de personagem VIVAS, como `#chooseMonsterTarget` — mesma referência de
@@ -9707,10 +9930,17 @@ const slots = bot.groups.get(group);
       // Os charms defensivos (#603, `combat-v4`): DEPOIS do `blockHit` e do reflexo, ANTES do mana
       // shield que `#applyMonsterHit` aplica. `null` é o Void Inversion (o dreno virou ganho de
       // mana): nenhum golpe a aplicar.
+      //
+      // O Hazard (#632) vem ANTES dos charms, como `handleHazardSystemAttack` em
+      // `Game::combatChangeHealth`: o crítico e o reforço do monstro de zona, e o golpe que eles
+      // marcam como extensão não rola charm defensivo (`!damage.extension`).
+      const hazardHit = this.#hazardOnMonsterHit(session, monster, character, result);
       const charmStage = this.#charmStage();
-      const landed = charmStage
-        ? this.#rollDefensiveCharms(session, monster, character, ability.damageType, rawDamage, result)
-        : result;
+      const landed = charmStage && !hazardHit.extension
+        ? this.#rollDefensiveCharms(
+          session, monster, character, ability.damageType, rawDamage, hazardHit.outcome,
+        )
+        : hazardHit.outcome;
       if (landed !== null) {
         this.#applyMonsterHit(session, subject, character, ability, defender, landed, source);
       }
@@ -9744,6 +9974,65 @@ const slots = bot.groups.get(group);
   }
 
   /**
+   * O ataque `outfit` de um monstro (#621, M44-03): veste a aparência de outro monstro (ou de um
+   * objeto) em quem a ability atinge. No Canary é `combat->setParam(COMBAT_PARAM_AGGRESSIVE, 0)` +
+   * `addCondition(ConditionOutfit)` (`Monsters::deserializeSpell`, `monsters.cpp:156-182`) — e o
+   * que isso muda, diante de uma ability agressiva, é QUEM entra:
+   *
+   * - **não agressiva**: `Combat::CombatFunc` só exclui o lançador (`caster != creature`) quando
+   *   `params.aggressive` — aqui todo mundo na forma entra, o LANÇADOR inclusive, e os outros
+   *   MONSTROS também (a ilusão do Halloween Hare vira os bichos em volta dele). Sem forma é o
+   *   alvo principal (`castSpell(creature, target)` sem área → `doCombat(creature, target)`);
+   * - **sem dano nem defesa**: `combatType` é `COMBAT_NONE` → `CombatNullFunc` → só
+   *   `CombatConditionFunc`, que NÃO rola bloqueio, esquiva nem crítico. O único sorteio que sai
+   *   daqui, além do `chance` que quem chamou já rolou, é o do **Cleanse**: o primeiro bloco da
+   *   `CombatConditionFunc` (`combat.cpp:1039-1062`) roda para QUALQUER condição de monstro num
+   *   jogador, o `outfit` inclusive — com o charm atribuído a este monstro e uma condição
+   *   limpável ativa, ele rola, remove uma, dá os 11 s de imunidade e `return`a SEM vestir a
+   *   aparência (`#cleanseBeforeCondition`, a mesma peça e a mesma ordem de sorteio do golpe);
+   * - **a imunidade** é `!target->isImmune(CONDITION_OUTFIT)` — exceto `caster == target`, que a
+   *   pula (`#applyConditionTo` com `fromCombat`, e `sourceId` = o próprio monstro).
+   *
+   * O alvo de uma forma tem visão livre do lançador, como o de toda ability (#553, RF-05).
+   */
+  #executeOutfitAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility, spec: ConditionSpec,
+    primary: CharacterRuntime | MonsterRuntime,
+  ): void {
+    const subject = monster.subject;
+    const from = this.#at(monster);
+    const candidates: readonly (CharacterRuntime | MonsterRuntime)[] = [
+      ...session.participants, ...this.#monsters,
+    ];
+    const targets = abilityTargets(ability, from, primary, candidates)
+      .filter((target) => target === monster || isSightClear(this.#world.map, from, this.#at(target)));
+    session.emit({
+      kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id, casterPosition: from,
+      targets: targets.map((target) => ({
+        creatureId: target instanceof MonsterRuntime ? target.subject : target.id,
+        position: this.#at(target),
+      })),
+      tiles: abilityTiles(ability, from, this.#at(primary)),
+      ...(ability.presentation?.missileKey === undefined
+        ? {} : { missileKey: ability.presentation.missileKey }),
+      ...(ability.presentation?.impactKey === undefined
+        ? {} : { impactKey: ability.presentation.impactKey }),
+    });
+    const charmStage = this.#charmStage();
+    for (const target of targets) {
+      if (!target.alive) continue;
+      // O Cleanse (#603) é do jogador atingido, nunca de monstro: `targetPlayer && casterMonster`.
+      // Se limpou uma condição dele, a aparência NÃO entra — o `return` do Canary aborta toda a
+      // `conditionList` da ability, e aqui ela só tem o `outfit`.
+      if (charmStage && target instanceof CharacterRuntime
+        && this.#cleanseBeforeCondition(session, monster, target, ability)) continue;
+      this.#applyConditionTo(session, target, conditionFromSpec(
+        spec, this.#subjectOf(target), subject, session.nowMs, 'monster-attack',
+      ), true);
+    }
+  }
+
+  /**
    * A SEGUNDA resolução do reflexo (#552, M30-05): o dano que o equipamento do personagem devolve
    * ao monstro que o atacou. É uma EXTENSÃO (`reflectedDamageIntent`): passa por `resolveDamage`
    * contra a defesa do monstro sem bloqueio por defesa/armadura, nunca reflete de volta, não
@@ -9757,10 +10046,12 @@ const slots = bot.groups.get(group);
   #reflectOntoMonster(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
-    const outcome = resolveDamage(
+    // O reflexo do personagem é um golpe DELE no monstro (`combatChangeHealth` com o jogador como
+    // atacante): a esquiva do Hazard (#632) também o alcança.
+    const outcome = this.#hazardOnPlayerHit(session, monster, resolveDamage(
       reflectedDamageIntent(reflected), this.#monsterDefender(monster), 'pve', this.#options.combat,
       session.rng, session.nowMs,
-    );
+    ));
     const applied = this.#drainMonster(session, monster, outcome, null);
     recordDamage(monster.contribution, character.id, applied.healthDamage);
     session.emit({
@@ -10728,7 +11019,7 @@ const slots = bot.groups.get(group);
         if (!rule.when(view)) continue;
         // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
         // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
-        session.record('exit-rule', rule.id);
+        session.record('exit-rule', rule.id, character.id);
         this.#beginExit(session, character.id, 'exit-rule');
         break;
       }
@@ -10769,11 +11060,9 @@ const slots = bot.groups.get(group);
       return;
     }
     runner.pendingExit = null;
-    if (session.participants.length <= 1) {
-      if (session.ended === null) session.end(reason);
-      return;
-    }
-    this.#depart(session, characterId, reason);
+    // Solo encerra a sessão com o motivo dele; em party ele sai com o extrato e ela continua — e
+    // no mundo nenhum dos dois: a decisão é da topologia (OW-12).
+    this.#topology.onExitFinished(session, characterId, reason, this.#topologyHost);
   }
 
   // --- combate ------------------------------------------------------------------------------
@@ -11097,6 +11386,135 @@ const slots = bot.groups.get(group);
     );
   }
 
+  // --- Hazard (#632, M44-14, ADR 0052 d.7) -----------------------------------------------------
+  //
+  // O nível de perigo de uma hunt com `hazardZoneId`: o crítico e o reforço do monstro, a esquiva do
+  // monstro, a XP e as rolagens extras de loot — os estágios do `combat-v4` em
+  // `docs/product/combat-conformance.md` ("Estágio #632"), com a matemática em `combat/hazard.ts`.
+  // A zona do Canary é uma caixa de coordenadas; aqui é a hunt inteira (`HazardZone`), então todo
+  // monstro que nasce nela é um monstro de hazard, como o `HazardMonster.onSpawn` decidiria por
+  // posição. Sem a zona, ou fora do `combat-v4`, o custo é um `undefined` e nenhum sorteio.
+
+  /** O Hazard liga nesta hunt? Há zona E o perfil é o `combat-v4` (invariante 7). */
+  #hazardOn(): boolean {
+    return this.#options.hazard !== undefined
+      && hasHazardStage(this.#options.combat.compatibilityProfile);
+  }
+
+  /**
+   * O nível de hazard que vale para a party: o MENOR entre os membros (`Party:refreshHazard` e os
+   * laços de `parseAttackRecvHazardSystem`/`parseAttackDealtHazardSystem` do Canary). Cada um traz
+   * o que escolheu na Cidade (`CharacterRuntime.hazard`), fixo enquanto a hunt dura — a escolha só
+   * é aceita fora dela (`HostedSession`, ADR 0052 d.5). Sem participante (impossível numa hunt
+   * viva) vale o `minLevel`, como o `getHazardPlayerAndPoints` sem jogador no mapa de dano.
+   */
+  #hazardPoints(session: Session): number {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined) return 0;
+    let points = Number.POSITIVE_INFINITY;
+    for (const member of session.participants) {
+      points = Math.min(points, member.hazard.currentLevelOf(hazard.zoneId, hazard.zone));
+    }
+    return Number.isFinite(points) ? points : hazard.zone.minLevel;
+  }
+
+  /**
+   * O Hazard num golpe de MONSTRO que acertou o jogador (`parseAttackRecvHazardSystem`): o crítico
+   * e o reforço de dano, DEPOIS do `blockHit` e do reflexo, ANTES dos charms defensivos e do mana
+   * shield. `extension` é o que faz o Canary pular os charms defensivos — ver `HazardMonsterHit`.
+   */
+  #hazardOnMonsterHit(
+    session: Session, attacker: MonsterRuntime, character: CharacterRuntime, outcome: DamageOutcome,
+  ): { readonly outcome: DamageOutcome; readonly extension: boolean } {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined || !this.#hazardOn() || !isHazardMonster(attacker)) {
+      return { outcome, extension: false };
+    }
+    const hit = applyHazardToMonsterHit(
+      outcome, this.#hazardPoints(session), hazard.config, hazard.zone, session.rng,
+      session.nowMs, character.hazardCriticalAtMs,
+    );
+    if (hit.criticalAtMs !== null) character.hazardCriticalAtMs = hit.criticalAtMs;
+    return hit;
+  }
+
+  /**
+   * O Hazard num golpe do JOGADOR num monstro de hazard (`parseAttackDealtHazardSystem`): a
+   * esquiva do monstro (o golpe inteiro some, e o `blockHit` já gastou o que tinha de gastar) e a
+   * defesa da zona. DEPOIS do `blockHit`, ANTES de a vida do monstro mudar — `negatedOutcome`
+   * mantém o reflexo e a cura por elemento, que o Canary decide no bloqueio, antes do Hazard.
+   */
+  #hazardOnPlayerHit(session: Session, target: MonsterRuntime, outcome: DamageOutcome): DamageOutcome {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined || !this.#hazardOn() || !isHazardMonster(target)) return outcome;
+    return applyHazardToPlayerHit(
+      outcome, this.#hazardPoints(session), hazard.config, hazard.zone, session.rng,
+    ).outcome;
+  }
+
+  /**
+   * O que a morte de um monstro de hazard faz (#632): a subida de nível (`creaturescripts_the_
+   * primal_menace_killed.lua`) e o que `hazard_primal.lua` rola na morte — o casulo e o Plunder
+   * Patriarch. Chamado no FIM de `#onMonsterDied`, com o morto já fora dos índices (como o Carnage).
+   *
+   * O nível que conta é o dos que FERIRAM o monstro — o `getHazardPlayerAndPoints(damageMap)` do
+   * Canary: o MENOR `current-level` entre eles (sem nenhum, o `minLevel`).
+   *
+   * **A subida** (só quando o monstro é o `levelUpMonsterId` da zona): cada feridor cujo teto
+   * desbloqueado é IGUAL a esse nível sobe o teto em um (`Hazard:levelUp`, que por sua vez só sobe
+   * quando o nível escolhido também é o teto).
+   *
+   * **Casulo e Plunder**, nesta ordem e com duas rolagens: `random(1, 10000) <= nível × podDrop` é o
+   * casulo — e ele ENCERRA a morte, sem Plunder —, e depois `random(1, 100000) <= nível × plunder` faz
+   * nascer o Plunder Patriarch no tile livre mais próximo. **O casulo em si fica de fora**: ele é
+   * um item no chão que vira Fungosaurus em 4 s (ou causa dano a quem o pisa entre 2 e 4 s), e o
+   * Draconya ainda não tem item no chão além do cadáver (ADR 0048 d.8) — a direção da issue o
+   * adia. A rolagem dele continua consumida e continua impedindo o Plunder, porque é ela que dá ao
+   * Plunder a chance que o Canary dá. O portão `isRewardBoss` do Lua vale (`MonsterDefinition.
+   * rewardBoss`): a morte do próprio Plunder Patriarch, que é um chefe de recompensa, não rola nada.
+   */
+  #hazardOnMonsterDeath(
+    session: Session, dead: MonsterRuntime, credit: KillCredit,
+  ): void {
+    const hazard = this.#options.hazard;
+    if (hazard === undefined) return;
+    const { zoneId, zone, config } = hazard;
+    const damagers = session.participants.filter((p) => credit.damageByActor[p.id] !== undefined);
+    let points = Number.POSITIVE_INFINITY;
+    for (const damager of damagers) {
+      points = Math.min(points, damager.hazard.currentLevelOf(zoneId, zone));
+    }
+    if (!Number.isFinite(points)) points = zone.minLevel;
+
+    if (zone.levelUpMonsterId !== undefined && dead.monsterId === zone.levelUpMonsterId) {
+      // Quem decide se o detalhe nomeia o dono é a topologia (`namesOwnerInEvents`, OW-12).
+      const namesOwner = this.#topology.namesOwnerInEvents(session);
+      for (const damager of damagers) {
+        if (damager.hazard.maxLevelOf(zoneId, zone) !== points) continue;
+        if (!damager.hazard.levelUp(zoneId, zone)) continue;
+        const detail = `${zoneId}/${String(damager.hazard.maxLevelOf(zoneId, zone))}`;
+        session.record('hazard-level-up', namesOwner ? `${damager.id}/${detail}` : detail, damager.id);
+      }
+    }
+
+    // O chefe de recompensa NÃO rola casulo nem Plunder (`PrimalHazardDeath`: "don't spawn pods or
+    // plunder if the monster is a reward boss"): sem as duas rolagens e sem gerar outro. O
+    // próprio Plunder Patriarch é um — a flag vem do Canary (`flags.rewardBoss`). Depois da subida
+    // de nível, que é outro script (`the_primal_menace_killed`) e não confere a flag.
+    if (this.#options.monsters.get(dead.monsterId)?.rewardBoss === true) return;
+    if (zone.plunderMonsterId === undefined || points < 1) return;
+    if (session.rng.integer(1, 10_000) <= points * config.podDropMultiplier) return;
+    if (session.rng.integer(1, 100_000) > points * config.plunderSpawnMultiplier) return;
+    const definition = this.#options.monsters.get(zone.plunderMonsterId);
+    if (definition === undefined) return;
+    const blocked = this.#summonBlockedFor();
+    for (const tile of tilesAround(dead.position, PLUNDER_SPAWN_RADIUS)) {
+      if (blocked(tile.x, tile.y, tile.z)) continue;
+      this.#spawnMonster(session, definition, tile, null);
+      return;
+    }
+  }
+
   // --- Charms em combate (#603, M39-03, ADR 0053 d.5) -----------------------------------------
   //
   // As rolagens e a ordem são as do Canary (`Game::combatChangeHealth`/`applyCharmRune`,
@@ -11202,7 +11620,9 @@ const slots = bot.groups.get(group);
   ): void {
     if (amount <= 0 || !monster.alive) return;
     const increase = neutral ? undefined : this.#attackerModifiers(character)?.increase;
-    const outcome = resolveDamage(
+    // O Hazard (#632) também vale para o dano do charm: no Canary ele passa por
+    // `Combat::doCombatHealth` → `combatChangeHealth`, onde a esquiva do monstro de zona roda.
+    const outcome = this.#hazardOnPlayerHit(session, monster, resolveDamage(
       {
         rawDamage: amount, source: 'charm', damageType, blockable: MAGIC_BLOCK_FLAGS,
         extension: true,
@@ -11210,7 +11630,7 @@ const slots = bot.groups.get(group);
         ...(increase === undefined ? {} : { modifiers: { increase } }),
       },
       this.#monsterDefender(monster), 'pve', this.#options.combat, session.rng, session.nowMs,
-    );
+    ));
     // O cano único do dano no monstro (`Monster::drainHealth`): o charm também revela o invisível
     // e arma o bypass de campo, como qualquer outro dano.
     const applied = this.#drainMonster(session, monster, outcome, null);
@@ -11650,8 +12070,11 @@ const slots = bot.groups.get(group);
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
   #land(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    outcome: DamageOutcome, source: 'melee' | 'spell',
+    resolved: DamageOutcome, source: 'melee' | 'spell',
   ): void {
+    // O Hazard (#632): a esquiva do monstro de zona e a defesa dela, DEPOIS do `blockHit` (que
+    // `resolved` já traz) e ANTES de a vida do monstro mudar. Sem hazard é o mesmo objeto.
+    const outcome = this.#hazardOnPlayerHit(session, monster, resolved);
     // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
     // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
     // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
@@ -11722,10 +12145,13 @@ const slots = bot.groups.get(group);
   #reflectOntoCharacter(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime, reflected: ReflectedDamage,
   ): void {
-    const outcome = resolveDamage(
+    const resolved = resolveDamage(
       reflectedDamageIntent(reflected), this.#playerDefender(character, session), 'pve',
       this.#options.combat, session.rng, session.nowMs,
     );
+    // O reflexo do monstro de hazard também é um golpe dele no jogador (`combatChangeHealth`):
+    // o Hazard (#632) o reforça como a qualquer outro.
+    const outcome = this.#hazardOnMonsterHit(session, monster, character, resolved).outcome;
     const applied = applyDamageOutcome(
       character, outcome, null, character.conditions.damageTakenScale(),
       this.#hasEnergyShield(character),
@@ -11856,7 +12282,7 @@ const slots = bot.groups.get(group);
     // por `getBaseMagicLevel()`. Os pontos já são reais: nada a arredondar.
     const rate = skillRateFor(this.#options.progression.rates, definition.id, character.skills.levelOf(definition));
     if (character.skills.gain(definition, rate === 1 ? points : points * rate, factor) > 0) {
-      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
+      session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`, character.id);
     }
   }
 
@@ -11900,21 +12326,18 @@ const slots = bot.groups.get(group);
     const monsterDamage = this.#hasMonsterDamage(credit);
     const killer = monsterDamage ? this.#corpseOwnerOf(session, credit) : lastHitter;
     const payLoot = !isSummon && rewarded && (!monsterDamage || killer !== null);
-    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
-    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
-    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
-    if (rewarded) for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
+    // Quem leva a CONTAGEM do abate, quem pode RECEBER a recompensa e quem leva o loot são da
+    // topologia (OW-12). Na instância o abate conta SEMPRE, para todo presente: "matei N" é a
+    // pergunta do analisador de cada um (#190, DT-01), e a party matou junto. Em solo é o de
+    // sempre — conta mesmo com a fonte sumida ou o dono morto; o extrato mentiria se dissesse que
+    // não.
+    const kill: KillContext = { lastHitter, diedToMonster, credit };
+    if (rewarded) this.#topology.creditKill(session, kill);
 
-    // Em solo, a XP é de quem está presente — o matador, ou (morte por monstro com dano dele
-    // antes) o único participante, que bateu; em party, dos vivos com stamina, e `#xpShares` decide
-    // a cota de cada um.
-    const solo = session.participants.length === 1;
-    const payee = diedToMonster ? session.participants[0] ?? null : lastHitter;
-    const eligible = !rewarded
-      ? NO_MEMBERS
-      : solo
-        ? (payee !== null && payee.alive && !isExhausted(payee) ? [payee] : NO_MEMBERS)
-        : session.participants.filter((p) => p.alive && !isExhausted(p));
+    // Na instância, a XP é, em solo, de quem está presente — o matador, ou (morte por monstro com
+    // dano dele antes) o único participante, que bateu; em party, dos vivos com stamina, e
+    // `#xpShares` decide a cota de cada um.
+    const eligible = !rewarded ? NO_MEMBERS : this.#topology.rewardEligible(session, kill);
     // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
     // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
     // ninguém — a bolsa (#192).
@@ -11933,7 +12356,7 @@ const slots = bot.groups.get(group);
       // individual, e a ordem do RNG é a de solo (gold, depois itens na ordem da tabela).
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
-        const loot = this.#rollLootFor(monster, definition.loot, session.rng, this.#gutOf(session, monster, credit));
+        const loot = this.#rollLootFor(session, monster, definition.loot, this.#gutOf(session, monster, credit));
         // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
@@ -11959,7 +12382,7 @@ const slots = bot.groups.get(group);
       // evento (decisão 3): não há "segunda chance" para quem está olhando ainda em #721/W2 —
       // isso é o W3/#722.
       const loot = this.#rollLootFor(
-        monster, this.#lootTableFor(definition, recipient), session.rng, this.#gutOf(session, monster, credit),
+        session, monster, this.#lootTableFor(definition, recipient), this.#gutOf(session, monster, credit),
       );
       corpseGold = loot.gold;
       corpseItems = this.#instantiateCorpseItems(session, recipient, loot.items);
@@ -12113,6 +12536,12 @@ const slots = bot.groups.get(group);
     // e este não. A invocação de PERSONAGEM nunca chega a um `killer`: quem a mata é monstro.
     if (definition !== undefined && this.#charmStage()) {
       this.#carnage(session, monster, definition, credit);
+    }
+    // O Hazard (#632): a subida de nível e o que a zona rola na morte — depois do Carnage, que
+    // resolve as mortes em cadeia dele primeiro. Só o monstro de hazard (`isHazardMonster`): o
+    // `PrimalHazardDeath` do Canary é registrado na `onSpawn`, que a invocação não passa.
+    if (definition !== undefined && this.#hazardOn() && isHazardMonster(monster)) {
+      this.#hazardOnMonsterDeath(session, monster, credit);
     }
   }
 
@@ -12309,12 +12738,12 @@ const slots = bot.groups.get(group);
   ): void {
     const boss = definition.bosstiary;
     if (!definition.boss || boss === undefined) return;
-    const solo = session.participants.length === 1;
+    const namesOwner = this.#topology.namesOwnerInEvents(session);
     for (const member of killers) {
       const recorded = member.bosstiary.record(boss.raceId, boss.rarity, this.#options.bosstiary);
       if (recorded.levelReached !== null) {
         const detail = `${monster.monsterId}/${String(recorded.levelReached)}`;
-        session.record('bosstiary-level', solo ? detail : `${member.id}/${detail}`);
+        session.record('bosstiary-level', namesOwner ? `${member.id}/${detail}` : detail, member.id);
       }
     }
   }
@@ -12346,7 +12775,7 @@ const slots = bot.groups.get(group);
       ? definition.experience * 2
       : definition.experience;
     const shares = this.#xpShares(session, eligible, baseExperience, credit);
-    const solo = session.participants.length === 1;
+    const namesOwner = this.#topology.namesOwnerInEvents(session);
     for (const member of eligible) {
       const share = shares.get(member.id) ?? 0;
       // Aditivo por decisão (#563): Bestiário + faixa de level + os que vierem (VIP, evento —
@@ -12355,10 +12784,16 @@ const slots = bot.groups.get(group);
       // membro: é no `onGainExperience` de cada um que o Canary o aplica.
       const bonusPercent = member.bestiary.xpBonusPercent(this.#options.bestiary)
         + levelExperienceBonusPercent(member.level, this.#options.progression);
-      const experience = applyRate(
+      const ratedExperience = applyRate(
         applyExperienceBonus(share, bonusPercent),
         experienceRateFor(this.#options.progression.rates, member.level),
       );
+      // O bônus de Hazard (#632, `Player::addExperience`): DEPOIS do rate — o `onGainExperience` do
+      // Lua — e antes de a XP entrar. O nível é o da party, como em todo estágio do Hazard.
+      const hazard = this.#options.hazard;
+      const experience = hazard !== undefined && this.#hazardOn()
+        ? hazardExperience(ratedExperience, this.#hazardPoints(session), hazard.config)
+        : ratedExperience;
       // O level de ANTES do ganho é o que o Canary compara (`onGainExperience`, DEPOIS do
       // `grantXp` o level já teria subido, e o portão perderia o "esta XP foi grande o
       // bastante para o level que eu TINHA" — o mesmo cuidado do bônus de Bestiário logo acima.
@@ -12368,9 +12803,12 @@ const slots = bot.groups.get(group);
       this.#gainSoulFromExperience(session, member, experience, levelBeforeGain);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
       // hunt de oito horas que o jogador quer ver ao voltar (§16.2). Em party o detalhe diz
-      // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo.
+      // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo. Quem
+      // decide se nomeia o dono é a topologia (`namesOwnerInEvents`, OW-12).
       if (change !== null) {
-        session.record('level-up', solo ? String(change.to) : `${member.id}/${String(change.to)}`);
+        session.record(
+          'level-up', namesOwner ? `${member.id}/${String(change.to)}` : String(change.to), member.id,
+        );
         // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
         // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
         // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
@@ -12392,7 +12830,7 @@ const slots = bot.groups.get(group);
         const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
         if (reached.milestoneReached !== null) {
           const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
-          session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+          session.record('bestiary-milestone', namesOwner ? `${member.id}/${detail}` : detail, member.id);
         }
       }
     }
@@ -12438,10 +12876,13 @@ const slots = bot.groups.get(group);
     };
   }
 
-  /** O líder presente, ou o mais antigo (#192): é dele a caixa do excedente e o invendável. */
+  /**
+   * O líder presente (#192): é dele a caixa do excedente e o invendável. Quem decide é a
+   * topologia (`leaderOf`, OW-12) — na instância, o líder da party ou o mais antigo; o mundo não
+   * tem líder.
+   */
   #leader(session: Session): CharacterRuntime | undefined {
-    const wanted = this.#party?.leaderId;
-    return session.participants.find((p) => p.id === wanted) ?? session.participants[0];
+    return this.#topology.leaderOf(session, this.#party?.leaderId);
   }
 
   /**
@@ -12642,7 +13083,8 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Quem recebe o loot de um abate (#191, ADR 0027 decisão 5).
+   * Quem recebe o loot de um abate (#191, ADR 0027 decisão 5). A regra é da topologia
+   * (`SessionTopology.lootRecipient`, OW-12), e a da instância é a de sempre:
    *
    * Solo — ou party que virou solo —: o matador, e NENHUM sorteio. Um `rng` a mais aqui
    * mudaria a sequência de loot de toda hunt existente (FUN-63), e o teste que grava a
@@ -12653,12 +13095,7 @@ const slots = bot.groups.get(group);
   #lootRecipient(
     session: Session, killer: CharacterRuntime | null, eligible: readonly CharacterRuntime[],
   ): CharacterRuntime | null {
-    if (this.#party === undefined || session.participants.length < 2) {
-      return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
-    }
-    if (this.#party.splitLoot) return null;
-    if (eligible.length === 0) return null;
-    return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
+    return this.#topology.lootRecipient(session, killer, eligible, this.#party);
   }
 
   /**
@@ -12768,20 +13205,28 @@ const slots = bot.groups.get(group);
    * maior — é por quê o roll extra é uma tabela INTEIRA a mais, não uma chance melhorada na
    * mesma tabela: dobra a EXPECTATIVA de drop, não a chance de cada linha.
    */
-  #rollLootFor(monster: MonsterRuntime, table: Monster['loot'], rng: Rng, gut?: LootGut): LootResult {
+  #rollLootFor(
+    session: Session, monster: MonsterRuntime, table: Monster['loot'], gut?: LootGut,
+  ): LootResult {
+    const rng = session.rng;
     // O Gut (#603) só entra no sorteio NORMAL: o roll extra da boosted (`ondroploot_boosted.lua`)
     // passa `gut = false`.
-    const first = rollLoot(table, rng, this.#options.progression.rates.loot, gut);
-    if (monster.monsterId !== this.#options.boostedMonsterId) return first;
-    const second = rollLoot(table, rng, this.#options.progression.rates.loot);
-    return {
-      gold: first.gold + second.gold,
-      items: second.items.length === 0 ? first.items : [...first.items, ...second.items],
-      supplies: second.supplies.length === 0 ? first.supplies : [...first.supplies, ...second.supplies],
-      ammunition: second.ammunition.length === 0
-        ? first.ammunition
-        : [...first.ammunition, ...second.ammunition],
-    };
+    let loot = rollLoot(table, rng, this.#options.progression.rates.loot, gut);
+    if (monster.monsterId === this.#options.boostedMonsterId) {
+      loot = mergeLoot(loot, rollLoot(table, rng, this.#options.progression.rates.loot));
+    }
+    // As rolagens extras do Hazard (#632, `ondroploot_hazard.lua`, `factor 1.0`, `gut = false`):
+    // DEPOIS da boosted — a ordem em que o Canary carrega os callbacks de `eventcallbacks/monster/`
+    // —, cada uma uma tabela INTEIRA a mais. A rolagem que decide quantas (a parte fracionária de
+    // `rolls`) é sempre consumida; o nível é o da party, como em todo estágio do Hazard.
+    const hazard = this.#options.hazard;
+    if (hazard !== undefined && this.#hazardOn()) {
+      const rolls = hazardLootRolls(rng, this.#hazardPoints(session), hazard.config);
+      for (let roll = 0; roll < rolls; roll += 1) {
+        loot = mergeLoot(loot, rollLoot(table, rng, this.#options.progression.rates.loot));
+      }
+    }
+    return loot;
   }
 
   /**
@@ -12799,10 +13244,8 @@ const slots = bot.groups.get(group);
       if (this.#options.items.get(rolled.itemId) === undefined) continue;
       // Em party (#191) o id leva o dono no meio — dois membros com `lootSeq` 0 colidiriam; em
       // solo o formato é o de sempre. O critério é o TIPO de sessão (DT-03, #397), não a
-      // contagem de presentes.
-      const instanceId = this.#party !== undefined
-        ? `${session.id}:${recipient.id}:${String(recipient.lootSeq++)}`
-        : `${session.id}:${String(recipient.lootSeq++)}`;
+      // contagem de presentes — e mora em `#newInstanceId`, que o mundo também usa.
+      const instanceId = this.#newInstanceId(session, recipient);
       carried.push({ instanceId, itemId: rolled.itemId, quantity: rolled.quantity });
     }
     return carried;
@@ -12890,7 +13333,7 @@ const slots = bot.groups.get(group);
       const runner = this.#runnerOf(character.id);
       if (runner.warnedFullBackpack) continue;
       runner.warnedFullBackpack = true;
-      session.record('backpack-full', character.id);
+      session.record('backpack-full', character.id, character.id);
     }
     return remaining;
   }
@@ -14001,6 +14444,34 @@ function findById<T extends { readonly id: string }>(
   return null;
 }
 
+/**
+ * Este monstro é um monstro de hazard? Só o que nasce do spawner da zona (ou é criado por script —
+ * o Plunder Patriarch): o `HazardMonster.onSpawn` do Canary roda em `SpawnMonster::spawnMonster`
+ * e em `Game.createMonster`, e a invocação de um monstro (`masterId` numérico) ou de um personagem
+ * (`masterId` de personagem) não passa por nenhuma das duas — `Monster::createMonster` a cria
+ * direto, sem `onSpawn` (#632).
+ */
+function isHazardMonster(monster: MonsterRuntime): boolean {
+  return monster.masterId === null;
+}
+
+/**
+ * Soma dois sorteios de loot do MESMO monstro (a boosted e o Hazard rolam a tabela de novo): o
+ * gold soma, e cada lista concatena na ordem — o primeiro sorteio primeiro, como o cadáver do
+ * Canary recebe `addLoot` depois do loot base. Devolve a MESMA referência de lista quando a nova
+ * está vazia, para não alocar no caso comum.
+ */
+function mergeLoot(first: LootResult, second: LootResult): LootResult {
+  return {
+    gold: first.gold + second.gold,
+    items: second.items.length === 0 ? first.items : [...first.items, ...second.items],
+    supplies: second.supplies.length === 0 ? first.supplies : [...first.supplies, ...second.supplies],
+    ammunition: second.ammunition.length === 0
+      ? first.ammunition
+      : [...first.ammunition, ...second.ammunition],
+  };
+}
+
 // --- montagem a partir de `content` ----------------------------------------------------------
 
 export interface HuntSessionOptions {
@@ -14021,6 +14492,8 @@ export interface HuntSessionOptions {
   readonly actuator?: BotActuator;
   /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
   readonly boostedMonsterId?: string;
+  /** O que supõe "sessão = party" (OW-12). Ver `HuntRulesetOptions.topology`. */
+  readonly topology?: SessionTopology;
 }
 
 export class HuntUnavailableError extends Error {
@@ -14065,33 +14538,34 @@ export interface HuntRulesetExtras {
   readonly actuator?: BotActuator;
   /** A Boosted Creature do dia (#615). Ver `HuntRulesetOptions.boostedMonsterId`. */
   readonly boostedMonsterId?: string;
+  /** O que supõe "sessão = party" (OW-12). Ver `HuntRulesetOptions.topology`. */
+  readonly topology?: SessionTopology;
 }
 
-export function createHuntRuleset(
+/**
+ * A zona de Hazard da hunt (#632): `hunt.hazardZoneId` resolvido contra `content.hazard`. Vazio
+ * para toda hunt sem a declaração — a chave nem existe em `HuntRulesetOptions`, por causa do
+ * `exactOptionalPropertyTypes`. `buildContent` já recusou a zona inexistente; o `undefined` aqui
+ * é o resto defensivo de quem monta um `Content` à mão num teste.
+ */
+function hazardOptionOf(content: Content, hunt: Hunt): Pick<HuntRulesetOptions, 'hazard'> {
+  if (hunt.hazardZoneId === undefined || content.hazard === undefined) return {};
+  const zone = content.hazard.zones[hunt.hazardZoneId];
+  if (zone === undefined) return {};
+  return { hazard: { zoneId: hunt.hazardZoneId, zone, config: content.hazard } };
+}
+
+/**
+ * O que um ruleset de hunt lê do CONTEÚDO, igual para a instância e para o mundo (OW-13): os
+ * catálogos e as tabelas de balanceamento. Fica fora o que é da hunt (`hunt`, `route`, o Hazard
+ * da zona dela) e o que é de quem monta (bot, party, topologia). Extraído de `createHuntRuleset`
+ * sem mudar o que ele monta — o mundo o reutiliza, e um catálogo novo que a hunt passe a ler
+ * entra nos dois por este lugar só, em vez de um dos dois o esquecer.
+ */
+export function contentOptionsOf(
   content: Content,
-  huntId: string,
-  difficulty: HuntDifficultyName,
-  extras: HuntRulesetExtras = {},
-): HuntRuleset {
-  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator, boostedMonsterId } = extras;
-  // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
-  // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
-  // de quem entrasse pela outra. Já aconteceu.
-  const hunt = content.hunts.get(huntId);
-  if (hunt === undefined) throw new HuntUnavailableError(`hunt "${huntId}" não existe`);
-  const map = content.maps.get(hunt.mapId);
-  if (map === undefined) {
-    throw new HuntUnavailableError(`hunt "${huntId}" aponta mapa inexistente "${hunt.mapId}"`);
-  }
-  const route = content.routes.get(hunt.routeId);
-  if (route === undefined) {
-    throw new HuntUnavailableError(`hunt "${huntId}" aponta rota inexistente "${hunt.routeId}"`);
-  }
-  return new HuntRuleset({
-    hunt,
-    difficulty,
-    map,
-    route,
+): Omit<HuntRulesetOptions, 'hunt' | 'difficulty' | 'map' | 'route' | 'hazard'> {
+  return {
     monsters: content.monsters,
     combat: content.combat,
     progression: content.progression,
@@ -14114,6 +14588,41 @@ export function createHuntRuleset(
     supplies: content.supplies,
     ammunition: content.ammunition,
     player: { ...content.combat.player },
+    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
+    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
+    botCooldownMs: content.bot.categoryCooldownMs,
+  };
+}
+
+export function createHuntRuleset(
+  content: Content,
+  huntId: string,
+  difficulty: HuntDifficultyName,
+  extras: HuntRulesetExtras = {},
+): HuntRuleset {
+  const {
+    premium, botConfig, botConfigs, partyOptions, exitRules, actuator, boostedMonsterId, topology,
+  } = extras;
+  // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
+  // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
+  // de quem entrasse pela outra. Já aconteceu.
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) throw new HuntUnavailableError(`hunt "${huntId}" não existe`);
+  const map = content.maps.get(hunt.mapId);
+  if (map === undefined) {
+    throw new HuntUnavailableError(`hunt "${huntId}" aponta mapa inexistente "${hunt.mapId}"`);
+  }
+  const route = content.routes.get(hunt.routeId);
+  if (route === undefined) {
+    throw new HuntUnavailableError(`hunt "${huntId}" aponta rota inexistente "${hunt.routeId}"`);
+  }
+  return new HuntRuleset({
+    hunt,
+    difficulty,
+    map,
+    route,
+    ...contentOptionsOf(content),
+    ...hazardOptionOf(content, hunt),
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),
@@ -14121,9 +14630,7 @@ export function createHuntRuleset(
     ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
     ...(boostedMonsterId === undefined ? {} : { boostedMonsterId }),
-    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
-    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
-    botCooldownMs: content.bot.categoryCooldownMs,
+    ...(topology === undefined ? {} : { topology }),
   });
 }
 
@@ -14146,6 +14653,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.partyOptions === undefined ? {} : { partyOptions: options.partyOptions }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
       ...(options.boostedMonsterId === undefined ? {} : { boostedMonsterId: options.boostedMonsterId }),
+      ...(options.topology === undefined ? {} : { topology: options.topology }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
     // que torna "por que eu morri" uma pergunta investigável.

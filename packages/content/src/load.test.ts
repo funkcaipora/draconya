@@ -1105,7 +1105,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 21 + 20 + 38 + 42 vocation spells, plus eight generic (Cure Poison and the utilities)', () => {
+  it('has exactly the catalogue: 22 + 21 + 40 + 44 vocation spells, plus eight generic (Cure Poison and the utilities)', () => {
     // #523 acrescentou uma magia por vocação que faltava (Fierce Berserk, Strong Ethereal
     // Spear, Ultimate Energy Strike) — Druid já tinha as 24 (Heal Friend só ganhou fórmula).
     // #590 (cura de condição) acrescentou: Cure Bleeding no Knight (+1) e no Druid (+1), Cure
@@ -1134,14 +1134,17 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     // #623 (utilitárias) acrescentou: Ultimate Light no Sorcerer (+1) e no Druid (+1) e a Food só no
     // Druid (+1), e as SETE genéricas novas (Light, Great Light, Levitate up/down, Magic Rope, Find
     // Person, Find Fiend) ao lado da Cure Poison: 1→8. Os números abaixo já contam as duas.
+    // #621 (Creature Illusion, M44-03) acrescentou uma por vocação que a tem: Sorcerer +1 e Druid +1
+    // — a golden table acima não a cobre (o efeito `illusion` só tem prazo, e o monstro vem do
+    // parâmetro do slot).
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
     }
     expect(byVocation.get('knight')).toBe(22);
     expect(byVocation.get('paladin')).toBe(21);
-    expect(byVocation.get('sorcerer')).toBe(39);
-    expect(byVocation.get('druid')).toBe(43);
+    expect(byVocation.get('sorcerer')).toBe(40);
+    expect(byVocation.get('druid')).toBe(44);
     expect(byVocation.get(undefined)).toBe(8);
   });
 
