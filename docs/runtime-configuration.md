@@ -48,9 +48,9 @@ a repassa como `OPEN_WORLD` (default `0`).
 
 | Papel | O que a flag muda |
 |---|---|
-| `api` | o ticket (solo e de cada membro da party) leva o mundo e os vitais da linha (`worldPosition`, `townId`, `health`, `mana`, `conditions`); a lista e a seleção de personagens reportam o repouso como `'offline'`; a liquidação do ticket aplica o extrato sem valor movido sem linha de ledger (OW-17) |
+| `api` | o ticket (solo e de cada membro da party) leva o mundo e os vitais da linha (`worldPosition`, `townId`, `health`, `mana`, `conditions`); a lista e a seleção de personagens reportam o repouso como `'offline'`; a liquidação do ticket aplica o checkpoint sem valor movido sem linha de ledger (OW-17) |
 | `game` | todo extrato — fim de hunt, estado da Cidade, snapshot irrestaurável — leva o mundo e os vitais do dono |
-| `jobs` | escreve as colunas que o extrato trouxer, guardadas por `durable_version`; e o extrato versionado **sem valor movido** é aplicado só como estado absoluto, **sem linha de ledger** (OW-17, #838): `draconya_jobs_receipts_state_only_total` os conta |
+| `jobs` | escreve as colunas que o extrato trouxer, guardadas por `durable_version`; e o **checkpoint** versionado **sem valor movido** é aplicado só como estado absoluto, **sem linha de ledger** (OW-17, #838): `draconya_jobs_receipts_state_only_total` os conta. O fim de sessão e a saída seguem com a linha |
 
 **Tem de ser a MESMA no `api` e no `game`.** Um `game` ligado com o `api` desligado recebe tickets sem o
 mundo, e por isso o extrato só leva o mundo de quem o ticket trouxe (a `townId` é a marca) — ligar

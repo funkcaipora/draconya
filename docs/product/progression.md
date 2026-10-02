@@ -136,9 +136,9 @@ Como delta, eles somam na ordem que vier.
 **A progressão pendura na mesma chave de idempotência do ledger** (`session_id`, `seq`): a linha
 do personagem só é tocada quando a linha de ledger foi de fato inserida. Um retry encontra o
 conflito, não insere nada, e por isso não credita nada — que é o par grava-depois-apaga do
-invariante 10 valendo para os dois de uma vez. (Com `OPEN_WORLD`, o extrato versionado que não moveu valor
-nenhum — o checkpoint do mundo — não passa por aqui: é só estado absoluto sob `durable_version`, sem linha
-de ledger. Ver [`open-world.md`](open-world.md), OW-17.)
+invariante 10 valendo para os dois de uma vez. (Com `OPEN_WORLD`, o checkpoint versionado que não moveu valor
+nenhum — o do mundo — não passa por aqui: é só estado absoluto sob `durable_version`, sem linha
+de ledger. O fim de sessão e a saída seguem com a linha. Ver [`open-world.md`](open-world.md), OW-17.)
 
 **O level é DERIVADO da XP nova**, nunca copiado do extrato. Copiar faria um extrato antigo,
 processado fora de ordem, rebaixar um personagem que já subiu; derivar sempre bate com a XP que
