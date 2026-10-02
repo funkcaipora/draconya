@@ -267,7 +267,7 @@ export function createGame(
         try {
           const claim = await tickets.consume(ticket, nodeId);
           let created = false;
-          let refused: 'party-full' | 'content-version' | 'session-not-here' | undefined;
+          let refused: 'party-full' | 'content-version' | 'session-not-here' | 'leaving' | undefined;
           if (claim !== null) {
             const prepared = await host.prepare(
               claim.characterId, claim.initialCharacter, claim.accountId, claim.party,
@@ -299,6 +299,8 @@ export function createGame(
                 'party-full': '409 Conflict',
                 'content-version': '409 Conflict',
                 'session-not-here': '503 Service Unavailable',
+                // O personagem saía do mundo quando o ticket chegou (#840, OW-19): o cliente reconecta.
+                'leaving': '503 Service Unavailable',
               }[refused];
               response.writeStatus(status).end(refused);
               return;
@@ -326,7 +328,17 @@ export function createGame(
     open: (socket) => {
       if (host === null) return;
       const data = socket.getUserData();
-      data.viewer = host.attach(socket, data.characterId);
+      try {
+        data.viewer = host.attach(socket, data.characterId);
+      } catch (error) {
+        // O personagem deixou de estar aqui entre o `prepare` e o `open` — saiu do mundo (o x-log, o
+        // `logout`), ou a sessão foi solta. Uma exceção que escapa de um handler do uWebSockets é um
+        // `uncaughtException`, e o `main.ts` o transforma em `process.exit(1)`: com o mundo num processo
+        // só (ADR 0060 d.2c), o descuido de uma reconexão derrubaria todo jogador. Fecha este socket, e
+        // a reconexão do cliente pede outro ticket.
+        logger.warn({ err: error, characterId: data.characterId }, 'Closing a connection that could not attach');
+        socket.end(1013, 'try again later');
+      }
     },
 
     message: (socket, message, isBinary) => {

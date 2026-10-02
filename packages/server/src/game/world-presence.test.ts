@@ -65,7 +65,12 @@ interface Node {
   /** Os mesmos, um `saveBatch` por elemento: o lote é um `MULTI` só. */
   readonly batches: SavedLine[][];
   /** Quantas gravações o Redis de mentira ainda recusa (`connection lost`), e quantas já recebeu. */
-  readonly redis: { failNext: number; attempts: number };
+  readonly redis: { failNext: number; attempts: number; registers: number };
+  /**
+   * Segura o Redis de mentira até o teste abrir a porta: o que o `saveBatch` e o `register` do diretório
+   * esperam, para fixar a ORDEM de uma corrida (a reconexão contra a saída) em vez de sortear por tempo.
+   */
+  readonly hold: { saveBatch: Promise<void> | null; register: Promise<void> | null };
   /** O que o diretório viu soltar: personagem, e conta que devolveu o slot. */
   readonly released: string[];
   readonly slots: string[];
@@ -93,13 +98,15 @@ function node(options: { readonly openWorld?: boolean } = {}): Node {
   });
   const lines: SavedLine[] = [];
   const batches: SavedLine[][] = [];
-  const redis = { failNext: 0, attempts: 0 };
+  const redis = { failNext: 0, attempts: 0, registers: 0 };
+  const hold: Node['hold'] = { saveBatch: null, register: null };
   const released: string[] = [];
   const slots: string[] = [];
   const receipts = {
     save: async (line: SavedLine) => { lines.push(line); },
     saveBatch: async (batch: readonly SavedLine[]) => {
       redis.attempts += 1;
+      if (hold.saveBatch !== null) await hold.saveBatch;
       if (redis.failNext > 0) {
         redis.failNext -= 1;
         throw new Error('connection lost');
@@ -109,7 +116,11 @@ function node(options: { readonly openWorld?: boolean } = {}): Node {
     },
   } as unknown as ReceiptStore;
   const directory = {
-    register: async () => true,
+    register: async () => {
+      redis.registers += 1;
+      if (hold.register !== null) await hold.register;
+      return true;
+    },
     release: async (characterId: string) => { released.push(characterId); },
     releaseSlot: async (_accountId: string, characterId: string) => { slots.push(characterId); },
     renew: async () => undefined,
@@ -135,7 +146,7 @@ function node(options: { readonly openWorld?: boolean } = {}): Node {
     return { viewer, socket };
   };
   return {
-    host, wiring, lines, batches, redis, released, slots,
+    host, wiring, lines, batches, redis, hold, released, slots,
     arrive,
     login: async (id, initial) => {
       await arrive(id, initial);
@@ -366,6 +377,159 @@ describe('chegar ao mundo sem visualizador (#840, OW-19)', () => {
   });
 });
 
+/** Uma porta que o teste abre quando quer: o Redis de mentira espera por ela (`Node.hold`). */
+const door = () => {
+  let open!: () => void;
+  const closed = new Promise<void>((resolve) => { open = resolve; });
+  return { closed, open };
+};
+
+/** Cede a fila de microtarefas e de timers: o que não depende de porta nenhuma já andou. */
+const settle = () => new Promise<void>((resolve) => { setTimeout(resolve, 5); });
+
+describe('a reconexão que corre contra a saída do mundo (#840, OW-19)', () => {
+  const INITIAL = { level: 1, xp: 0, townId: 'thais' } as const;
+
+  it('o ticket que chega com o x-log em voo ESPERA a saída e é recusado — não reanexa a quem vai embora', async () => {
+    // O x-log vence 60 s depois de o navegador fechar, e o cliente reconecta sozinho, com o mesmo atraso:
+    // a janela é o `release` (o lote do Redis) e é aí que o ticket cai.
+    const n = node();
+    const { viewer } = await n.login('a');
+    await n.login('keeper');
+    n.drop(viewer);
+    const gate = door();
+    n.hold.saveBatch = gate.closed;
+    n.tick(XLOG_DELAY_MS);
+    await vi.waitFor(() => { expect(n.redis.attempts).toBe(1); });
+    const world = n.session('a');
+    expect(world.participants.some((participant) => participant.id === 'a')).toBe(false);
+
+    let answered: unknown;
+    const arriving = n.host.prepare('a', { ...INITIAL }, 'acc-a').then((result) => { answered = result; });
+    await settle();
+    // Esperando a saída: nem `created: false` nem uma sessão nova.
+    expect(answered).toBeUndefined();
+
+    gate.open();
+    await arriving;
+    expect(answered).toEqual({ created: false, refused: 'leaving' });
+    expect(n.host.sessionFor('a')).toBeUndefined();
+    expect(n.released).toEqual(['a']);
+    expect(n.host.viewersOf('a')).toBe(0);
+
+    // A reconexão seguinte (um ticket novo) encontra o personagem em repouso e entra de verdade.
+    n.hold.saveBatch = null;
+    const { viewer: back, socket } = await n.reconnect('a');
+    expect(back.dead).toBe(false);
+    expect(socket.ended).toBeNull();
+    expect(n.session('a').participants.some((participant) => participant.id === 'a')).toBe(true);
+  });
+
+  it('o `prepare` que espera o diretório quando o x-log vence responde com a saída, e não com `created: false`', async () => {
+    const n = node();
+    const { viewer } = await n.login('a');
+    await n.login('keeper');
+    n.drop(viewer);
+    n.tick(XLOG_DELAY_MS - 1_000);
+
+    // O `prepare` acha a sessão de pé e fica no `register` do diretório (a lentidão do Redis)...
+    const gate = door();
+    n.hold.register = gate.closed;
+    const registersBefore = n.redis.registers;
+    const arriving = n.host.prepare('a', { ...INITIAL }, 'acc-a');
+    await vi.waitFor(() => { expect(n.redis.registers).toBe(registersBefore + 1); });
+
+    // ...e o x-log vence nesse meio tempo, e a saída inteira acaba antes de o diretório responder.
+    n.tick(1_000);
+    await untilGone(n, 'a');
+    gate.open();
+
+    expect(await arriving).toEqual({ created: false, refused: 'leaving' });
+  });
+
+  it('o upgrade que já passou do `prepare` quando o x-log vence: `attach` recusa, e ninguém fica olhando quem saiu', async () => {
+    const n = node();
+    const { viewer } = await n.login('a');
+    await n.login('keeper');
+    n.drop(viewer);
+    // O ticket foi consumido e o `prepare` terminou antes dos 60 s: só o websocket falta.
+    await n.arrive('a');
+    const gate = door();
+    n.hold.saveBatch = gate.closed;
+    n.tick(XLOG_DELAY_MS);
+    await vi.waitFor(() => { expect(n.redis.attempts).toBe(1); });
+
+    // `attach` lançar sem ninguém tratar derrubava o processo (`open` do servidor): agora é o erro de que o
+    // servidor fecha o socket — e nenhum visualizador entra num personagem que o `sim` já não conhece.
+    expect(() => n.host.attach(new FakeSocket(), 'a')).toThrow('a is leaving the world');
+    // `viewersOf` conta os da sessão: só o de `keeper`, e nenhum a mais.
+    expect(n.host.viewersOf('a')).toBe(1);
+
+    gate.open();
+    await untilGone(n, 'a');
+    expect(n.host.viewersOf('keeper')).toBe(1);
+  });
+
+  it('a saída do x-log que FALHOU nunca fica sem dono: o ciclo de checkpoint a repete, sem jogador nenhum', async () => {
+    const n = node();
+    const { viewer } = await n.login('a', { worldPosition: absolute(STREET) });
+    await n.login('keeper');
+    n.drop(viewer);
+    n.redis.failNext = 1;
+
+    n.tick(XLOG_DELAY_MS);
+    await vi.waitFor(() => { expect(n.redis.attempts).toBe(1); });
+    await settle();
+    // O personagem é um fantasma: o `sim` já não o conhece, e o hospedeiro ainda o tem — com o slot da conta.
+    expect(n.host.sessionFor('a')).toBeDefined();
+    expect(n.session('a').participants.some((participant) => participant.id === 'a')).toBe(false);
+    expect(n.released).toEqual([]);
+    // Fantasma não recebe visualizador: ele só veria uma cena vazia.
+    expect(() => n.host.attach(new FakeSocket(), 'a')).toThrow('a is leaving the world');
+
+    // Muito tempo depois, sem ninguém: o ciclo seguinte do checkpoint termina o que o x-log começou.
+    n.tick(10 * 60_000);
+    await n.host.checkpointWorlds();
+    await untilGone(n, 'a');
+
+    expect(n.released).toEqual(['a']);
+    expect(n.slots).toEqual(['a']);
+    expect(linesOf(n, 'a')).toEqual([expect.objectContaining({ reason: 'manual-exit', worldPosition: absolute(STREET) })]);
+    // E a saída que acabou não é repetida: o ciclo seguinte não solta nada de novo.
+    await n.host.checkpointWorlds();
+    expect(n.released).toEqual(['a']);
+  });
+
+  it('quem reconecta a um fantasma o liberta: o `prepare` repete a saída e o ticket seguinte entra', async () => {
+    const n = node();
+    const { viewer } = await n.login('a', { worldPosition: absolute(STREET) });
+    await n.login('keeper');
+    n.drop(viewer);
+    n.redis.failNext = 1;
+    n.tick(XLOG_DELAY_MS);
+    await vi.waitFor(() => { expect(n.redis.attempts).toBe(1); });
+    await settle();
+    expect(n.released).toEqual([]);
+
+    // O ticket da reconexão repete a saída (o Redis voltou) e é recusado: o personagem agora está em repouso.
+    expect(await n.host.prepare('a', { ...INITIAL }, 'acc-a')).toEqual({ created: false, refused: 'leaving' });
+    expect(n.released).toEqual(['a']);
+    expect(n.host.sessionFor('a')).toBeUndefined();
+
+    // E se o Redis AINDA recusa, o ticket também é recusado — nunca reanexa ao fantasma.
+    const second = await n.login('a', { worldPosition: absolute(STREET) });
+    n.drop(second.viewer);
+    n.redis.failNext = 2;
+    n.tick(XLOG_DELAY_MS);
+    await vi.waitFor(() => { expect(n.redis.attempts).toBeGreaterThanOrEqual(3); });
+    await settle();
+    expect(await n.host.prepare('a', { ...INITIAL }, 'acc-a')).toEqual({ created: false, refused: 'leaving' });
+    expect(n.host.sessionFor('a')).toBeDefined();
+    await n.host.checkpointWorlds();
+    await untilGone(n, 'a');
+  });
+});
+
 describe('o `logout` no mundo (#840, OW-19)', () => {
   it('na PZ passa na hora: o socket fecha com `logout`, e o checkpoint leva a posição e a vida', async () => {
     const n = node();
@@ -460,7 +624,7 @@ describe('o `logout` no mundo (#840, OW-19)', () => {
     expect(n.released).toEqual(['a']);
   });
 
-  it('a saída que FALHOU não prende o personagem: o `logout` seguinte tenta de novo, com o extrato que não pousou na frente', async () => {
+  it('a saída que FALHOU é tentada de novo: o `logout` não tem como pedir outra vez, e o ciclo de checkpoint a termina', async () => {
     const n = node();
     const { viewer, socket } = await n.login('a', { worldPosition: absolute(STREET) });
     await n.login('keeper');
@@ -471,18 +635,18 @@ describe('o `logout` no mundo (#840, OW-19)', () => {
     // O Redis recusou o extrato: o `release` não soltou o personagem (diretório e slot ficam), embora o `sim`
     // já o tenha tirado da sessão. O socket fechou — o `release` começa por aí.
     await vi.waitFor(() => { expect(socket.ended).not.toBeNull(); });
-    expect(n.host.sessionFor('a')).toBeDefined();
+    await vi.waitFor(() => { expect(n.host.sessionFor('a')).toBeDefined(); });
     expect(n.released).toEqual([]);
     expect(n.lines).toEqual([]);
 
-    // O jogador volta e pede de novo. O `sim` já não conhece o personagem (nenhum veredicto), e o `logout`
-    // é o `release` de sempre: sem este ramo o pedido seria engolido, e o personagem ficaria preso.
-    const again = n.host.attach(new FakeSocket(), 'a');
-    n.host.handle(again, { type: 'logout' });
+    // Ninguém pede de novo — o cliente nem tem como (não manda `logout` nem reanexa a quem está saindo) —, e
+    // quem repete a saída é o hospedeiro: o próximo ciclo de checkpoint, com o extrato que não pousou na frente.
+    await n.host.checkpointWorlds();
     await untilGone(n, 'a');
 
     expect(linesOf(n, 'a')).toEqual([expect.objectContaining({ reason: 'manual-exit', worldPosition: absolute(STREET) })]);
     expect(n.released).toEqual(['a']);
+    expect(n.slots).toEqual(['a']);
   });
 
   it('a saída ANTECIPA o lote inteiro: a linha de quem sai vai junto da de quem está sujo, num `saveBatch` só', async () => {
