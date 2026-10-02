@@ -5097,6 +5097,12 @@ export class SessionHost {
     // (#837, OW-16): o construtor leva o MESMO `CharacterRuntime` para a sessão nova, e depois disso o
     // `position` dele já é o de lá — a âncora seria o lugar onde ele COMEÇA a hunt, não onde saiu.
     this.#anchorWorldPosition(hosted, characterId);
+    // E o que SÓ a origem sabe vai para o personagem pelo mesmo motivo (#839): o destino lê, na entrada,
+    // o restante do prazo do anel que vestia (`overlay.durationRemainingMs`), e o `onLeave`/`onEnd` da
+    // origem — que o guarda — roda DEPOIS do destino pronto. Sem isto, mundo → hunt (e hunt → mundo)
+    // armaria o anel com o prazo velho: o tempo vestido aqui seria de graça lá. Só publica; se o destino
+    // for recusado o personagem segue aqui, intacto.
+    hosted.session.beforeLeave(characterId);
 
     // Construir ANTES de encerrar: se o destino não existe — hunt que saiu do conteúdo,
     // dificuldade que a hunt não define — o personagem fica exatamente onde estava, em vez de

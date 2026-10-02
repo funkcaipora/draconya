@@ -3309,8 +3309,20 @@ export class HuntRuleset implements Ruleset {
     // O observer sai com ele: a Cidade não simula, e uma closure apontando para a sessão que
     // ele deixou vazaria. O prazo do anel vestido fica guardado na instância (#689) — o evento
     // morre aqui, o restante não.
+    //
+    // O observer só sai se AINDA é o desta sessão: numa transição o destino já o instalou sobre este
+    // mesmo `CharacterRuntime` (o destino é construído antes de a origem soltar) — mundo → hunt, hunt →
+    // mundo —, e `setEquipmentObserver(null)` o apagaria: a bota deixaria de mexer na velocidade e o
+    // anel tirado deixaria o vencimento na fila do destino (#839).
     this.#parkEquipment(session, character);
-    character.inventory.setEquipmentObserver(null);
+    character.inventory.releaseEquipmentObserver(session);
+    // E a regeneração do que ele vestia: o subject é `<id>:<slot>:<recurso>`, que o `cancelEvents` da
+    // entrada (exato, `<id>`) não alcança. No mundo o MESMO id volta à MESMA sessão num relogue rápido,
+    // e a cadeia que ficou na fila acharia o `CharacterRuntime` novo por id, curaria e se reagendaria
+    // — com a da entrada, duas, e o anel a 2×, 3×… (#839). Só o `onLeave`: o `onEnd` leva a fila toda.
+    for (const slot of ITEM_SLOTS) {
+      if (character.inventory.equippedAt(slot) !== null) this.#cancelItemRegen(session, character.id, slot);
+    }
     // O tempo que ele passou na hunt enche o banco de offline training (#631, ADR 0059 d.3) — o
     // `Session.leave` emite o extrato DEPOIS deste hook, e o `durationMs` dele ainda existe aqui.
     this.#creditOfflineBank(session, character);
@@ -3850,7 +3862,8 @@ export class HuntRuleset implements Ruleset {
     // segurar uma sessão encerrada.
     for (const character of session.participants) {
       this.#parkEquipment(session, character);
-      character.inventory.setEquipmentObserver(null);
+      // Só o observer DESTA sessão (ver `onLeave`): numa transição o destino já instalou o dele.
+      character.inventory.releaseEquipmentObserver(session);
       // O tempo de hunt enche o banco de offline training 1:1 (#631, ADR 0059 d.3). O `durationMs`
       // é o do PARTICIPANTE — o tempo que ele passou aqui, não o da instância —, e `end()` só
       // roda uma vez: o crédito não dobra.
@@ -9325,9 +9338,27 @@ const slots = bot.groups.get(group);
     }
   }
 
+  /**
+   * O hospedeiro vai levar o personagem para outra sessão que o recebe ANTES de ele sair (#839): o
+   * destino arma o vencimento do anel pelo `overlay.durationRemainingMs` na ENTRADA, e o restante só é
+   * guardado no `onLeave`/`onEnd` desta — tarde: o destino leria o prazo velho (o do último equip, ou
+   * o cheio) e o tempo que o anel passou aqui seria de graça. Guarda o restante AGORA, sem cancelar
+   * nada: a transição pode ser recusada, e o anel continua vencendo na fila desta sessão. O
+   * `#parkEquipment` do `onLeave` repete a conta com o mesmo resultado — nenhum tempo lógico corre
+   * entre os dois.
+   */
+  onBeforeLeave(session: Session, character: CharacterRuntime): void {
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped !== null) this.#stashRemaining(session, character, slot, equipped);
+    }
+  }
+
   /** O que agenda e cancela o vencimento por duração, e reavalia a velocidade. Closure pura sobre a `Session`. */
   #equipmentObserver(session: Session, characterId: string): EquipmentObserver {
     return {
+      // A sessão é a dona: só ela o tira (`releaseEquipmentObserver`), e a transição não o perde.
+      owner: session,
       onEquip: (slot, item, previous) => {
         const subject = equipExpirySubject(characterId, slot);
         // Troca direta anel → anel: o que saiu guarda o que sobrou dele antes do cancelamento.

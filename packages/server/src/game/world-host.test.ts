@@ -416,6 +416,96 @@ describe('mundo → hunt → mundo (#839): o grafo com `world` no centro', () =>
   });
 });
 
+describe('o equipamento atravessa a transição do mundo e o relogue (#839)', () => {
+  // O destino de uma transição é construído ANTES de a origem soltar o personagem — e o personagem é o MESMO
+  // objeto nas duas sessões. Antes do mundo só a Cidade (que não simula) era origem; agora a origem também
+  // tem observer de equipamento, prazo de anel e regeneração de item na fila dela.
+  const RING_MS = 1_200_000;
+  const gear = () => ({
+    backpack: [{ instanceId: 'b1', itemId: 'boots-of-haste', quantity: 1 }],
+    equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+  });
+  const ringDueAt = (session: Session, id = 'a') => session.dueAtOf('equip-expire', `${id}:finger`);
+  const BOOTS = (): number => {
+    const speed = real().items.get('boots-of-haste')?.bonuses?.speed;
+    if (speed === undefined) throw new Error('o conteúdo real não tem a boots-of-haste com velocidade');
+    return speed;
+  };
+
+  it('mundo → hunt: o observer da hunt vive (a bota mexe na velocidade) e o anel tirado leva o vencimento e a regeneração', async () => {
+    const n = node();
+    await n.login('a', { inventory: gear() });
+    await n.login('keeper');
+
+    await n.host.transition('a', { to: 'hunt', huntId: 'rat-cellars' });
+
+    const hunt = n.session('a');
+    const hero = n.character('a');
+    expect(hunt.ruleset.type).toBe('hunt');
+    const base = hero.speed;
+    // Mutação que mata: o `onLeave` do mundo com `setEquipmentObserver(null)` — apagava o observer que a hunt
+    // acabara de instalar sobre o mesmo personagem, e a bota deixava de mexer na velocidade.
+    expect(hero.inventory.equip('b1', hero, real().items).ok).toBe(true);
+    expect(hero.speed).toBe(base + BOOTS());
+
+    expect(ringDueAt(hunt)).not.toBeNull();
+    expect(hero.inventory.unequip('finger', { backpackSlots: 20, satchelSlots: 0, row: 1 }).ok).toBe(true);
+    expect(ringDueAt(hunt)).toBeNull();
+    expect(hunt.cancelEvent('item-regen', 'a:finger:health')).toBe(0);
+    expect(hunt.cancelEvent('item-regen', 'a:finger:mana')).toBe(0);
+  });
+
+  it('mundo → hunt → mundo: o tempo de anel vestido em cada uma é descontado, e o observer do mundo vive na volta', async () => {
+    const n = node();
+    await n.login('a', { inventory: gear() });
+    await n.login('keeper');
+    const world = n.session('a');
+    n.tick(600_000);
+    expect(ringDueAt(world)).toBe(RING_MS);
+
+    await n.host.transition('a', { to: 'hunt', huntId: 'rat-cellars' });
+    const hunt = n.session('a');
+    // 10 minutos no mundo: a hunt arma o anel com os 10 que RESTAM, e não com os 20 cheios.
+    // Mutação que mata: destino lendo o `overlay` antes de a origem guardá-lo — o anel saía com 10 min de graça.
+    expect(ringDueAt(hunt)).toBe(RING_MS - 600_000);
+    expect(n.character('a').inventory.equippedAt('finger')?.overlay?.durationRemainingMs).toBe(RING_MS - 600_000);
+
+    n.tick(240_000);
+    await n.host.transition('a', { to: 'world' });
+
+    // De volta: a MESMA sessão do mundo, com o anel pelo que sobrou depois dos 4 min de hunt (e o relógio do
+    // mundo é o dele: o prazo é relativo ao instante lógico da sessão).
+    expect(n.session('a')).toBe(world);
+    const back = n.character('a');
+    expect(back.inventory.equippedAt('finger')?.overlay?.durationRemainingMs).toBe(RING_MS - 600_000 - 240_000);
+    expect(ringDueAt(world)).toBe(world.nowMs + RING_MS - 600_000 - 240_000);
+    // O observer do mundo, de novo: a `hunt.onEnd` não o apagou.
+    const base = back.speed;
+    expect(back.inventory.equip('b1', back, real().items).ok).toBe(true);
+    expect(back.speed).toBe(base + BOOTS());
+  });
+
+  it('o relogue rápido no mundo não duplica a regeneração do anel: tanto quanto quem entrou agora', async () => {
+    const n = node();
+    await n.login('keeper');
+    await n.login('a', { health: 10, mana: 0, inventory: gear() });
+    n.tick(2_000);
+    await n.host.release('a', 1000, 'logout');
+    n.tick(100);
+    // `a` volta ao mesmo mundo no mesmo instante em que o controle entra pela primeira vez.
+    await n.login('a', { health: 10, mana: 0, inventory: gear() });
+    await n.login('control', { health: 10, mana: 0, inventory: gear() });
+    n.tick(20_000);
+
+    const [back, control] = [n.character('a'), n.character('control')];
+    expect(control.health).toBeGreaterThan(10);
+    expect(control.mana).toBeGreaterThan(0);
+    // Mutação que mata: sem cancelar a regeneração do item na saída, a cadeia da estadia anterior curava
+    // junto da nova — o anel a 2×.
+    expect({ health: back.health, mana: back.mana }).toEqual({ health: control.health, mana: control.mana });
+  });
+});
+
 describe('o analisador no mundo (#839): o cursor é a posição ABSOLUTA, e o teto não o desloca', () => {
   it('com a lista no teto, o evento novo ainda chega — e só ele', async () => {
     // Teto de 2 eventos por personagem: com UM personagem a lista guarda os dois últimos, e cada evento

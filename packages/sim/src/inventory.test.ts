@@ -416,6 +416,39 @@ describe('carga e destruição do equipado (#421)', () => {
     ]);
   });
 
+  it('`releaseEquipmentObserver` só tira o observer do dono que pede (#839)', () => {
+    const inventory = new Inventory();
+    const comLugar: ContainerRules = { backpackSlots: 0, satchelSlots: 1, row: 1 };
+    inventory.ensureContainers(comLugar);
+    inventory.add(carried('ring', 'r1'), amuletCatalog, wearer(), comLugar);
+    const origin = {};
+    const destination = {};
+    const events: string[] = [];
+    const observerOf = (owner: object, name: string) => ({
+      owner,
+      onEquip: () => events.push(`${name}:equip`),
+      onUnequip: () => events.push(`${name}:unequip`),
+    });
+
+    // A origem instalou o dela; o destino instalou o dele por cima (o destino é construído antes de a
+    // origem soltar o personagem); a origem então libera o seu — que já não é o instalado.
+    inventory.setEquipmentObserver(observerOf(origin, 'origin'));
+    inventory.setEquipmentObserver(observerOf(destination, 'destination'));
+    inventory.releaseEquipmentObserver(origin);
+    inventory.equip('r1', wearer(), amuletCatalog);
+    // Mutação que mata: `release` incondicional — o destino ficaria sem observer.
+    expect(events).toEqual(['destination:equip']);
+
+    // O dono de verdade o tira, e um observer sem dono (fixture) nunca é tirado por aqui.
+    inventory.releaseEquipmentObserver(destination);
+    inventory.unequip('finger', comLugar);
+    expect(events).toEqual(['destination:equip']);
+    inventory.setEquipmentObserver({ onEquip: () => events.push('anon:equip'), onUnequip: () => undefined });
+    inventory.releaseEquipmentObserver(origin);
+    inventory.equip('r1', wearer(), amuletCatalog);
+    expect(events).toEqual(['destination:equip', 'anon:equip']);
+  });
+
   it('na troca direta, `onEquip` recebe o item que saiu, já de volta no container (#689)', () => {
     const inventory = new Inventory();
     const comLugar: ContainerRules = { backpackSlots: 0, satchelSlots: 2, row: 2 };

@@ -379,6 +379,20 @@ export interface Ruleset {
   onLeave?(session: Session, character: CharacterRuntime): void;
 
   /**
+   * O hospedeiro VAI tirar o personagem desta sessão para outra que já o recebeu — e ainda não o
+   * tirou (`Session.beforeLeave`). A transição constrói o destino ANTES de soltar a origem, para a
+   * recusa do destino não deixar o personagem sem sessão; só que o destino lê, na entrada, o que
+   * só a origem sabe (o restante do prazo de um anel que a fila dela carrega), e o `onLeave`/`onEnd`
+   * da origem chegaria tarde. Aqui ela PUBLICA o que o destino vai ler.
+   *
+   * **Só publica; não desfaz nada.** A transição pode ser recusada depois, e o personagem então
+   * continua aqui como estava — quem o tira de verdade é o `onLeave`/`onEnd`, e o que ele guarda de
+   * novo é o mesmo valor (nenhum tempo lógico corre entre os dois). Sem efeito na fila, no sorteio
+   * ou na posição: nada do que ela faz é observável pela simulação desta sessão.
+   */
+  onBeforeLeave?(session: Session, character: CharacterRuntime): void;
+
+  /**
    * Um evento venceu. `session.nowMs` É o instante do vencimento — não "algum ponto do tick".
    *
    * Quem quiser repetir reagenda a partir daqui (`session.nowMs + intervalo`), e é isso que
@@ -717,6 +731,19 @@ export class Session implements SessionClock {
     this.#performanceSamples.delete(characterId);
     this.#notableCursor?.delete(characterId);
     return { character, receipt };
+  }
+
+  /**
+   * Avisa o ruleset de que `characterId` vai sair desta sessão para outra que o recebe ANTES de ele
+   * sair (a transição do hospedeiro: o destino é construído, e só então a origem solta o personagem).
+   * Ver `Ruleset.onBeforeLeave`. Não tira ninguém e não emite extrato; quem não é participante, e a
+   * sessão que já acabou, não têm o que publicar.
+   */
+  beforeLeave(characterId: string): void {
+    if (this.#endedReason !== null) return;
+    const character = this.participants.find((participant) => participant.id === characterId);
+    if (character === undefined) return;
+    this.ruleset.onBeforeLeave?.(this, character);
   }
 
   /**
