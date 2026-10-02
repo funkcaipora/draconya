@@ -20,19 +20,28 @@ import type { SessionType } from '@draconya/sim';
  * de estados vira um caminho de transição que ninguém testou, e a transição é justamente o
  * único momento em que o estado quente troca de dono. Passar pela Cidade dá a cada troca um
  * ponto de parada conhecido, onde o personagem está curado, sem instância e sem nada em voo.
+ *
+ * **Com o mundo aberto (OW-18, ADR 0060 d.6) o centro é o MUNDO, e a Cidade continua enquanto a
+ * flag `OPEN_WORLD` existir.** Do mundo se vai a toda instância e de toda instância se volta a ele
+ * — é o mesmo desenho, com o mesmo ponto de parada, e é a Cidade que sai quando o mundo cobrir todo
+ * serviço dela. Quem constrói o destino decide se ele existe: com a flag desligada nenhum nó
+ * hospeda um mundo, `'world'` aqui não passa de uma aresta que o construtor de sessões recusa
+ * (`unknown-destination`), e nenhuma mensagem do cliente pede esse destino. O que NÃO está aqui: o
+ * mundo não vai à Cidade nem a Cidade ao mundo — quem está numa Cidade sob a flag ligada (o fim de uma
+ * hunt ainda volta a ela até a OW-20) sai do jogo e entra de novo.
+ *
+ * **Esta tabela diz só o que é possível, não quando.** A entrada numa instância a partir do mundo
+ * só quando o Tibia deixaria deslogar (`canLogout`, d.6a) é do hospedeiro (OW-20), que a consulta
+ * ao ruleset; a volta só com alguém olhando também.
  */
 const ALLOWED: Readonly<Record<SessionType, readonly SessionType[]>> = {
   city: ['hunt', 'training', 'quest', 'boss', 'guild-war'],
-  hunt: ['city'],
-  // O mundo (OW-13, ADR 0060 d.6) tem sessão desde a OW-13, mas ninguém o hospeda: o hospedeiro o
-  // constrói na OW-18, atrás de `OPEN_WORLD`, e é a OW-20 que o põe no CENTRO deste grafo (mundo ↔
-  // hunt idle, sob `canLogout`). Até lá nenhuma transição o toca, e a entrada vazia é só o que o
-  // `Record<SessionType, …>` exige para compilar — nenhum estado de hoje passa a poder ir a ele.
-  world: [],
-  training: ['city'],
-  quest: ['city'],
-  boss: ['city'],
-  'guild-war': ['city'],
+  world: ['hunt', 'training', 'quest', 'boss', 'guild-war'],
+  hunt: ['city', 'world'],
+  training: ['city', 'world'],
+  quest: ['city', 'world'],
+  boss: ['city', 'world'],
+  'guild-war': ['city', 'world'],
 };
 
 export type TransitionRefusal =

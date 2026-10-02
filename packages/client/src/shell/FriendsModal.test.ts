@@ -82,6 +82,15 @@ describe('FriendsModal (#404)', () => {
     expect(html).not.toContain('undefined');
   });
 
+  it('shows a friend in the open world as "No mundo", not as offline (#839)', async () => {
+    friends.set((state) => ({ ...state, friends: [friend({ where: 'world' })] }));
+    const html = await render();
+
+    // Mutação que mata: o `where: 'world'` do servidor caindo no ramo `offline` do `whereLabel`.
+    expect(html).toContain('No mundo');
+    expect(html).not.toContain('offline');
+  });
+
   it('renders the add-by-name form (RF-04)', async () => {
     friends.set((state) => ({ ...state, friends: [friend()] }));
     const html = await render();

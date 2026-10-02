@@ -931,3 +931,155 @@ describe('o id de item novo é único no mundo (OW-13, revisão)', () => {
     expect(worldTopology({ map, temple: TEMPLE }).namesOwnerInItemIds).toBe(true);
   });
 });
+
+describe('o equipamento atravessa a transição e o relogue (#839)', () => {
+  // Um Life Ring (20 min, regenera +2/+8 a cada 6 s) e uma bota de velocidade, no mesmo conteúdo do
+  // mundo. O destino de uma transição é construído ANTES de a origem soltar o personagem, e é isso que
+  // estes testes montam: `beforeLeave` (o aviso do hospedeiro), `enter` no destino e `leave` na origem.
+  const RING_MS = 1_200_000;
+  const withItems = buildContent(raw({
+    items: [
+      {
+        id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger', weight: 1, value: 0,
+        durationMs: RING_MS,
+        bonuses: { regeneration: { healthGain: 2, healthTicksMs: 6000, manaGain: 8, manaTicksMs: 6000 } },
+      },
+      { id: 'fast-boots', name: 'Fast Boots', kind: 'armor', slot: 'feet', weight: 1, value: 0, bonuses: { speed: 40 } },
+    ],
+  }));
+  const BOOTS_SPEED = 40;
+  const gear = (): InventoryState => ({
+    backpack: [{ instanceId: 'b1', itemId: 'fast-boots', quantity: 1 }],
+    equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+  });
+  const worldOf = (id: string) => createWorldSession({
+    id, map, world: main, content: withItems, seed: id, createdAtMs: 0,
+  });
+  /** A transição do hospedeiro: avisa a origem, constrói o destino (que recebe o personagem) e só então solta a origem. */
+  const transition = (from: ReturnType<typeof worldOf>, to: ReturnType<typeof worldOf>, hero: CharacterRuntime) => {
+    from.beforeLeave(hero.id);
+    to.enter(hero);
+    from.leave(hero.id);
+  };
+  const ringDueAt = (session: ReturnType<typeof worldOf>) => session.dueAtOf('equip-expire', 'a:finger');
+  const ringOverlay = (hero: CharacterRuntime) => hero.inventory.equippedAt('finger')?.overlay?.durationRemainingMs;
+
+  it('o observer do destino SOBREVIVE à saída da origem: a bota ainda mexe na velocidade e o anel tirado leva o vencimento', () => {
+    const origin = worldOf('origin');
+    const dest = worldOf('dest');
+    const hero = member('a', { inventory: gear() });
+    origin.enter(hero);
+    const base = hero.speed;
+
+    transition(origin, dest, hero);
+
+    // Mutação que mata: `onLeave` com `setEquipmentObserver(null)` — apagaria o observer que o destino acabou
+    // de instalar, e a bota não mexeria na velocidade.
+    expect(hero.inventory.equip('b1', hero, withItems.items).ok).toBe(true);
+    expect(hero.speed).toBe(base + BOOTS_SPEED);
+    expect(ringDueAt(dest)).toBe(RING_MS);
+    expect(hero.inventory.unequip('finger', { backpackSlots: 20, satchelSlots: 0, row: 1 }).ok).toBe(true);
+    // O vencimento do anel tirado sai da fila do destino (senão destruiria o próximo anel do slot).
+    expect(ringDueAt(dest)).toBeNull();
+    expect(dest.cancelEvent('item-regen', 'a:finger:health')).toBe(0);
+    expect(dest.cancelEvent('item-regen', 'a:finger:mana')).toBe(0);
+  });
+
+  it('o mesmo na volta (destino → origem): o `onEnd` de quem acaba não apaga o observer do mundo', () => {
+    const hunt = worldOf('hunt-like');
+    const back = worldOf('back');
+    const hero = member('a', { inventory: gear() });
+    hunt.enter(hero);
+    const base = hero.speed;
+
+    // A hunt privada que ACABA sozinha: `end` roda o `onEnd` depois de o destino ter recebido o personagem.
+    hunt.beforeLeave(hero.id);
+    back.enter(hero);
+    hunt.end('manual-exit');
+
+    expect(hero.inventory.equip('b1', hero, withItems.items).ok).toBe(true);
+    expect(hero.speed).toBe(base + BOOTS_SPEED);
+  });
+
+  it('o tempo de anel vestido na origem é DESCONTADO no destino: 10 min no mundo, restam 10 min na hunt', () => {
+    const origin = worldOf('origin');
+    const dest = worldOf('dest');
+    const hero = member('a', { inventory: gear() });
+    origin.enter(hero);
+    origin.advanceBy(600_000);
+    expect(ringDueAt(origin)).toBe(RING_MS);
+
+    transition(origin, dest, hero);
+
+    // Mutação que mata: sem o `beforeLeave`, o destino lia o `overlay` ausente e armava os 1 200 000 cheios —
+    // 10 minutos de anel de graça —, e só DEPOIS o `onLeave` da origem guardava os 600 000.
+    expect(ringDueAt(dest)).toBe(600_000);
+    expect(ringOverlay(hero)).toBe(600_000);
+    // E na volta: 4 min na hunt, restam 6.
+    dest.advanceBy(240_000);
+    const back = worldOf('back');
+    transition(dest, back, hero);
+    expect(ringOverlay(hero)).toBe(360_000);
+    expect(back.dueAtOf('equip-expire', 'a:finger')).toBe(360_000);
+  });
+
+  it('o aviso só PUBLICA: a transição recusada deixa o anel vencendo na fila da origem, e o observer é dela', () => {
+    const origin = worldOf('origin');
+    const hero = member('a', { inventory: gear() });
+    origin.enter(hero);
+    origin.advanceBy(100_000);
+
+    origin.beforeLeave('a');
+
+    expect(ringDueAt(origin)).toBe(RING_MS);
+    const base = hero.speed;
+    expect(hero.inventory.equip('b1', hero, withItems.items).ok).toBe(true);
+    expect(hero.speed).toBe(base + BOOTS_SPEED);
+    // E quem não é participante, ou a sessão que acabou, não faz nada.
+    expect(() => { origin.beforeLeave('ninguem'); }).not.toThrow();
+    origin.end('manual-exit');
+    expect(() => { origin.beforeLeave('a'); }).not.toThrow();
+  });
+
+  it('um relogue rápido NÃO duplica a regeneração do anel: a cadeia que ficou na fila é cancelada na saída', () => {
+    // O `cancelEvents(<id>)` da entrada é do subject exato; o do anel é `<id>:finger:health|mana`.
+    const after = (relogs: number): { health: number; mana: number } => {
+      const session = worldOf('world');
+      session.enter(member('keeper'));
+      let hero = member('a', { health: 10, inventory: gear() });
+      hero.mana = 0;
+      session.enter(hero);
+      for (let i = 0; i < relogs; i += 1) {
+        session.advanceBy(2_000);
+        session.leave('a');
+        session.advanceBy(100);
+        hero = member('a', { health: 10, inventory: gear() });
+        hero.mana = 0;
+        session.enter(hero);
+      }
+      // 20 s desde a ÚLTIMA entrada, longe do teto de mana (100): o que sobra é o que as cadeias regeneraram.
+      session.advanceBy(20_000);
+      return { health: hero.health, mana: hero.mana };
+    };
+    const control = after(0);
+    // O controle regenerou de fato (vocação + anel), e sem bater no teto.
+    expect(control.health).toBeGreaterThan(10);
+    expect(control.mana).toBeGreaterThan(0);
+    expect(control.mana).toBeLessThan(100);
+
+    // Mutação que mata: sem o `#cancelItemRegen` no `onLeave`, o anel curava a 2× (e 3×, 4×… a cada relogue).
+    expect(after(1)).toEqual(control);
+    expect(after(5)).toEqual(control);
+  });
+
+  it('sair e voltar no mesmo instante: a fila de quem volta tem uma cadeia de regeneração de anel só', () => {
+    const control = worldOf('world');
+    control.enter(member('a', { inventory: gear() }));
+    const session = worldOf('world');
+    session.enter(member('a', { inventory: gear() }));
+    session.leave('a');
+    session.enter(member('a', { inventory: gear() }));
+    // Passo, vida, mana, vencimento do anel, vida do anel, mana do anel: os mesmos de quem nunca saiu.
+    expect(session.pendingEvents).toBe(control.pendingEvents);
+  });
+});

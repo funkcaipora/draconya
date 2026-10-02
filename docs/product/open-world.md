@@ -7,10 +7,12 @@ tipo, mapa, cidade, templo e teto, validado no boot), a **regra de zona e de sa�
 Tibia no `sim`** (OW-14, #835: o `logout` por `canLogout` e a perda de conexão, que tenta sair aos
 60 s), o **personagem em repouso** (OW-15, #836: as colunas de mundo e vitais em `characters`, o
 ticket e o extrato que as levam), o **checkpoint do mundo** no hospedeiro (OW-16, #837: um lote a cada
-60 s e em toda saída, num `MULTI` só) e a **liquidação do checkpoint no `jobs`** (OW-17, #838: o checkpoint
-sem valor movido vira só estado absoluto, sem linha de ledger). Nada hospeda a sessão ainda — o
-hospedeiro a constrói na OW-18, atrás de `OPEN_WORLD` — e a presença no hospedeiro e a apresentação ainda
-não saíram do papel.
+60 s e em toda saída, num `MULTI` só), a **liquidação do checkpoint no `jobs`** (OW-17, #838: o checkpoint
+sem valor movido vira só estado absoluto, sem linha de ledger) e o **mundo hospedado** (OW-18, #839: o
+`WorldShard`, o login que cai no mundo atrás de `OPEN_WORLD`, o grafo com `world` no centro, o serviço
+de Cidade só em PZ, a party e os amigos). A presença no hospedeiro (OW-19), a volta da hunt ao mundo
+(OW-20), a entrada pelo repouso com a fila (OW-21) e a apresentação do cliente (OW-23) ainda não
+saíram do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -21,12 +23,12 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem seis: o que o mundo **é** como dado, a regra de
+cada peça do plano que sai do papel; hoje existem sete: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
 topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
 que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) —, o
-checkpoint, que leva o que o mundo rendeu ao Redis (OW-16), e a liquidação do checkpoint, que decide o que
-do extrato vira linha de ledger (OW-17).
+checkpoint, que leva o que o mundo rendeu ao Redis (OW-16), a liquidação do checkpoint, que decide o que
+do extrato vira linha de ledger (OW-17), e o mundo hospedado, que põe o personagem dentro dele (OW-18).
 
 ## O personagem em repouso (OW-15, #836)
 
@@ -85,7 +87,7 @@ O caminho de volta tem uma armadilha: `Session.enter` **não** traduz o personag
 sessão anterior não há de onde vir), então uma sessão que já andou — o recém-chegado de uma party em curso,
 a Cidade, o mundo — veria toda condição como vencida no instante da entrada, e o ruleset a apagaria.
 `carryRestoredConditions` soma o relógio da sessão **antes** de `enter` (o hospedeiro o faz para o
-recém-chegado e a Cidade; o `WorldShard` da OW-18 tem de fazer o mesmo).
+recém-chegado e a Cidade, e o `WorldShard.admit` da OW-18 o faz para quem nasce do ticket).
 
 ### O repouso é `'offline'`
 
@@ -99,8 +101,9 @@ coluna `state` guarda por default. O diretório continua mandando: quem está nu
 - **O checkpoint e a liquidação existem** (OW-16 e OW-17): o dono da sessão grava a âncora na saída e no
   checkpoint, e o `jobs` liquida o checkpoint sem valor como estado puro (seções abaixo). O que a OW-20
   acrescenta é a volta da hunt.
-- **A sessão do mundo hospedada** (OW-18): com a flag ligada o login ainda cai na Cidade, que cura ao entrar
-  — a vida do ticket só sobrevive numa hunt idle, e na praça é curada.
+- **A sessão do mundo hospedada existe desde a OW-18**: com a flag ligada o login cai no mundo, que **não cura
+  na entrada**, e a vida do ticket sobrevive. O que ainda cai na Cidade, que cura ao entrar, é o fim de uma
+  hunt (OW-20).
 - **A escolha do mundo** (`world_id`, OW-50) e a **troca de cidade** (`town_id`): hoje só há `main` e `thais`.
 
 ## O checkpoint do mundo (OW-16, #837)
@@ -226,13 +229,15 @@ seguinte grava o que ficou para trás antes de soltar o personagem. A sessão do
 
 ### O que ainda não existe
 
-- **Quem hospeda o mundo.** A sessão `world` ainda não é hospedada (o `WorldShard` é a OW-18, atrás de
-  `OPEN_WORLD`): o checkpoint se prova com a sessão real do `sim` em `world-checkpoint-real.test.ts` e com
-  um ruleset de mentira (`world-checkpoint.test.ts`), e entra em produção com o `WorldShard`.
+- **Quem hospeda o mundo existe desde a OW-18** (`WorldShard`, atrás de `OPEN_WORLD`): o checkpoint se
+  prova com a sessão real do `sim` em `world-checkpoint-real.test.ts`, com um ruleset de mentira
+  (`world-checkpoint.test.ts`) e, de ponta a ponta, em `world-host.test.ts` e `world-boot.test.ts`.
 - **A presença** (OW-19): o `departure-requested` que o `sim` emite (logout, x-log) ainda não é lido pelo
   hospedeiro; quando for, ele chama o mesmo funil de saída, e o lote antecipado vem de graça.
-- **O `use-slot` do mundo** só suja pelo `dirty` na Cidade (`ruleset.type === 'city'`); conjurar no mundo
-  suja pela mana e pelo gold, e trocar essa conferência é da OW-18.
+- **O `use-slot` do mundo** só suja pelo `dirty` na Cidade (`ruleset.type === 'city'`), e **a OW-18 não o
+  muda**: conjurar já suja o personagem no mundo sem a marca — a magia gasta mana (a marca do checkpoint), a
+  runa e a poção gastam gold (`goldSpent`) e contam `suppliesUsed` (os agregados) —, e marcar `dirty` também
+  seria um extrato a mais por conjuração, sem nada que o lote já não visse.
 
 ## A liquidação do checkpoint no `jobs` (OW-17, #838)
 
@@ -512,10 +517,9 @@ exercitaram. A revisão da OW-13 achou quatro defeitos que nascem daí, e os qua
   `scopesEventsToOwner` — a instância nunca o grava, e a lista dela é a de sempre byte a byte —, e
   `Receipt` (`#receiptFor`), o `session-state` e o analisador (`Session.notableEventsFor`) levam os
   eventos sem dono e os do próprio personagem. O evento da sessão (`advance-truncated`) continua de
-  todos. **Fica para a OW-18**: o cursor do analisador no hospedeiro ainda é a posição absoluta na
-  lista, que o teto (`maxNotableEventsPerCharacter`) desloca (`Session.notableEventsDropped`), e um
-  evento de outro personagem ainda muda a contagem e provoca um `analyzer` sem evento novo para
-  quem o recebe.
+  todos. **A OW-18 fechou os dois restos no hospedeiro**: o cursor do analisador é a posição ABSOLUTA na
+  lista (`notableEventsTotal`, o descarte do teto somado ao tamanho), e o `analyzer` só sai quando há
+  evento novo PARA o personagem — o de outro entra na lista, o cursor dele avança e nada é enviado.
 
 ### A entrada: onde se saiu, senão o templo
 
@@ -549,8 +553,8 @@ treino (ADR 0052 d.2): **só em tile PZ**. Lê o **bit** da PZ (`hasZoneFlag`), 
 `P` (PZ + no-logout, o de z6 sobre o templo) aceita serviço e recusa a saída, as duas leituras do
 mesmo tile. Mapa sem a camada `zones`, andar sem ela, personagem morto e quem não está na sessão
 respondem `false`: sem dado, sem serviço, ao contrário de `canLogout`, que sem dado não prende
-ninguém. É a pergunta; **quem recusa a intenção e avisa o jogador é o hospedeiro** (OW-18), que
-hoje confere `ruleset.type === 'city'`.
+ninguém. É a pergunta; **quem recusa a intenção e avisa o jogador é o hospedeiro**, desde a OW-18
+(seção "O mundo hospedado", abaixo).
 
 ### Os tetos da sessão
 
@@ -561,10 +565,10 @@ máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
 
 ### O que ainda não existe
 
-- **Quem hospeda.** Nada cria o mundo: o `WorldShard` atrás de `OPEN_WORLD` é a OW-18, e a tabela
-  de transições (`game/transitions.ts`) tem a entrada `world: []` só porque o `Record<SessionType,
-  …>` o exige. Com a flag desligada — o default — o hospedeiro é o de hoje.
-- **Quem lê a saída.** `departure-requested` e `logout-refused` saem do `sim`, e o hospedeiro hoje os
+- **Quem hospeda existe desde a OW-18**: o `WorldShard` atrás de `OPEN_WORLD` cria o mundo, e a tabela
+  de transições (`game/transitions.ts`) o põe no centro do grafo. Com a flag desligada — o default — o
+  hospedeiro é o de hoje.
+- **Quem lê a saída.** `departure-requested` e `logout-refused` saem do `sim`, e o hospedeiro ainda os
   ignora (`#presentMoves` os descarta): ler o primeiro **sem visualizador** — gravar o checkpoint e
   soltar o personagem para o repouso — e traduzir o segundo na mensagem `logout-refused` é a OW-19, que
   também entrega `presence-lost` e `presence-restored`.
@@ -664,6 +668,146 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 - A instância não muda: o conjunto de suspensos é `null` em toda hunt (só nasce na primeira queda de
   um mundo), lido pelas sete guardas do caminho quente (`HuntRuleset#isSuspended`).
 
+## O mundo hospedado (OW-18, #839)
+
+Até a OW-17 o mundo existia como sessão do `sim` e como contrato de persistência, e nenhum processo o
+hospedava. A OW-18 põe o personagem **dentro** dele: com `OPEN_WORLD` ligado ([configuração](../runtime-configuration.md))
+o login cai no mundo — no templo, ou no tile onde se saiu — no lugar da Cidade. Sem a flag nada disto
+existe, e o jogo é o de hoje, byte a byte.
+
+### O `WorldShard`: uma sessão por mundo
+
+`WorldShard` (`packages/server/src/game/sessions.ts`) é a `CityShard` do mundo aberto, e o que muda é a
+identidade: a Cidade é uma praça que enche e abre outra cópia; o mundo é **um**, como o `Game` do Canary
+(`canary/src/game/game.hpp:95, 927`).
+
+| Regra | O que faz |
+|---|---|
+| Uma sessão por `world_id` no processo | `admit('main', personagem, entrada)` cria o mundo na primeira chegada e devolve a MESMA sessão nas seguintes — dois logins são duas pessoas na mesma sessão, nunca "Thais 2" |
+| O mundo vazio é esquecido | Quando o último sai, o hospedeiro larga a sessão e a próxima chegada cria outra, com `session_id` novo e a versão de conteúdo de agora (invariante 7): o `seq` do ledger recomeça em zero, e reusar o id colidiria com os extratos da anterior (invariante 10) |
+| O teto vale só na entrada do repouso | `entry: 'rest'` — o login — recusa o mundo cheio com `WorldFullError`; `entry: 'instance'` — quem volta de uma hunt — **nunca recusa**: já estava no mundo, e barrá-lo o deixaria numa sessão encerrada. O teto é o `capacity` do conteúdo (200); a fila com posição (`world-full`) e a hunt idle direta são da OW-21 |
+| O personagem do ticket traz as condições no relógio de zero | `carryRestoredConditions` as leva para o relógio do mundo, que já andou — sem isso `armConditions` as daria por vencidas na entrada (ver "O personagem em repouso") |
+| O mundo padrão é `main` | `characters.world_id` nasce `'main'` e o ticket ainda não o leva: a escolha do mundo é da OW-50. Conteúdo sem `worlds/main.json` com `OPEN_WORLD` ligado **não sobe** (recusa na construção, não no primeiro ticket) |
+
+A flag escolhe o espaço compartilhado do nó em `createSessionWiring`: **desligada**, o login cai na Cidade
+e `to: 'world'` não tem destino (o hospedeiro recusa com `unknown-destination`); **ligada**, o login cai no mundo
+e `to: 'world'` volta a ele. O MESMO conjunto de shards nos dois caminhos — quem entra e quem volta chegam
+no mesmo lugar. O ticket de **party** continua nascendo hunt, com a flag ligada ou não: a party é uma instância.
+
+### O grafo: `world` no centro, e a Cidade ainda ao lado
+
+`ALLOWED` (`packages/server/src/game/transitions.ts`):
+
+| De | Para |
+|---|---|
+| `world` | `hunt`, `training`, `quest`, `boss`, `guild-war` |
+| `hunt`, `training`, `quest`, `boss`, `guild-war` | `city` **e `world`** |
+| `city` | `hunt`, `training`, `quest`, `boss`, `guild-war` (como era) |
+
+O mundo e a Cidade **não se tocam**: quem está numa Cidade sob a flag ligada — o fim de uma hunt ainda
+volta a ela até a OW-20 — sai do jogo e entra de novo. A tabela diz só o que é POSSÍVEL: a entrada numa
+instância a partir do mundo só quando o Tibia deixaria deslogar (`canLogout`, ADR 0060 d.6a) e a volta só com
+alguém olhando (d.6c) são do hospedeiro, e são a OW-20. Até lá, `enter-hunt` e `enter-training` no mundo
+passam sem `canLogout` — o treino exige PZ (abaixo), a hunt não.
+
+### O serviço de Cidade só vale em PZ
+
+O hospedeiro responde a pergunta que o `sim` declarou na OW-13 (`Ruleset.acceptsCityServices`). A resposta
+tem dois níveis (`#cityServiceRefusal`, `#zoneServiceRefusal`): a SESSÃO oferece serviço? (a Cidade e o
+mundo sim, a hunt e o treino nunca — o predicado `offersCityServices`, OW-04) e, no mundo, o TILE aceita?
+(só em protect zone). A recusa fora de PZ é uma frase só — "Isso só se faz numa zona de proteção." —, sem
+debitar nada e sem tocar no inventário.
+
+| Intenção | Cidade | Hunt | Mundo |
+|---|---|---|---|
+| `buy-blessing` | sim | recusa | **só em PZ** |
+| `promote-vocation` | sim | recusa | **só em PZ** |
+| `buy-item` | sim | recusa | **só em PZ** |
+| `set-offline-training-skill` (o livro) | sim | recusa | **só em PZ** |
+| `enter-training` | sim | recusa | **só em PZ** |
+| `set-hazard-level` | sim | recusa | **só em PZ** |
+| `sell-items` | de onde estiver | de onde estiver | **só em PZ** |
+| `learn-spell` | de onde estiver | de onde estiver | **só em PZ** (emenda ao ADR 0058 d.2) |
+
+Dois pontos de leitura: o **tile `P`** (PZ + no-logout, o de z6 sobre o templo) aceita serviço — a PZ decide o
+serviço, e o no-logout a saída —; e **o ouro sai pelo canal único** (`#mirrorGold`, OW-04): o mundo credita por
+agregado, então a bênção comprada no templo move `goldDelta` E `goldSpent`, e a Cidade da flag desligada
+segue como era. Os Charms (`charm-unlock`, `charm-assign`, `charm-remove`) continuam valendo de qualquer
+sessão (ADR 0052 d.4).
+
+### O equipamento atravessa a transição (mundo ↔ hunt)
+
+O destino de uma transição é construído **antes** de a origem soltar o personagem (a recusa do destino não pode
+deixá-lo sem sessão), e o personagem é o MESMO `CharacterRuntime` nas duas. Até o mundo ser hospedado só a Cidade
+— que não simula — era origem; agora a origem também tem observer de equipamento, prazo de anel e regeneração de
+item. Três regras:
+
+- **O observer é do dono.** `EquipmentObserver.owner` é a sessão que o instalou, e o `onLeave`/`onEnd` chama
+  `Inventory.releaseEquipmentObserver(session)`, que só limpa o que é dela. Sem isso a saída da origem apagava o
+  observer que o destino acabara de instalar: a bota não mexia na velocidade e o anel tirado deixava o vencimento
+  na fila.
+- **O que só a origem sabe vai antes.** O hospedeiro chama `Session.beforeLeave(characterId)`
+  (`Ruleset.onBeforeLeave`) antes de construir o destino, e o `HuntRuleset` guarda o restante do prazo do anel no
+  `overlay` — o destino o lê na entrada. **Só publica; não cancela nada**: a transição recusada deixa o anel
+  vencendo na fila da origem, e o `onLeave`/`onEnd` repete a conta com o mesmo valor (nenhum tempo lógico corre
+  entre os dois). Sem isso o anel vestido 10 minutos no mundo chegava à hunt com o prazo cheio.
+- **A regeneração do item sai da fila na saída.** O subject é `<id>:<slot>:<recurso>`, que o `cancelEvents(<id>)`
+  da entrada (subject exato) não alcança; o mundo reentra o MESMO id na MESMA sessão num relogue rápido, e a cadeia
+  que ficou achava o personagem novo por id e curava junto da nova — o anel a 2×, 3×… A instância não muda: o id
+  de quem sai nunca volta à fila dela.
+
+### O que mais o hospedeiro faz com o mundo
+
+- **A AOI está ligada** (`usesAreaOfInterest`): cada visualizador recebe só a vizinhança — quem está por
+  perto, no mesmo andar que o Canary deixa ver — e o `creature-appear` do recém-chegado vai a quem o enxerga.
+- **O `leave-hunt` no mundo é recusado** ("Você já está aqui."). O `WorldRuleset` é um `HuntRuleset` e herda
+  `requestExit`, que concluiria por `onExitFinished` e levaria o personagem à Cidade por fora do `canLogout`
+  e da tabela de transições.
+- **O mundo não é uma hunt para o cliente**: o `instance-enter` e o `session-state` não levam `huntId` nem
+  `difficulty` (os sintéticos do motor, `world:main` e `world`, não descrevem hunt nenhuma do catálogo).
+- **O analisador anda por posição absoluta** e só fala quando há evento novo para o personagem (ver o
+  checkpoint, acima).
+- **O registro recusado não deixa fantasma**: se o diretório recusa o registro depois de a fábrica já ter posto
+  o personagem na sessão compartilhada (a reserva expirou), o hospedeiro o tira dela. Sem isso ele ficaria em
+  `participants` — um tile bloqueado no templo e uma vaga do teto que nunca volta, numa sessão que não esvazia.
+  Vale também para a Cidade.
+- **O mundo roda a 10 Hz com ou sem visualizador** e nunca é recolhido como a Cidade (`#collectResting` só
+  visita `hz <= 0`): fechar o navegador não o tira de lá. A saída do mundo — o `logout` por `canLogout`, o
+  x-log aos 60 s — é a OW-19.
+
+### A party e os amigos
+
+- **A party** se forma e se larga do mundo como da Cidade (`api/party.ts`): onde só `'city'` valia (criar,
+  convidar, o matchmaking, o convite social, o `/start` e a entrada numa party em curso), `'world'` passa. O nome
+  da recusa (`not-in-city`, `inviter-in-hunt`) não mudou, e a instância (hunt, treino, quest) continua recusada.
+  **Largar a hunt a partir do mundo ainda não passa por `canLogout`**: o `api` só vê o TIPO da sessão, e o gate
+  de quem está em luta é do `game` (OW-20, `member-in-fight`).
+- **Os amigos** (`api/friends.ts`): `GET /api/friends` responde `where: 'world'` para o amigo no mundo — `'city'`
+  na Cidade, `'hunt'` em qualquer instância, `null` offline. O cliente o rotula "No mundo" (`FriendsModal`); o
+  resto do HUD do mundo é da OW-23.
+
+### O nó se recusa a subir com outro `game`
+
+Um mundo é uma sessão num processo só (invariante 9). Com a flag ligada o `game` lê o batimento dos nós no
+`start` e **cai** se há outro vivo, antes de abrir a porta (`game/open-world-guard.ts`; detalhes de operação em
+[`runtime-configuration.md`](../runtime-configuration.md)). É proteção de boot; a trava de verdade é a
+OW-59.
+
+### O que ainda não existe
+
+- **A presença** (OW-19): `logout` ainda chama `release` direto, sem `canLogout`; o `departure-requested` e o
+  `logout-refused` do `sim` ainda não são lidos; fechar o navegador não dispara o x-log.
+- **Mundo ↔ hunt idle** (OW-20): o fim, a morte e a drenagem de uma hunt ainda levam à Cidade (que cura), assistidos
+  ou não; a entrada numa instância a partir do mundo não consulta `canLogout`; a volta só com alguém olhando.
+- **A entrada pelo repouso** (OW-21): o mundo cheio recusa o login com `WorldFullError` (o socket falha); a fila
+  `world-full` e a hunt idle direta do login não existem.
+- **A stamina** (OW-46): o tempo no mundo conta como recuperação na próxima transição e no próximo login — o
+  `materializeStamina` da fronteira e o marco do extrato ainda tratam o mundo como "offline" (ADR 0060 d.14b).
+- **O `player-stats.zone` e o `inFight`** (OW-11): o protocolo os tem, e nenhum servidor os emite. O cliente
+  da OW-23 depende deles para os ícones de PZ e de luta.
+- **A morte no mundo** (OW-32): sem monstro (OW-25) não há como morrer, e o dia em que houver, a saída por
+  `member-left` leva o personagem à Cidade — a tela de relogin e o repouso no templo são da OW-32.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor | Onde mora |
@@ -671,7 +815,7 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 | Tipo do mundo | `no-pvp` | `packages/content/data/worlds/main.json`, `worldType` (vocabulário em `WORLD_TYPES`, `packages/content/src/schemas.ts`) |
 | Mapa do mundo | `thais` | `packages/content/data/worlds/main.json`, `map` |
 | Templo de Thais | `(32369, 32241, 7)`, absoluto | `packages/content/data/worlds/main.json`, `towns[].temple` |
-| Teto de gente | 200 | `packages/content/data/worlds/main.json`, `capacity` — o `CITY_SHARD_CAPACITY` (`packages/server/src/game/sessions.ts`) continua sendo o da Cidade até a admissão do mundo (OW-18) |
+| Teto de gente | 200, só na entrada do repouso | `packages/content/data/worlds/main.json`, `capacity`, lido pelo `WorldShard` (`packages/server/src/game/sessions.ts`, OW-18) — o `CITY_SHARD_CAPACITY` é o da Cidade |
 | Janela de luta que trava a saída | 60 s desde o último golpe dado ou recebido, fora da PZ | `packages/sim/src/combat/in-fight.ts`, `IN_FIGHT_WINDOW_MS` (o `pzLocked` do Canary) |
 | Espera do x-log, desde a perda de conexão | 60 s, no relógio lógico (o `noPongTime >= 60000` do Canary) | `packages/sim/src/world-exit.ts`, `XLOG_DELAY_MS` |
 | Taxa de atualização do mundo | 10 Hz, com ou sem visualizador | `packages/sim/src/rulesets/world.ts`, `WORLD_HZ` |
@@ -684,12 +828,13 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 
 ## Em aberto
 
-- A presença no hospedeiro e a apresentação (OW-18 a OW-20): ver o [plano](../open-world-plan.md). É aí
-  que a sessão de mundo ganha quem a hospede, que o `departure-requested` vira repouso (o checkpoint
-  que ele grava já existe, OW-16) e que o `logout-refused` chega ao cliente.
+- A presença no hospedeiro e a volta da hunt (OW-19 e OW-20): ver o [plano](../open-world-plan.md). É aí
+  que o `departure-requested` vira repouso (o checkpoint que ele grava já existe, OW-16), que o
+  `logout-refused` chega ao cliente e que a entrada numa instância passa por `canLogout`.
 - O `requestExit` que o `WorldRuleset` herda da hunt (a OW-13 o testa) **não é a saída do mundo**:
   ele conclui por `onExitFinished` depois de `exitDelayMs` e da janela de luta, mas não olha o tile —
-  um tile de no-logout não o recusa. O hospedeiro do mundo (OW-19) deve rotear o `logout` por
+  um tile de no-logout não o recusa. **O hospedeiro o recusa desde a OW-18**: o `leave-hunt` no mundo
+  responde "Você já está aqui." e não chama o `requestExit`. O `logout` do mundo (OW-19) deve passar por
   `requestLogout`, e nunca por ele.
 - O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
   sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.

@@ -55,7 +55,8 @@ hunt (ADR 0035 d.1).
   saiu do contrato junto com a aprovação (ADR 0036). As vagas por vocação (`openSlots`) são
   calculadas pelo servidor a partir de `party:{id}:vocations`, não repetidas no membro.
 - **Iniciar é do líder, sem aprovação** (ADR 0036): `POST /api/party/:id/start` exige ≥ 2
-  membros, hunt e dificuldade existentes, todos na Cidade ou em repouso (invariante 8), e o
+  membros, hunt e dificuldade existentes, todos na Cidade, no mundo (com `OPEN_WORLD`, OW-18) ou em
+  repouso (invariante 8), e o
   progresso pendente de cada um liquidado. Aí o `api` escolhe **um nó** (o do líder) e emite um
   ticket por membro com o mesmo `sessionId`; se o k-ésimo ticket falhar, os k−1 anteriores são
   revogados. O primeiro ticket a chegar ao `game` cria a sessão com os N; o líder e quem mais
@@ -133,8 +134,9 @@ Três caminhos de formação e entrada, sobre o mesmo fluxo HTTP:
 - **Amigos** (mínimo do §21): tabela `friend (character_id, friend_character_id, created_at)`,
   par único, sem pedidos nem bloqueios. `POST /api/friends { name }`,
   `DELETE /api/friends/:characterId` e `GET /api/friends` →
-  `[{ characterId, name, vocationId, level, online, where: 'city' | 'hunt' | null }]` (`online`/
-  `where` saem do `directory`, que conhece o tipo da sessão, não a hunt). **Convite tradicional**
+  `[{ characterId, name, vocationId, level, online, where: 'city' | 'world' | 'hunt' | null }]` (`online`/
+  `where` saem do `directory`, que conhece o tipo da sessão, não a hunt; `'world'` é o mundo aberto, com
+  `OPEN_WORLD` — sem a flag nunca sai). **Convite tradicional**
   (com party): o convite fica visível ao convidado por um índice reverso
   (`party:invited:{characterId}`, TTL do convite); `GET /api/party/mine` devolve `invites[]`, e
   `POST /api/party/:id/decline` recusa. **Convite social** (M26, #502; sem party):
@@ -150,7 +152,8 @@ Três caminhos de formação e entrada, sobre o mesmo fluxo HTTP:
   `party-full` quando a lotação viva chegou a `maxMembers`.
 - **Entrada na instância em curso** (`join` com a party em `state: 'hunting'`): o `api` valida
   convite ou sala pública (level e **vaga por vocação**), lotação viva, personagem na Cidade/
-  repouso e liquida o progresso pendente dele; **reserva a vaga ANTES de emitir o ticket**
+  repouso ou no mundo (`OPEN_WORLD`, #839 — `inSharedSpace`) e liquida o progresso pendente dele;
+  **reserva a vaga ANTES de emitir o ticket**
   (`reserveSlot` em Lua) e faz rollback — `releaseSlot` + revogação do ticket — se a emissão
   falhar, para não deixar vaga ocupada por fantasma; resolve o nó **da sessão**
   (`directory.lookup(leaderId).nodeId`) e emite um ticket com `party: { sessionId, leaderId,
@@ -435,7 +438,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 ## Regras
 
 - Party é uma sessão de hunt com N participantes; um personagem está em uma sessão só.
-- Tamanho máximo: `maxMembers` (8). Início com ≥ 2, todos na Cidade — o LÍDER inicia, sem
+- Tamanho máximo: `maxMembers` (8). Início com ≥ 2, todos na Cidade (ou no mundo, OW-18) — o LÍDER inicia, sem
   aprovação de membros (ADR 0036); entrada em sessão em curso aceita convite ou sala pública,
   com lotação viva ≤ `maxMembers` e vaga por vocação.
 - Formação por HTTP no `api`, em Redis com TTL; matchmaking forma, não inicia. Sala pública com

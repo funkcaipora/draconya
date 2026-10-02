@@ -7,11 +7,11 @@
 import { randomUUID } from 'node:crypto';
 import {
   CharacterRuntime, DEFAULT_DIFFICULTY_NAME, Rng, Session, createCityRuleset, createHuntSession,
-  createTrainingSession, holdStamina, huntRulesetFromSnapshot, materializeStamina, statsForLevel,
-  trainingRulesetFromSnapshot,
+  createTrainingSession, createWorldSession, holdStamina, huntRulesetFromSnapshot, materializeStamina,
+  statsForLevel, trainingRulesetFromSnapshot,
 } from '@draconya/sim';
 import type {
-  HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
+  HuntDifficultyName, InventoryState, Ruleset, SessionLimits, SessionSnapshot, SkillsState,
 } from '@draconya/sim';
 import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, sanitizeBotConfigV2,
@@ -172,6 +172,178 @@ export class CityShard {
   }
 }
 
+/**
+ * O mundo a que o personagem pertence quando o ticket não diz (OW-18). A escolha de mundo na criação
+ * e o segundo mundo são da OW-50: até lá `characters.world_id` nasce `'main'` (migração `0029`) e o
+ * ticket não o leva, então todo login e toda volta de instância caem neste.
+ */
+export const DEFAULT_WORLD_ID = 'main';
+
+/**
+ * De onde o personagem chega ao mundo, e é isto que decide o teto (ADR 0060 d.2b):
+ *
+ * - `'rest'`: do REPOUSO — o login, o ticket. Conta para o `capacity` do mundo, e o mundo cheio o
+ *   recusa (`WorldFullError`; a fila e a hunt idle direta são da OW-21).
+ * - `'instance'`: de uma hunt, do treino, de uma quest — quem JÁ ESTAVA no mundo antes de entrar nela,
+ *   e voltar a ele não pode ser recusado: o teto vale só na entrada.
+ */
+export type WorldEntry = 'rest' | 'instance';
+
+/** O mundo está no teto e a entrada era do repouso (ADR 0060 d.2b). Quem volta de uma instância nunca a vê. */
+export class WorldFullError extends Error {
+  constructor(readonly worldId: string, readonly capacity: number) {
+    super(`world "${worldId}" is full (${String(capacity)} characters)`);
+    this.name = 'WorldFullError';
+  }
+}
+
+export interface WorldShardOptions {
+  /**
+   * Teto de personagens por mundo. Padrão: o `capacity` de `data/worlds/<id>.json` (`main.json`: 200),
+   * que é conteúdo — o teto é uma propriedade do mundo, como o `maxPlayers` do Canary. Existe para o
+   * teste e para o `bench:world` fixarem um valor sem reescrever o conteúdo.
+   */
+  readonly capacity?: number;
+  /** Substitui, campo a campo, `WORLD_SESSION_LIMITS` do `sim` (o `bench:world` os fixa na máquina de destino). */
+  readonly limits?: SessionLimits;
+}
+
+/**
+ * Os mundos deste nó — UMA sessão por `world_id` (OW-18, ADR 0060 d.2a).
+ *
+ * É a `CityShard` do mundo aberto, e o que muda é a identidade, não o mecanismo: a Cidade é uma
+ * praça que enche e abre outra cópia ("Cidade 2"); o mundo é UM, como o `Game` do Canary
+ * (`canary/src/game/game.hpp:95, 927`) — "nunca se abre Thais 2". Para caber mais gente, cria-se outro
+ * `world_id` (OW-50) e mais nós, nunca uma segunda cópia do mesmo mundo, e é por isso que aqui não há
+ * lista de cópias: há um mapa de `world_id` para sessão.
+ *
+ * **O mundo vazio é ESQUECIDO**, como a cópia vazia da Cidade, pelo mesmo motivo (invariante 7): a
+ * versão de conteúdo é fixada na criação, e um mundo que ninguém ocupa e atravessa três deploys
+ * continuaria rodando a versão do primeiro. Vazio ele também não custa nada — o hospedeiro o larga
+ * quando o último sai, e a próxima entrada cria outro, já na versão de agora. Monstros, cadáveres e
+ * campos são efêmeros e recomeçam (ADR 0060 d.10a), como no Canary depois de um save global.
+ *
+ * **O teto vale só na ENTRADA do repouso** (d.2b): `admit(..., 'rest')` recusa o mundo cheio, e
+ * `admit(..., 'instance')` nunca recusa — quem volta de uma hunt já estava no mundo antes de sair, e
+ * barrá-lo prenderia o personagem numa sessão encerrada.
+ *
+ * **Uma sessão num processo só** (invariante 9). Com mais de um nó `game`, é a trava `world:{id}:owner`
+ * (OW-59) que garante isso; até lá, `OPEN_WORLD` só liga com um `game` (`game/server.ts` recusa subir).
+ */
+export class WorldShard {
+  readonly #content: Content;
+  readonly #now: () => number;
+  readonly #capacity: number | undefined;
+  readonly #limits: SessionLimits | undefined;
+  readonly #worlds = new Map<string, Session>();
+
+  constructor(
+    content: Content,
+    now: () => number = () => Date.now(),
+    options: WorldShardOptions = {},
+  ) {
+    const capacity = options.capacity;
+    if (capacity !== undefined && (!Number.isInteger(capacity) || capacity < 1)) {
+      throw new Error(`world shard capacity must be a positive integer: ${String(capacity)}`);
+    }
+    // O mundo padrão tem de existir, com o mapa dele: é o que todo login pede, e descobrir que não
+    // existe no primeiro ticket seria uma sessão recusada por jogador em vez de um nó que não sobe.
+    // O `buildContent` já confere que cada mundo aponta para um mapa que existe.
+    if (!content.worlds.has(DEFAULT_WORLD_ID)) {
+      throw new Error(
+        `OPEN_WORLD needs the world "${DEFAULT_WORLD_ID}" in the content (data/worlds/${DEFAULT_WORLD_ID}.json)`,
+      );
+    }
+    this.#content = content;
+    this.#now = now;
+    this.#capacity = capacity;
+    this.#limits = options.limits;
+  }
+
+  /**
+   * Põe o personagem na sessão do mundo `worldId`, criando-a se não há. `entry` diz de onde ele vem
+   * (`WorldEntry`) e, com isso, se o teto o alcança. Lança `WorldFullError` quando o mundo está cheio e a
+   * entrada é do repouso, e `Error` para um mundo que o conteúdo não tem.
+   *
+   * O personagem que NASCE do ticket (`'rest'`) traz as condições como prazo restante (relógio zero,
+   * #836): a sessão que já andou tem outro relógio, e `Session.enter` não traduz quem nunca esteve numa
+   * sessão — `carryRestoredConditions`, antes do `enter`, o leva para o dela. Quem volta de uma
+   * instância (`'instance'`) já foi traduzido por `moveToClock`.
+   */
+  admit(worldId: string, character: CharacterRuntime, entry: WorldEntry): Session {
+    const world = this.#content.worlds.get(worldId);
+    if (world === undefined) throw new Error(`unknown world "${worldId}"`);
+    const existing = this.#worlds.get(worldId);
+    // Vazia ou encerrada: esquece. O hospedeiro já largou a que esvaziou (`release`), e a que acabou
+    // por fora não aceita ninguém.
+    const live = existing !== undefined && existing.ended === null && existing.participants.length > 0
+      ? existing
+      : undefined;
+    if (live === undefined && existing !== undefined) this.#worlds.delete(worldId);
+
+    const capacity = this.#capacity ?? world.capacity;
+    if (entry === 'rest' && live !== undefined && live.participants.length >= capacity) {
+      throw new WorldFullError(worldId, capacity);
+    }
+    const session = live ?? this.#create(worldId);
+    if (live === undefined) this.#worlds.set(worldId, session);
+    if (entry === 'rest') carryRestoredConditions(character, session);
+    session.enter(character);
+    return session;
+  }
+
+  /** O mundo `worldId` está no teto? É a pergunta que a fila da OW-21 faz antes de chamar `admit`. */
+  isFull(worldId: string): boolean {
+    const world = this.#content.worlds.get(worldId);
+    const live = this.#worlds.get(worldId);
+    if (world === undefined || live === undefined || live.ended !== null) return false;
+    return live.participants.length >= (this.#capacity ?? world.capacity);
+  }
+
+  /** Quantos personagens o mundo `worldId` tem agora neste nó. */
+  populationOf(worldId: string): number {
+    return this.#worlds.get(worldId)?.participants.length ?? 0;
+  }
+
+  /** Quantos personagens há nos mundos deste nó, somados. */
+  get population(): number {
+    let total = 0;
+    for (const session of this.#worlds.values()) total += session.participants.length;
+    return total;
+  }
+
+  /** Quantos mundos têm sessão agora. Vazio é esquecido na próxima entrada: o nó sem ninguém mostra zero. */
+  get worlds(): number {
+    let live = 0;
+    for (const session of this.#worlds.values()) {
+      if (session.ended === null && session.participants.length > 0) live += 1;
+    }
+    return live;
+  }
+
+  /** A sessão viva do mundo `worldId`, se há uma. */
+  sessionOf(worldId: string): Session | undefined {
+    const session = this.#worlds.get(worldId);
+    return session !== undefined && session.ended === null && session.participants.length > 0 ? session : undefined;
+  }
+
+  #create(worldId: string): Session {
+    const world = this.#content.worlds.get(worldId);
+    const map = world === undefined ? undefined : this.#content.maps.get(world.map);
+    if (world === undefined || map === undefined) throw new Error(`world "${worldId}" has no map in the content`);
+    // O id é desta ENCARNAÇÃO do mundo (invariante 10): o ledger é `UNIQUE (session_id, seq)` e o `seq`
+    // recomeça em zero a cada sessão, então reusar o id do mundo colidiria com os extratos da anterior.
+    const id = randomUUID();
+    return createWorldSession({
+      id, map, world, content: this.#content,
+      // Semente derivada do id, como a Cidade: o mesmo id reproduz a mesma sequência.
+      seed: id,
+      createdAtMs: this.#now(),
+      ...(this.#limits === undefined ? {} : { limits: this.#limits }),
+    });
+  }
+}
+
 export function createCitySessionFactory(
   content: Content,
   now: () => number = () => Date.now(),
@@ -184,6 +356,78 @@ export function createCitySessionFactory(
     const character = characterFromTicket(content, characterId, initialCharacter, now);
     // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
     return shard.admit(character, true);
+  };
+}
+
+/**
+ * A fábrica de sessões do nó com `OPEN_WORLD` ligado (OW-18): o login cai no MUNDO, no templo ou na
+ * posição salva, em vez da Cidade. É a `createCitySessionFactory` com o shard trocado — o ticket de party
+ * continua nascendo hunt, e o personagem do ticket é o mesmo (`characterFromTicket`) —, e por isso o
+ * mundo é uma sessão de DUAS ou mais pessoas desde o primeiro dia: o segundo login entra na mesma sessão.
+ *
+ * O mundo vem do ticket quando ele o levar (OW-50); até lá é `DEFAULT_WORLD_ID`. Lança `WorldFullError`
+ * quando o mundo está no teto, e é do `game/server.ts` — hoje, o handshake que falha — o que o jogador
+ * vê; a fila e a hunt idle direta são da OW-21.
+ */
+export function createWorldSessionFactory(
+  content: Content,
+  now: () => number,
+  worlds: WorldShard,
+  worldId: string = DEFAULT_WORLD_ID,
+): SessionFactory {
+  return (characterId, initialCharacter = { level: 1, xp: 0 }, party): Session => {
+    if (party !== undefined) return partyHuntFor(content, party, now);
+    const character = characterFromTicket(content, characterId, initialCharacter, now);
+    return worlds.admit(worldId, character, 'rest');
+  };
+}
+
+/**
+ * As duas costuras de sessão do nó `game` — a que cria a sessão do login e a que constrói o destino de uma
+ * transição —, montadas com o MESMO conjunto de shards (FUN-71, OW-18).
+ *
+ * É o lugar onde a flag `OPEN_WORLD` escolhe o espaço compartilhado do nó, e por isso mora aqui e não no
+ * `main.ts`: o que importa testar é que a flag desligada dá a Cidade de sempre e a ligada dá o mundo, e
+ * o `main` é boot, sem teste.
+ *
+ * - **desligada** (o default): o login cai na Cidade, `to: 'world'` devolve `null` (o host recusa a
+ *   transição) e o jogo é o de hoje, byte a byte. Nenhum `WorldShard` existe.
+ * - **ligada**: o login cai no mundo, e `to: 'world'` volta a ele. A Cidade continua existindo — o fim
+ *   de uma hunt ainda volta a ela até a OW-20 —, com o MESMO `CityShard` nos dois caminhos.
+ *
+ * O MESMO shard nos dois caminhos é o ponto: quem entra no jogo e quem volta de uma instância chegam no
+ * mesmo lugar, e dois shards seriam dois mundos que nunca se veem — defeito invisível até alguém tentar
+ * encontrar um amigo.
+ */
+export interface SessionWiringOptions {
+  /** `OPEN_WORLD` (`config.ts`). Padrão: desligada. */
+  readonly openWorld?: boolean;
+  readonly cityShard?: CityShardOptions;
+  readonly worldShard?: WorldShardOptions;
+}
+
+export interface SessionWiring {
+  readonly createSession: SessionFactory;
+  readonly buildSession: SessionBuilder;
+  readonly cityShard: CityShard;
+  /** Só com `OPEN_WORLD` ligado. */
+  readonly worldShard: WorldShard | undefined;
+}
+
+export function createSessionWiring(
+  content: Content,
+  now: () => number = () => Date.now(),
+  options: SessionWiringOptions = {},
+): SessionWiring {
+  const cityShard = new CityShard(content, now, options.cityShard);
+  const worldShard = options.openWorld === true ? new WorldShard(content, now, options.worldShard) : undefined;
+  return {
+    createSession: worldShard === undefined
+      ? createCitySessionFactory(content, now, cityShard)
+      : createWorldSessionFactory(content, now, worldShard),
+    buildSession: createSessionBuilder(content, now, cityShard, worldShard),
+    cityShard,
+    worldShard,
   };
 }
 
@@ -439,6 +683,12 @@ export function createSessionBuilder(
   content: Content,
   now: () => number = () => Date.now(),
   shard: CityShard = new CityShard(content, now),
+  /**
+   * Os mundos do nó (OW-18), só com `OPEN_WORLD` ligado. Ausente — o default —, `to: 'world'` devolve
+   * `null` e o host recusa a transição (`unknown-destination`): o nó sem a flag não sabe construir um
+   * mundo, e o jogo é o de hoje, byte a byte.
+   */
+  worlds?: WorldShard,
 ): SessionBuilder {
   return (request, from, characterId, departed): Session | null => {
     // Quem atravessa é UM personagem, mesmo quando a origem tem duzentos (FUN-71). Mover
@@ -465,6 +715,7 @@ export function createSessionBuilder(
     else materializeStamina(character, now(), content.stamina);
 
     if (request.to === 'city') return cityFor(shard, from, character);
+    if (request.to === 'world') return worlds === undefined ? null : worldFor(worlds, from, character);
     if (request.to === 'hunt') return huntFor(content, request, character, now);
     if (request.to === 'training') return trainingFor(content, request, character, now);
     // Quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com erro claro,
@@ -485,6 +736,23 @@ function cityFor(shard: CityShard, from: Session, character: CharacterRuntime): 
   // A MESMA cópia em que os outros estão (FUN-71). Voltar da hunt é chegar na praça, não
   // abrir uma praça nova — que é o que uma sessão por personagem fazia.
   return shard.admit(character);
+}
+
+/**
+ * O mundo não sucede a si mesmo: uma sessão de mundo que acaba é logout ou drenagem, como a Cidade.
+ *
+ * Quem chega aqui vem de uma INSTÂNCIA (`ALLOWED` não liga a Cidade ao mundo), então a entrada é
+ * `'instance'`: o teto do mundo não a alcança (ADR 0060 d.2b) — o personagem já estava no mundo antes de
+ * sair, e barrá-lo o deixaria numa sessão encerrada. É o MESMO objeto de personagem, com a âncora que a
+ * saída do mundo gravou (`#anchorWorldPosition`): é ela que o `placeOnEnter` do mundo usa para recolocá-lo
+ * no tile de onde ele saiu.
+ *
+ * **A volta só com alguém olhando é do hospedeiro** (OW-20, d.6c): este construtor não sabe quem olha, e
+ * por isso o fim de uma hunt ainda não passa por aqui — volta à Cidade, como sempre.
+ */
+function worldFor(worlds: WorldShard, from: Session, character: CharacterRuntime): Session | null {
+  if (from.ruleset.type === 'world') return null;
+  return worlds.admit(DEFAULT_WORLD_ID, character, 'instance');
 }
 
 function huntFor(

@@ -1,7 +1,7 @@
 // A formação da party de hunt (#195, ADR 0027 decisão 8): HTTP, no `api`, em Redis.
 //
-// O personagem está na Cidade, e a Cidade é inerte — nada disto passa pela sessão. Criar,
-// convidar, configurar, entrar, sair são escritas num formulário em Redis (`PartyStore`);
+// O personagem está na Cidade — ou, com `OPEN_WORLD`, no mundo (OW-18) —, e nada disto passa pela
+// sessão. Criar, convidar, configurar, entrar, sair são escritas num formulário em Redis (`PartyStore`);
 // `start` é o que faz para N o que `POST /api/tickets` faz para um: valida, liquida o
 // progresso pendente de cada um, escolhe UM nó, emite um ticket por membro com o mesmo
 // `sessionId` e o bloco `party`, e apaga o formulário. Daqui em diante a sessão é a party.
@@ -239,6 +239,20 @@ async function view(
 }
 
 /**
+ * O personagem está num espaço compartilhado — fora de uma hunt? `null` é repouso (Cidade sem sessão, ADR
+ * 0024), `'city'` a Cidade viva e `'world'` o mundo aberto (OW-18, ADR 0060 d.6): é de qualquer um dos três que
+ * se forma e se larga uma party, e o que não é — hunt, treino, quest — está numa instância (invariante 8).
+ *
+ * O NOME da recusa (`not-in-city`, `inviter-in-hunt`) não muda: o cliente a traduz por ele, e o `api` que
+ * recusa é o mesmo com a flag `OPEN_WORLD` ligada ou desligada. **Quem larga a party a partir do MUNDO passa
+ * por `canLogout` no `game`** (ADR 0060 d.6a) — a OW-20; o `api` só vê o tipo da sessão, e não sabe se o
+ * personagem está em luta.
+ */
+function inSharedSpace(location: { type: string } | null): boolean {
+  return location === null || location.type === 'city' || location.type === 'world';
+}
+
+/**
  * A entrada numa party em CURSO (#402, ADR 0035 D7). O cliente manda só a intenção; quem
  * decide elegibilidade, lotação, versão de conteúdo e o nó é este processo. O teto aqui é
  * OTIMISTA — a recusa definitiva é o `onEnter` do `sim`, dentro do ciclo da sessão dona (DT-02).
@@ -257,7 +271,7 @@ async function joinRunningParty(
   }
   // Quem entra numa hunt em curso está na Cidade (ou em repouso — Cidade sem sessão, ADR 0024).
   const current = await deps.locateSession(me.characterId);
-  if (current !== null && current.type !== 'city') return { status: 409, body: { error: 'not-in-city' } };
+  if (!inSharedSpace(current)) return { status: 409, body: { error: 'not-in-city' } };
 
   // Elegibilidade: convite explícito OU sala publicada com o level no mínimo (RF-05).
   const invited = await deps.party.isInvited(party.id, me.characterId);
@@ -487,7 +501,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const character = await deps.getCharacter(me.accountId, me.characterId);
     if (character === null) return reply.code(404).send({ error: 'character-not-found' });
     const location = await deps.locateSession(me.characterId);
-    if (location !== null && location.type !== 'city') return reply.code(409).send({ error: 'not-in-city' });
+    if (!inSharedSpace(location)) return reply.code(409).send({ error: 'not-in-city' });
     const result = await deps.party.enqueue(
       me.characterId, me.accountId, character.level, character.vocation,
       deps.matchmakingLevelRange ?? 0, deps.limits.maxMembers,
@@ -514,7 +528,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     // Convidar é da Cidade (RF-08): quem está numa hunt não convida — vale para o convite
     // tradicional e para o social, pela MESMA régua do diretório (DT-02).
     const location = await deps.locateSession(me.characterId);
-    if (location !== null && location.type !== 'city') {
+    if (!inSharedSpace(location)) {
       return reply.code(409).send({ error: 'inviter-in-hunt' });
     }
     // Lotação também trava o convite (§20.1): a contagem é VIVA quando a hunt já começou.
@@ -731,7 +745,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const invite = Invite.safeParse(request.body);
     if (!invite.success) return reply.code(400).send({ error: 'invalid-body' });
     const location = await deps.locateSession(me.characterId);
-    if (location !== null && location.type !== 'city') {
+    if (!inSharedSpace(location)) {
       return reply.code(409).send({ error: 'inviter-in-hunt' });
     }
     if (invite.data.inviteeId === me.characterId) return reply.code(400).send({ error: 'invite-self' });
@@ -760,7 +774,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (me === null) return;
     // O aceite é da Cidade: quem está numa hunt não entra em outra (invariante 8).
     const location = await deps.locateSession(me.characterId);
-    if (location !== null && location.type !== 'city') {
+    if (!inSharedSpace(location)) {
       return reply.code(409).send({ error: 'not-in-city' });
     }
     const character = await deps.getCharacter(me.accountId, me.characterId);
@@ -810,7 +824,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     // não entra em outra (invariante 8).
     for (const member of party.members) {
       const location = await deps.locateSession(member);
-      if (location !== null && location.type !== 'city') return reply.code(409).send({ error: 'not-in-city', characterId: member });
+      if (!inSharedSpace(location)) return reply.code(409).send({ error: 'not-in-city', characterId: member });
     }
 
     // O progresso pendente de CADA um entra na tabela antes da leitura da linha (FUN-56), e

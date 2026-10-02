@@ -91,6 +91,14 @@ export interface CarriedItem {
  */
 export interface EquipmentObserver {
   /**
+   * Quem instalou este observer (a sessão do ruleset). O personagem atravessa a transição como o
+   * MESMO objeto e a sessão de destino é construída ANTES de a origem o soltar: quando o `onLeave`/
+   * `onEnd` da origem chega, o observer instalado já é o do destino, e anulá-lo às cegas o apagaria.
+   * `releaseEquipmentObserver(owner)` só limpa o que é do dono que pede. Ausente é "sem dono" —
+   * fixture de teste —, e um observer assim nunca é liberado por ali.
+   */
+  readonly owner?: object;
+  /**
    * `previous` é o que o slot tinha antes da troca direta (já de volta no lugar de onde `item`
    * saiu), ou `null`. A troca é uma transação só (ADR 0032 d.8), então o item que sai não recebe
    * um `onUnequip` à parte: é por aqui que o observer guarda o prazo restante dele (#689).
@@ -274,9 +282,20 @@ export class Inventory {
     return this.#equipped.get(slot) ?? null;
   }
 
-  /** Instalado pelo ruleset em `onEnter`/`onResume`; limpo em `onLeave`/`onEnd`. */
+  /** Instalado pelo ruleset em `onEnter`/`onResume`; limpo em `onLeave`/`onEnd` por `releaseEquipmentObserver`. */
   setEquipmentObserver(observer: EquipmentObserver | null): void {
     this.#observer = observer;
+  }
+
+  /**
+   * Tira o observer SÓ se for do `owner` (a sessão que o instalou). É o que o `onLeave`/`onEnd` do
+   * ruleset chama no lugar de `setEquipmentObserver(null)`: numa transição o destino já instalou o
+   * dele sobre o mesmo `CharacterRuntime` quando a origem sai (`createSessionBuilder` constrói antes de
+   * soltar, para a recusa não deixar o personagem sem sessão), e limpar o do destino o deixaria sem
+   * observer — o vencimento do anel e a velocidade da bota parariam de reagir ao equip.
+   */
+  releaseEquipmentObserver(owner: object): void {
+    if (this.#observer?.owner === owner) this.#observer = null;
   }
 
   /**

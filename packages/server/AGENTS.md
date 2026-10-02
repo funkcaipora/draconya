@@ -941,24 +941,86 @@ extrato próprio: `#leaveWithReceipt` espera `exitSaves` (`#awaitExitSaves`), in
 de o `release` soltar diretório, slot e snapshot. É o contrato do `release` concorrente da sessão
 privada (#267), por outro caminho; `gold-channel.test.ts` o prende nas duas variantes.
 
-**Ainda não é o mundo hospedado.** Só o `WorldRuleset` (OW-13) declara `progress: 'checkpointed'`, e nenhuma
-sessão de mundo é hospedada ainda (OW-18): os ramos de `creditsAggregates && leavesOnExit` (a coluna "Mundo")
-rodam em teste, com um ruleset de mentira (`game/gold-channel.test.ts`, `game/world-checkpoint.test.ts`) e com o
-mundo real (`game/world-checkpoint-real.test.ts`). **A OW-16 (#837) trouxe o timer, o lote num `MULTI` e a
-antecipação na saída**, e fechou a janela que esta seção deixava aberta — o extrato que `leave` emite uma vez e
-que, se a gravação falhasse, só existia em memória — com a fila `CheckpointState.unsaved` (ver "O checkpoint do
-mundo" adiante); a saída de membro de party (#194) tem a mesma janela, e continua sem o remédio. **Perguntas
-por `ruleset.type === 'city'`** — `promote`,
-`buy-item`, o livro do offline training, e a marca `dirty` do `use-slot` — não são ramos de
-`shared`, ficam como estão. O mundo ganhou tipo próprio na OW-13 (`'world'`) e a pergunta do tile
-tem resposta no `sim` (`Ruleset.acceptsCityServices`), mas nenhuma sessão de mundo é hospedada
-ainda: trocar essas conferências por ela é do `WorldShard` (OW-18) — e é por isso que o `use-slot` do mundo
-ainda não marca `dirty` (suja pela mana e pelo agregado, que o checkpoint já enxerga). **Eventos notáveis por
+**O mundo hospedado (OW-18, #839).** Só o `WorldRuleset` (OW-13) declara `progress: 'checkpointed'`, e é o
+`WorldShard` que o hospeda (ver "O mundo hospedado", adiante): os ramos de `creditsAggregates &&
+leavesOnExit` (a coluna "Mundo") rodam em produção atrás de `OPEN_WORLD`, e em teste com um ruleset de
+mentira (`game/gold-channel.test.ts`, `game/world-checkpoint.test.ts`), com o mundo real
+(`game/world-checkpoint-real.test.ts`) e hospedado de ponta a ponta (`game/world-host.test.ts`,
+`game/world-boot.test.ts`). **A OW-16 (#837) trouxe o timer, o lote num `MULTI` e a antecipação na saída**, e
+fechou a janela que esta seção deixava aberta — o extrato que `leave` emite uma vez e que, se a gravação
+falhasse, só existia em memória — com a fila `CheckpointState.unsaved` (ver "O checkpoint do mundo"
+adiante); a saída de membro de party (#194) tem a mesma janela, e continua sem o remédio. **O serviço de
+Cidade** — `promote`, `buy-item`, o livro do offline training, `enter-training`, o hazard, a bênção — é
+perguntado por `#cityServiceRefusal`, que soma "a sessão oferece?" (`offersCityServices`) com "o tile
+aceita?" (`Ruleset.acceptsCityServices`, só o mundo a declara): a Cidade e a hunt respondem como sempre, e
+o mundo só em PZ. A marca `dirty` do `use-slot` segue só na Cidade: no mundo a conjuração já suja pela
+mana (a marca do checkpoint) e pelo gold e `suppliesUsed` (os agregados). **Eventos notáveis por
 personagem:** o `session-state` e o analisador (`#presentAnalyzer`) leem
 `Session.notableEventsFor(characterId, from)`, nunca `session.notableEvents` crua — no mundo cada
 evento de personagem tem dono (`scopesEventsToOwner`) e o de um estranho não pode chegar a outro.
-Na instância é a fatia inteira, como sempre foi. O cursor do analisador continua a posição absoluta
-na lista, que o teto do mundo desloca (`notableEventsDropped`): corrigi-lo é da OW-18.
+Na instância é a fatia inteira, como sempre foi. **O cursor do analisador é a posição ABSOLUTA**
+(`notableEventsTotal`, o descarte do teto somado ao tamanho da lista), e o `analyzer` só sai quando há
+evento novo PARA o personagem: o de outro entra na lista, o cursor avança e nada é enviado (OW-18).
+
+## O mundo hospedado: `WorldShard`, o grafo com `world` no centro e o serviço em PZ (#839, OW-18, ADR 0060 d.2 e d.6)
+
+Com `OPEN_WORLD` o login cai no MUNDO, e o que o hospeda é o `WorldShard` (`game/sessions.ts`), ao lado da
+`CityShard`. A flag escolhe o espaço compartilhado do nó em `createSessionWiring` (o `main.ts` só o chama): a
+desligada dá a Cidade de sempre e `to: 'world'` devolve `null`; a ligada dá o mundo. Produto:
+`docs/product/open-world.md`, "O mundo hospedado".
+
+- **Uma sessão por `world_id`, descartada quando vazia.** `admit(worldId, character, entry)`. O mundo é UM
+  (o `Game` do Canary): o segundo login entra na MESMA sessão, e "Thais 2" não existe — para caber mais gente,
+  outro `world_id` (OW-50) e mais nós. A sessão vazia é esquecida na próxima `admit`, e a nova nasce com `id`
+  novo — o ledger é `UNIQUE (session_id, seq)` e o `seq` recomeça em zero, então reusar o id colidiria com os
+  extratos da anterior (invariante 10) — e com a versão de conteúdo de agora (invariante 7).
+- **O teto vale só na ENTRADA do repouso.** `entry: 'rest'` (o login) recusa o mundo cheio com
+  `WorldFullError`; `entry: 'instance'` (quem volta de uma hunt) NUNCA recusa. Quem aplica o teto a toda entrada
+  deixa o personagem sem sessão ao voltar. O erro sobe por `createSession` antes de qualquer registro: o
+  handshake falha, e a fila `world-full` é da OW-21.
+- **`carryRestoredConditions` é do `'rest'`.** O personagem do ticket nasce com as condições no relógio de zero, e
+  o mundo que já andou tem outro: sem a tradução `armConditions` as daria por vencidas na entrada. Quem vem de uma
+  instância já foi traduzido por `moveToClock`.
+- **O mundo padrão é `'main'`** (`DEFAULT_WORLD_ID`): o ticket ainda não leva `world_id` (OW-50). Conteúdo sem
+  `worlds/main.json` com a flag ligada não sobe — a recusa é na construção do `WorldShard`.
+- **`ALLOWED` tem `world` no centro** (`game/transitions.ts`): do mundo a toda instância, de toda instância ao
+  mundo; a Cidade continua, e mundo e Cidade NÃO se tocam. A tabela diz só o que é POSSÍVEL — `canLogout` na
+  entrada da instância e a volta só com alguém olhando são do hospedeiro (OW-20). O fim, a morte e a drenagem de uma
+  hunt ainda levam à Cidade (`#settleOne`, `buildSession({ to: 'city' })`).
+- **`worldFor` (o builder) trata `'instance'`**, e a âncora que o `placeOnEnter` usa é a que a saída gravou em
+  `CharacterRuntime.worldPosition` (`#anchorWorldPosition`, OW-16) — lida ANTES de o destino ser construído.
+
+**O serviço de Cidade por PZ.** `#cityServiceRefusal(hosted, characterId, cityText)` soma `offersCityServices`
+(a sessão oferece) com `Ruleset.acceptsCityServices` (só o mundo: o tile é PZ?) e devolve o texto da recusa ou
+`null`. Serviço novo copia o padrão — nunca `ruleset.type === 'city'`. `#zoneServiceRefusal` é só a metade do
+tile, para o serviço que a hunt também aceita (`sell-items`, `learn-spell`): Cidade e hunt respondem `null`.
+O ouro continua por `#mirrorGold`.
+
+Outras decisões do hospedeiro, cada uma com teste que a mata (`game/world-host.test.ts`):
+
+- **`leave-hunt` no mundo é recusado** ("Você já está aqui."). O `WorldRuleset` herda `requestExit` do
+  `HuntRuleset`, e ele concluiria por `onExitFinished` → `member-left` → `#settleOne` → a Cidade, por fora do
+  `canLogout` e da tabela de transições. O mundo sai por logout (OW-19) e por transição (OW-20).
+- **O mundo não leva identidade de hunt no fio.** `huntIdentityOf` omite `huntId` e `difficulty` do
+  `instance-enter` e do `session-state` quando `type === 'world'`: são os sintéticos do motor (`world:main`,
+  `world`), e o cliente procuraria no catálogo uma hunt que não existe.
+- **O cursor do analisador é absoluto** (`notableEventsTotal`) e o `analyzer` só sai com evento novo PARA o
+  personagem — o evento de outro avança o cursor sem mandar nada. Contar o tamanho da lista mandaria a todos
+  do mundo uma mensagem por evento de qualquer um, e o teto (`notableEventsDropped`) a cegaria.
+- **O registro recusado não deixa fantasma.** Se `#register` lança depois de a fábrica já ter posto o personagem
+  na sessão compartilhada, `#createAndRegisterSession` o tira dela (`leave`): senão ele ficaria em `participants`
+  de uma sessão que ninguém hospeda por ele — um tile bloqueado e, no mundo, uma vaga do teto que nunca volta.
+
+**A recusa de subir com outro `game`** (`game/open-world-guard.ts`, chamada pelo `start` do `game/server.ts`):
+`OPEN_WORLD` só liga com um processo (invariante 9; a trava `world:{id}:owner` é a OW-59). Lê `aliveNodes`,
+ignora o próprio `NODE_ID` (a encarnação anterior bate até o fim do lease), e cai com `MultipleGameNodesError`
+ANTES de abrir a porta e de bater o coração. O Redis que falha também derruba o boot. **O default de `NODE_ID` é
+o `hostname()`** — o id do contêiner —, então um contêiner reiniciado vê o anterior por até 30 s: fixe `NODE_ID`
+no `game` com a flag ligada. O `compose.coolify.yml` o fixa (`${NODE_ID:-game-1}`); o `compose.prod.yml` o lê do `.env`.
+
+**Party e amigos no `api`:** `inSharedSpace(location)` (`api/party.ts`) aceita `null`, `'city'` e `'world'` onde
+só `'city'` valia — o nome da recusa não mudou. `api/friends.ts` responde `where: 'world'`. A party largada do
+mundo NÃO passa por `canLogout` (o `api` só vê o tipo da sessão): é o `member-in-fight` da OW-20.
 
 ## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
 
@@ -1112,7 +1174,7 @@ zero) e **`Session.enter` não traduz quem nunca esteve numa sessão**. Uma sess
 recém-chegado de uma party em curso, a Cidade, o mundo — veria toda condição como vencida e o
 `armConditions` a apagaria. Por isso **`carryRestoredConditions(character, session)`**
 (`world-state.ts`) soma o relógio da sessão ANTES de `enter`: `#admitLateJoiner` e `CityShard.admit
-(character, true)` já o chamam, e o `WorldShard` (OW-18) tem de chamar. Numa sessão que nasce agora
+(character, true)` já o chamam, e o `WorldShard` (OW-18) o chama. Numa sessão que nasce agora
 (relógio zero) é nada. Chamá-lo para quem já andou por outra sessão desloca duas vezes.
 
 **O repouso é `'offline'` na lista de personagens** (`api/characters.ts`, `toDto`), só com a flag: a
@@ -1124,10 +1186,10 @@ upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria 
 depois dele (`ADD COLUMN` sem `IF NOT EXISTS`). O banco legado entra pela migração.
 
 **O que NÃO existe ainda.** A âncora é escrita pelo checkpoint e pela saída desde a OW-16 (ver "O checkpoint do
-mundo"); a volta da hunt para o mundo é a OW-20. Nenhuma sessão de mundo é hospedada (OW-18): hoje o login cai na
-Cidade, que CURA ao entrar (`city.ts:126-130`), então a vida do ticket só sobrevive numa hunt idle ou no mundo,
-nunca na praça. O que existe é o contrato — coluna, ticket, sessão, extrato — com teste de ponta a ponta
-(`jobs/world-vitals.postgres.test.ts`). A liquidação do checkpoint sem linha de ledger é a OW-17 (abaixo).
+mundo"); a volta da hunt para o mundo é a OW-20. O mundo é hospedado desde a OW-18 (ver "O mundo hospedado"): com a
+flag ligada o login cai nele, que NÃO cura na entrada, e a vida do ticket sobrevive. O que ainda cai na Cidade, que
+CURA ao entrar (`city.ts:126-130`), é o fim de uma hunt. O contrato — coluna, ticket, sessão, extrato — tem teste de
+ponta a ponta (`jobs/world-vitals.postgres.test.ts`). A liquidação do checkpoint sem linha de ledger é a OW-17 (abaixo).
 
 ## A liquidação do checkpoint: o checkpoint sem valor movido não cria linha de ledger (#838, OW-17, ADR 0060 d.10.d-e)
 

@@ -149,8 +149,8 @@ O que ficou escrito é a regra do gold, que vale para todo serviço que move gol
 
 O ramo do mundo (sair por extrato de delta, transição, drenagem) já existe no hospedeiro e é
 exercitado em teste com um ruleset de mentira; o ruleset real existe desde a OW-13
-(`WorldRuleset`, `docs/product/open-world.md`), o checkpoint com timer existe desde a OW-16, e falta
-quem o hospede (OW-18).
+(`WorldRuleset`, `docs/product/open-world.md`), o checkpoint com timer existe desde a OW-16, e quem o
+hospeda existe desde a OW-18 (`WorldShard`, atrás de `OPEN_WORLD`).
 
 ### Desconectar não tira ninguém da praça na hora
 
