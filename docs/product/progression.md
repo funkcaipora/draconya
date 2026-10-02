@@ -176,9 +176,60 @@ o servidor sabe estar desatualizado é o defeito que a rota acabou de deixar de 
 retentável de graça: o extrato continua no Redis e a varredura o pega de qualquer jeito.
 
 Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o Redis
-guarda um índice por personagem (`receipts:char:{characterId}`) ao lado do extrato. Um extrato
-gravado por um nó `game` antigo, durante um deploy em rolagem, não tem entrada de índice e volta
-a esperar a varredura — degradação, não perda.
+guarda um índice por personagem (`receipts:char:v2:{characterId}`, um conjunto ordenado por
+versão) ao lado do extrato. Um extrato gravado por um nó `game` anterior ao #194, durante um
+deploy em rolagem, não tem entrada de índice e volta a esperar a varredura — degradação, não
+perda.
+
+### Os extratos de um personagem têm ordem: a versão durável (#823)
+
+Até o #823 a chave do extrato era `receipt:{sessionId}:{characterId}`, gravada com `SET`: o segundo
+extrato do mesmo par **sobrescrevia** o primeiro — e um personagem deixa dois ou três pendentes
+com facilidade (Cidade → hunt → Cidade). Pior: a varredura aplicava na ordem do `SCAN`, o ticket
+na do `SMEMBERS`, e onze campos absolutos (`ammo`, alma, estoques, comida, charms, bênçãos,
+postura, equipamento, layout, overlays e storages) são última-escrita-vence, sem guarda. O que
+chegasse por último vencia, mesmo sendo o mais velho.
+
+Agora:
+
+- **A chave leva o `seq`** (`receipt:{sessionId}:{characterId}:{seq}`): nenhum extrato apaga outro.
+  As chaves antigas continuam lidas por um ciclo de deploy; `remove` só apaga uma chave antiga
+  quando ela carrega o mesmo `seq`.
+- **O hospedeiro numera os extratos de cada personagem** (`durableVersion`): um contador por
+  personagem, que nasce no ticket (`max(characters.durable_version, maior versão ainda pendente)`,
+  lido depois de liquidar) e sobe a cada extrato gravado, de qualquer sessão — a `seq` é por
+  sessão e recomeça. Um ticket sem versão (`api` anterior) grava extratos sem versão.
+- **O `jobs` e o ticket liquidam o personagem COMPLETO e em ordem de versão**, o mais antigo
+  primeiro. O `SCAN` da varredura só diz quais personagens têm pendência (ele corta em 200, pela
+  ordem do hash): cada um é completado pelo índice por versão, e o que passa de 50 sai no ciclo
+  seguinte, sempre pelos mais antigos — nunca um mais novo na frente de um mais velho.
+- **O extrato que falha segura os seguintes do mesmo personagem**, nesta varredura e na seguinte,
+  até liquidar. Um extrato que falha já trancava o ticket do personagem (503
+  `progress-not-settled`), então segurar os seguintes não tranca nada que já não estivesse. A
+  exceção é o extrato que NUNCA liquida (dado torto): depois de cinco varreduras seguidas
+  (`STUCK_RECEIPT_AFTER`, ~50 s) ele deixa de segurar os seguintes, para o personagem não ficar
+  preso até o TTL do Redis — os absolutos dele se perdem (a guarda já subiu) e isso vai ao log.
+- **Todo campo absoluto só é escrito quando a versão do extrato é maior que
+  `characters.durable_version`**, que sobe na mesma transação (migração 0028, `bigint` com default
+  0). Extrato atrasado entra só com os deltas: XP, gold, item criado/vendido, e o que é monotônico
+  por natureza (Bestiário pelo máximo, vocação, promoção, magias aprendidas pela união). Um
+  extrato sem versão segue a regra de antes e não mexe na coluna.
+- **Todo extrato versionado é o estado absoluto INTEIRO.** A guarda descarta o extrato mais velho
+  por completo, então o mais novo precisa carregar tudo o que o velho carregava: o extrato de
+  estado da Cidade leva skills, stamina, comida e storages (como o da hunt), e o estoque de
+  supply/munição mesmo vazio — `{}` é "esgotado", e omitir a chave deixaria a poção usada na hunt
+  voltar. Sem isto, um extrato de Cidade liquidado na frente apagaria o que só o de hunt trazia.
+- **O piso do contador sobrevive ao `release`.** O ticket é emitido lendo a versão no `api`, sem
+  ver o extrato que um `release` concorrente ainda vai gravar; o nó guarda por dez minutos a maior
+  versão que soltou, e a adoção seguinte faz `max` com ela — senão o primeiro extrato da sessão
+  nova repetiria o número do extrato de estado e perderia os absolutos.
+
+Stamina e skills mantêm a guarda de instante que já tinham, por cima da de versão.
+
+**Limites conhecidos:** a ordem de liquidação é por nó do `jobs` (um singleton), e o piso do
+`release` é por nó do `game`: o nó que cai com um ticket vivo perde o piso, e o primeiro extrato da
+sessão nova pode repetir uma versão — o seguinte, que também é o estado inteiro, a corrige. E o
+extrato que desistiu da espera (acima) liquida depois do mais novo e entra só com os deltas.
 
 `GET /api/characters` e `POST /api/characters/:id/select` liquidam pelo **mesmo caminho** antes
 de ler a linha (FUN-66), então a tela de seleção e o jogo concordam. A diferença é o que se faz
@@ -186,7 +237,7 @@ ao falhar: o ticket recusa a entrada, porque a sessão nasce daquele número; a 
 valor atrasado** e loga, porque ela é como se chega a qualquer lugar e um 503 nela trancaria a
 conta inteira por uma falha de ledger — o valor ali só é exibido, nada é criado a partir dele.
 Na lista, liquida-se depois de listar (os ids só se conhecem listando) e relê-se só quando algo
-foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma consulta a mais.
+foi escrito; sem pendência o custo é uma ida ao Redis por personagem (`ZRANGE` + `SMEMBERS` do índice antigo, em pipeline) e nenhuma consulta a mais.
 
 ## Rates do servidor (#691, M44-G15)
 

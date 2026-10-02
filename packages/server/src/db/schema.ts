@@ -311,6 +311,20 @@ export const characters = pgTable(
      */
     fightMode: text('fight_mode').notNull().default('attack'),
 
+    /**
+     * A versão do ÚLTIMO extrato de estado absoluto que o ledger aplicou a este personagem
+     * (#823, OW-02, ADR 0060 decisão 10e). Um contador por personagem, mantido pelo hospedeiro
+     * (`game/host.ts`, sobe a cada extrato gravado), que viaja no ticket e no extrato
+     * (`SessionReceipt.durableVersion`). O `jobs` (`jobs/ledger.ts`) só escreve um campo ABSOLUTO —
+     * ammo, alma, estoques, comida, charms, bênçãos, postura, equipamento, layout, overlays,
+     * storages, stamina, skills — quando a versão do extrato é MAIOR que esta coluna, e a sobe na
+     * MESMA transação: extrato atrasado nunca desfaz estado mais novo, em qualquer ordem de
+     * liquidação. Os deltas (XP, gold, item) não olham para ela: seguem sob `UNIQUE (session_id, seq)`.
+     * `bigint`/`number`, default 0: quem nunca teve extrato versionado, ou todo personagem anterior
+     * à migração 0023 — e um extrato SEM versão (nó anterior) segue a regra de antes e não a mexe.
+     */
+    durableVersion: bigint('durable_version', { mode: 'number' }).notNull().default(0),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

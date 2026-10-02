@@ -1681,6 +1681,28 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
     expect(host.sessionFor('p1')).toBeDefined();
   });
 
+  it('o extrato do snapshot irrestaurável é versionado, e o da sessão nova continua dali (#823)', async () => {
+    // Sem versão ele entraria no ledger À FRENTE dos checkpoints que a sessão morta deixou
+    // pendentes, e o último deles — mais velho que o snapshot — desfaria o estado dele. Com a
+    // versão do ticket (7) + 1 ele fica depois de todos, e o contador segue subindo.
+    const { snapshots } = withSnapshots(stored());
+    const receipts: Array<{ sessionId: string; durableVersion?: number }> = [];
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      snapshots,
+      receipts: { save: async (receipt: { sessionId: string }) => { receipts.push(receipt); } } as unknown as ReceiptStore,
+      restoreSession: () => null,
+    });
+
+    await host.prepare('p1', { level: 8, xp: 0, durableVersion: 7 }, 'a1');
+    await host.drainAll('drain');
+
+    expect(receipts.map((receipt) => [receipt.sessionId, receipt.durableVersion])).toEqual([
+      ['s-antiga', 8], ['s-p1', 9],
+    ]);
+  });
+
   it('a progressão PERMANENTE do snapshot vai no extrato: skills e Bestiário (FUN-113)', async () => {
     // Achado da revisão da FUN-113: o extrato levava XP, gold e stamina, e deixava skills e
     // Bestiário no snapshot que estava prestes a ser apagado — a XP era creditada e o abate
@@ -5580,10 +5602,12 @@ describe('o nível de Hazard pelo socket (M44-14, #632, ADR 0052 d.1/d.5)', () =
     socket.received().filter((m): m is S2CMessage & { type: 'hazard' } => m.type === 'hazard');
 
   /** Um personagem na praça, com o teto do Hazard já subido até `max` (o que o chefe da zona faz). */
-  async function inCity(max = 1, receipts?: ReceiptStore) {
+  async function inCity(max = 1, receipts?: ReceiptStore, durableVersion?: number) {
     const { host, sessions } = buildHost(shard, { hazard, ...(receipts === undefined ? {} : { receipts }) });
     // O extrato durável precisa da conta do personagem (`prepare`), como nos testes de postura.
-    if (receipts !== undefined) await host.prepare('p1', undefined, 'a1');
+    if (receipts !== undefined) {
+      await host.prepare('p1', durableVersion === undefined ? undefined : { level: 8, xp: 0, durableVersion }, 'a1');
+    }
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
@@ -5728,6 +5752,22 @@ describe('o nível de Hazard pelo socket (M44-14, #632, ADR 0052 d.1/d.5)', () =
     await host.release('p1', 1000, 'logout');
     expect(saved).toHaveLength(1);
     expect(hero.hazard.currentLevelOf('gardens', ZONE)).toBe(2);
+  });
+
+  it('o extrato de hazard leva a versão durável do personagem (#823): sobe com o contador, na ordem das escolhas', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, viewer } = await inCity(3, receipts, 7);
+
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 2 });
+    host.handle(viewer, { type: 'set-hazard-level', zoneId: 'gardens', level: 1 });
+    host.flush();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    // Sem versão o extrato iria para o score 0 do índice do `ReceiptStore`, à frente de todo extrato
+    // versionado pendente — e o registro de ANTES dele o sobrescreveria. Mutação que mata: omitir a
+    // versão aqui. A segunda escolha leva a versão seguinte, e é a que vale.
+    expect(saved.map((receipt) => receipt['durableVersion'])).toEqual([8, 9]);
   });
 
   it('escolher o nível em que já estava não grava nada', async () => {
@@ -8395,5 +8435,299 @@ describe('cenário usável: use-on-map, look e tile-update (#729, ADR 0050 d.7)'
     ]);
     // Idem para quem nunca tinha visto o mapa antes de a porta abrir (o socket original).
     expect(socket.received().length).toBeGreaterThan(0);
+  });
+});
+
+// A versão durável dos extratos (#823, OW-02, ADR 0060 decisão 10e): um contador por personagem
+// no hospedeiro, nascido do ticket, que sobe a cada extrato gravado e ordena o que o `jobs`
+// escreve — a `seq` é por sessão, e Cidade → hunt → Cidade cruza três delas.
+describe('a versão durável dos extratos (#823, OW-02)', () => {
+  type Saved = { characterId: string; reason: string; seq: number; sessionId: string; durableVersion?: number };
+  const recorder = () => {
+    const saved: Saved[] = [];
+    const receipts = { save: async (r: Saved) => { saved.push(r); } } as unknown as ReceiptStore;
+    return { saved, receipts };
+  };
+  const directory = {
+    register: async () => true, succeed: async () => true, release: async () => {}, releaseSlot: async () => {},
+    renew: async () => {},
+  } as unknown as SessionDirectory;
+  const ticketOf = (durableVersion?: number) => ({
+    level: 8, xp: 0, ...(durableVersion === undefined ? {} : { durableVersion }),
+  });
+  const cityRuleset: Ruleset = {
+    type: 'city', shared: true, hz: () => 0, onEnter: () => {}, onEvent: () => {},
+    onCreatureDied: () => {}, onEnd: () => {},
+  };
+  const runtimeOf = (id: string) => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+    level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+
+  it('grava o extrato com a versão do ticket + 1', async () => {
+    const { saved, receipts } = recorder();
+    const { host } = buildHost(countingRuleset().ruleset, { directory, receipts });
+    await host.prepare('p1', ticketOf(7), 'a1');
+
+    await host.drainAll('drain');
+
+    expect(saved.map((receipt) => receipt.durableVersion)).toEqual([8]);
+  });
+
+  it('um ticket SEM versão (api anterior) grava extratos sem versão — nunca uma inventada', async () => {
+    // Mutação que mata: começar o contador em 0 quando o ticket não traz nada. A coluna pode
+    // estar em 5; um extrato de versão 1 seria descartado como atrasado, e os absolutos dele
+    // (equipamento, bênçãos…) se perderiam em silêncio.
+    const { saved, receipts } = recorder();
+    const { host } = buildHost(countingRuleset().ruleset, { directory, receipts });
+    await host.prepare('p1', ticketOf(), 'a1');
+
+    await host.drainAll('drain');
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).not.toHaveProperty('durableVersion');
+  });
+
+  it('um host sem ticket nenhum também grava sem versão', async () => {
+    const { saved, receipts } = recorder();
+    const { host } = buildHost(countingRuleset().ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+
+    await host.drainAll('drain');
+
+    expect(saved[0]).not.toHaveProperty('durableVersion');
+  });
+
+  it('a tentativa repetida depois de uma falha leva a MESMA versão (#267)', async () => {
+    // É o mesmo extrato: gastar uma versão nova a cada retry faria "resposta perdida" gravar
+    // outra coisa que a primeira tentativa, que pode ter chegado ao Redis.
+    const save = vi.fn<(receipt: Parameters<ReceiptStore['save']>[0]) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Redis unavailable'))
+      .mockResolvedValue(undefined);
+    const { host } = buildHost(countingRuleset().ruleset, {
+      directory, receipts: { save } as unknown as ReceiptStore,
+    });
+    await host.prepare('p1', ticketOf(7), 'a1');
+
+    expect(await host.drainAll()).toBe(0);
+    expect(await host.drainAll()).toBe(1);
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[0]?.[0].durableVersion).toBe(8);
+    expect(save.mock.calls[1]?.[0]).toEqual(save.mock.calls[0]?.[0]);
+  });
+
+  it('atravessa a troca hunt → Cidade: o extrato da morte e o de estado da Cidade são 8 e 9', async () => {
+    // A `seq` é por sessão e recomeça; o que ordena os dois é o contador do PERSONAGEM. É a
+    // janela Cidade → hunt → Cidade de hoje: dois extratos do mesmo personagem, sem ordem.
+    const { saved, receipts } = recorder();
+    const lethal: Ruleset = {
+      type: 'hunt', hz: () => 10,
+      onEnter: (session) => { session.scheduleIn('lethal', 0); },
+      onEvent: (session) => {
+        const character = session.participants[0];
+        if (character !== undefined && character.alive) session.kill(character);
+      },
+      onCreatureDied: (session) => { session.end('death'); },
+      onEnd: () => {},
+    };
+    const { host } = buildHost(lethal, {
+      directory, receipts, now: () => 1000,
+      buildSession: (_request, ended) => {
+        const city = new Session({
+          id: `city-${ended.id}`, contentVersion: 'v-test', ruleset: cityRuleset,
+          rng: Rng.fromSeed(ended.id), createdAtMs: ended.nowMs,
+        });
+        for (const character of ended.participants) city.enter(character);
+        return city;
+      },
+    });
+    await host.prepare('p1', ticketOf(7), 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    host.cycle(1100);
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+
+    // Na Cidade, mexer na postura marca o personagem sujo; sair grava o extrato de estado.
+    host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    host.flush();
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved.map((receipt) => [receipt.reason, receipt.durableVersion])).toEqual([
+      ['death', 8], ['manual-exit', 9],
+    ]);
+  });
+
+  it('o ticket de party depois da Cidade: o extrato da Cidade e o da hunt nunca repetem a versão', async () => {
+    // O líder clica "Iniciar" da Cidade. O ticket da party foi emitido com a versão 7; ANTES de
+    // a hunt nascer, `#leaveForParty` grava o extrato de estado da Cidade (versão 8). Adotar só
+    // o número do ticket faria o extrato da hunt repetir o 8, e o ledger o trataria como
+    // atrasado. Mutação que mata: trocar o `max` da adoção por uma atribuição.
+    const { saved, receipts } = recorder();
+    const { ruleset: huntRuleset } = countingRuleset();
+    let city: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory, receipts,
+      createSession: (characterId, _initial, ticket) => {
+        if (ticket === undefined) {
+          city ??= new Session({
+            id: 'city-1', contentVersion: 'v-test', ruleset: cityRuleset, rng: Rng.fromSeed('city'), createdAtMs: 0,
+          });
+          city.enter(runtimeOf(characterId));
+          return city;
+        }
+        const session = new Session({
+          id: ticket.sessionId, contentVersion: 'v-test', ruleset: huntRuleset, rng: Rng.fromSeed('p'),
+          createdAtMs: 0,
+        });
+        for (const member of ticket.members) session.enter(runtimeOf(member.characterId));
+        return session;
+      },
+    });
+    const party = {
+      sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena',
+      difficulty: 'cautious',
+      members: [
+        { characterId: 'a', accountId: 'acc-a', initialCharacter: ticketOf(7) },
+        { characterId: 'b', accountId: 'acc-b', initialCharacter: ticketOf(3) },
+      ],
+    };
+    // Os dois logam na Cidade com o ticket solo (versões 7 e 3) e mexem em algo durável.
+    await host.prepare('a', ticketOf(7), 'acc-a');
+    await host.prepare('b', ticketOf(3), 'acc-b');
+    for (const id of ['a', 'b']) {
+      const viewer = host.attach(new FakeSocket(), id);
+      host.handle(viewer, { type: 'set-fight-mode', mode: 'defense' });
+    }
+    host.flush();
+
+    await host.prepare('a', ticketOf(7), 'acc-a', party);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    // A Cidade gravou 8 (a) e 4 (b) ao sair; agora a hunt termina e grava a dela.
+    await host.drainAll('drain');
+
+    const versionsOf = (id: string) => saved
+      .filter((receipt) => receipt.characterId === id)
+      .map((receipt) => receipt.durableVersion);
+    expect(versionsOf('a')).toEqual([8, 9]);
+    expect(versionsOf('b')).toEqual([4, 5]);
+  });
+
+  /** Uma Cidade nova a cada `createSession`: cada entrada tem a sua `seq`, como depois de um release. */
+  const cityHost = (
+    options: { receipts: ReceiptStore; now?: () => number; runtime?: (id: string) => CharacterRuntime },
+  ) => {
+    let created = 0;
+    return new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory, receipts: options.receipts,
+      ...(options.now === undefined ? {} : { now: options.now }),
+      createSession: (characterId) => {
+        created += 1;
+        const city = new Session({
+          id: `city-${created}`, contentVersion: 'v-test', ruleset: cityRuleset, rng: Rng.fromSeed('city'),
+          createdAtMs: 0,
+        });
+        city.enter(options.runtime?.(characterId) ?? runtimeOf(characterId));
+        return city;
+      },
+    });
+  };
+  /** Mexe na postura na Cidade: é o que a marca como suja, e sai um extrato de estado ao soltar. */
+  const touch = (host: SessionHost, characterId: string, mode: 'defense' | 'balanced') => {
+    const viewer = host.attach(new FakeSocket(), characterId);
+    host.handle(viewer, { type: 'set-fight-mode', mode });
+    host.flush();
+  };
+
+  it('o extrato de estado da Cidade leva o estado absoluto INTEIRO, inclusive o estoque vazio (#823, ADR 0060 d.10d)', async () => {
+    // O ledger descarta o extrato mais velho POR INTEIRO quando o mais novo já foi aplicado. Se o de
+    // estado da Cidade não levasse o que só a hunt carregava (skills, stamina, comida, storages) e o
+    // estoque quando vazio, ele apagaria isso ao chegar na frente. Mutação que mata: tirar qualquer
+    // um destes campos de `#saveDurableReceipt`.
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const host = cityHost({
+      receipts,
+      runtime: (id) => new CharacterRuntime({
+        id, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+        level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        skills: { melee: { level: 12, points: 3 } },
+        staminaMs: 3_000_000, staminaUpdatedAtMs: 123_000,
+        fedMs: 4_500,
+        storages: { 'quest:a': 2 },
+      }),
+    });
+    await host.prepare('p1', ticketOf(7), 'a1');
+    touch(host, 'p1', 'defense');
+
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      skills: { melee: { level: 12, points: 3 } },
+      staminaMs: 3_000_000, staminaUpdatedAtMs: 123_000,
+      fedMs: 4_500,
+      storages: { 'quest:a': 2 },
+      // Vazio é "esgotado", e a chave sai mesmo assim.
+      supplyStock: {}, ammunitionStock: {},
+      durableVersion: 8,
+    });
+  });
+
+  it('o piso que o release solta vale para a adoção seguinte: o ticket emitido ANTES dele não repete a versão (#823)', async () => {
+    // O ticket sai com a versão 7 de um personagem em repouso; ANTES de o websocket conectar, o
+    // `#collectResting` (ou um logout em outra aba) o solta e grava o extrato de estado, versão 8.
+    // A sessão nova adotaria o 7 do ticket e o primeiro extrato dela seria TAMBÉM o 8: o ledger o
+    // trataria como atrasado e descartaria os absolutos dele. Mutação que mata: `release` voltar a
+    // só apagar o contador, sem guardar o piso.
+    const { saved, receipts } = recorder();
+    const host = cityHost({ receipts });
+    await host.prepare('p1', ticketOf(7), 'a1');
+    touch(host, 'p1', 'defense');
+    await host.release('p1', 1000, 'logout');
+
+    // O ticket velho (versão 7) é consumido DEPOIS do release.
+    await host.prepare('p1', ticketOf(7), 'a1');
+    touch(host, 'p1', 'balanced');
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved.map((receipt) => receipt.durableVersion)).toEqual([8, 9]);
+  });
+
+  it('um ticket NOVO (mais alto) vale mais que o piso do release — o max vai nos dois sentidos (#823)', async () => {
+    const { saved, receipts } = recorder();
+    const host = cityHost({ receipts });
+    await host.prepare('p1', ticketOf(7), 'a1');
+    touch(host, 'p1', 'defense');
+    await host.release('p1', 1000, 'logout');
+
+    await host.prepare('p1', ticketOf(20), 'a1');
+    touch(host, 'p1', 'balanced');
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved.map((receipt) => receipt.durableVersion)).toEqual([8, 21]);
+  });
+
+  it('passado o prazo o piso do release é esquecido: o mapa não cresce com cada personagem que já passou (#823)', async () => {
+    // O piso só precisa cobrir o intervalo entre emitir o ticket (30 s) e conectar. Mutação que
+    // mata: nunca podar — um nó de longa vida guardaria um número por personagem que já esteve nele.
+    let clock = 0;
+    const { saved, receipts } = recorder();
+    const host = cityHost({ receipts, now: () => clock });
+    await host.prepare('p1', ticketOf(7), 'a1');
+    touch(host, 'p1', 'defense');
+    await host.release('p1', 1000, 'logout');
+
+    // Dez minutos e um segundo depois, OUTRO personagem solta — é ele que poda o mais antigo.
+    clock = 10 * 60_000 + 1_000;
+    await host.prepare('p2', ticketOf(0), 'a2');
+    touch(host, 'p2', 'defense');
+    await host.release('p2', 1000, 'logout');
+
+    await host.prepare('p1', ticketOf(7), 'a1');
+    touch(host, 'p1', 'balanced');
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved.filter((receipt) => receipt.characterId === 'p1').map((receipt) => receipt.durableVersion))
+      .toEqual([8, 8]);
   });
 });
