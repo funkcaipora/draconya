@@ -276,6 +276,9 @@ No mundo, um índice de espectadores no `sim` decide a dormência. Ele usa setor
 - A hunt idle não muda e não precisa de nova linha de base. Levar a dormência a ela é outra decisão.
 - O monstro dormente continua materializado. Virar registro `{slot, hp}` só se o `bench:world` pedir memória.
 - A fila ganha cancelamento preguiçoso sem mudar a ordem.
+  - **Só acima de 1.024 eventos, que é o mundo (#827).** O índice de pares custa ~100 bytes por par e um acesso a `Map` por evento; ligado também na hunt, o `bench:hunts` mediu +12% de memória por sessão e +25% a +50% no custo da própria fila, sem ganho, porque uma hunt cancela pouco. A fila pequena remove direto e fica como era.
+  - A "geração" do par é o próprio `seq`: cancelar grava no slot o próximo `seq`, e o evento com `seq` menor é lápide. O evento não ganha campo.
+  - `docs/product/hunt.md`, seção "A fila por dentro".
 - `MAX_EVENTS_PER_ADVANCE` (`session.ts:71`) e `MAX_PENDING_DOMAIN_EVENTS` (`session.ts:42`) viram limites por sessão.
 - `notableEvents` (`session.ts:788-794`) é limitado no mundo.
 

@@ -67,6 +67,15 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   ataque de monstro, ataque do jogador, regeneração e respawn são todos eventos que se
   reagendam. O acumulador de duração (`timesThatFit`) foi removido: ele devolvia N aplicações e
   deixava quem chamava decidir o que fazer com o N, que é a forma exata do defeito da FUN-67.
+- **A fila tem dois regimes de cancelamento, e a ordem da instância é contrato** (#827, ADR 0060
+  d.5c). Até 1.024 eventos (a hunt) `cancelEvent`/`cancelEvents` filtram o vetor e reempilham — sem
+  índice, sem lápide, sem memória a mais; acima disso (o mundo) o evento fica no heap, morto, e quem
+  o encontra no topo o descarta. Em qualquer dos dois `pendingEvents` e `snapshot().schedule` só
+  mostram os vivos. A fila desempata por `(dueAtMs, priority, seq)`, byte a byte como sempre foi —
+  `tieBreak: 'stable'` (`(dueAtMs, priority, subject, kind, seq)`) é SÓ do mundo, e a escolha vai no
+  `ScheduleState`. Mexer em `schedule.ts` exige as sequências do FUN-63, 1 Hz = 10 Hz e o
+  `bench:hunts` antes e depois — e a memória por sessão que ele imprime, porque foi nela que a
+  primeira versão (índice sempre ligado) regrediu 12%.
 - **Grandeza contínua é evento periódico**: uma taxa de `r` por segundo é um evento a cada
   `1000 / r` ms. Não some `r * dtMs / 1000` num acumulador fracionário — somar `0,1` dez vezes em
   ponto flutuante dá `0,9999…` e some uma unidade a cada dez. Já foi tentado e revertido. Onde o

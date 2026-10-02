@@ -1126,6 +1126,77 @@ describe('DPS/HPS por evento com janela de 60 s (#431, ADR 0032 d.14)', () => {
   });
 });
 
+describe('fila: desempate estável e cancelamento preguiçoso (#827, ADR 0060 d.5c)', () => {
+  /** Registra a ordem de despacho; não tem regra de jogo nenhuma. */
+  function recordingRuleset(log: string[]): Ruleset {
+    return {
+      type: 'hunt',
+      hz: () => 10,
+      onEnter: () => {},
+      onCreatureDied: () => {},
+      onEnd: () => {},
+      onEvent: (_session, event) => {
+        log.push(`${event.kind}:${event.subject}`);
+      },
+    };
+  }
+  const sessionWith = (log: string[], tieBreak?: 'insertion' | 'stable'): Session =>
+    new Session({
+      id: 's-queue', contentVersion: 'v1', ruleset: recordingRuleset(log),
+      rng: Rng.fromSeed('queue'), createdAtMs: 0, ...(tieBreak === undefined ? {} : { tieBreak }),
+    });
+
+  it('por padrão desempata pela inserção, como sempre foi', () => {
+    const log: string[] = [];
+    const session = sessionWith(log);
+    session.scheduleIn('step', 100, { subject: 'm:2' });
+    session.scheduleIn('step', 100, { subject: 'm:1' });
+    session.advanceBy(100);
+    expect(log).toEqual(['step:m:2', 'step:m:1']);
+    expect('tieBreak' in session.snapshot().schedule).toBe(false);
+  });
+
+  it("com 'stable' a ordem do mesmo instante não depende de quem foi agendado primeiro", () => {
+    const log: string[] = [];
+    const session = sessionWith(log, 'stable');
+    session.scheduleIn('step', 100, { subject: 'm:2' });
+    session.scheduleIn('think', 100, { subject: 'm:1' });
+    session.scheduleIn('step', 100, { subject: 'm:1' });
+    session.advanceBy(100);
+    expect(log).toEqual(['step:m:1', 'think:m:1', 'step:m:2']);
+  });
+
+  it("o snapshot do 'stable' guarda a escolha, e a sessão restaurada continua estável", () => {
+    const log: string[] = [];
+    const session = sessionWith(log, 'stable');
+    session.scheduleIn('step', 100, { subject: 'm:3' });
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
+    expect(snapshot.schedule.tieBreak).toBe('stable');
+
+    const resumedLog: string[] = [];
+    const resumed = Session.fromSnapshot(snapshot, recordingRuleset(resumedLog), Rng.fromSeed('queue'));
+    resumed.scheduleIn('step', 100, { subject: 'm:4' });
+    resumed.scheduleIn('step', 100, { subject: 'm:1' });
+    resumed.advanceBy(100);
+    expect(resumedLog).toEqual(['step:m:1', 'step:m:3', 'step:m:4']);
+  });
+
+  it('o que se cancela não despacha, não conta em pendingEvents e não vai para o snapshot', () => {
+    const log: string[] = [];
+    const session = sessionWith(log);
+    session.scheduleIn('step', 100, { subject: 'm:1' });
+    session.scheduleIn('attack', 100, { subject: 'm:1' });
+    session.scheduleIn('step', 100, { subject: 'm:2' });
+    session.scheduleIn('step', 900, { subject: 'm:3' });
+    expect(session.cancelEvents('m:1')).toBe(2);
+    expect(session.cancelEvent('step', 'm:3')).toBe(1);
+    expect(session.pendingEvents).toBe(1);
+    expect(session.snapshot().schedule.events.map((e) => e.subject)).toEqual(['m:2']);
+    session.advanceBy(1000);
+    expect(log).toEqual(['step:m:2']);
+  });
+});
+
 describe('progress e progressOf (OW-03, ADR 0060 d.10b)', () => {
   it('ausente mantém o sentido de hoje: a privada credita no fim, a compartilhada não credita', () => {
     expect(progressOf({})).toBe('at-end');

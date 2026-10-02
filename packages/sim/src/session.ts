@@ -18,7 +18,7 @@ import type { PresenceEvent } from './presence.js';
 import type { EquipmentChanged } from './inventory.js';
 import type { GridPoint } from './monster/step.js';
 import { Schedule } from './schedule.js';
-import type { ScheduleState, ScheduledEvent } from './schedule.js';
+import type { ScheduleState, ScheduledEvent, TieBreak } from './schedule.js';
 
 /**
  * Um acontecimento de GAMEPLAY, produzido haja ou não alguém olhando (§12 do documento de
@@ -447,6 +447,12 @@ export interface SessionOptions extends SessionLimits {
   readonly ruleset: Ruleset;
   readonly rng: Rng;
   readonly createdAtMs: number;
+  /**
+   * Como a fila desempata eventos do mesmo instante e prioridade (#827, ADR 0060 d.5c). Ausente é
+   * `'insertion'`, que é o que a instância usa, byte a byte; só o mundo pede `'stable'`. Uma
+   * sessão restaurada NÃO passa por aqui: o snapshot grava a escolha no próprio `schedule`.
+   */
+  readonly tieBreak?: TieBreak;
 }
 
 /** Valida um teto opcional: inteiro positivo, ou ausente. Zero e negativo são bug de quem configura. */
@@ -606,6 +612,7 @@ export class Session implements SessionClock {
     // Instante do HOSPEDEIRO, guardado para quem investiga — não é o relógio da simulação, e
     // desde a FUN-68 nada aqui dentro o consulta. A simulação começa em zero.
     this.createdAtMs = options.createdAtMs;
+    if (options.tieBreak === 'stable') this.#schedule = new Schedule({ tieBreak: 'stable' });
     this.#maxPendingDomainEvents = limitOf('maxPendingDomainEvents', options.maxPendingDomainEvents)
       ?? MAX_PENDING_DOMAIN_EVENTS;
     // `>> 1` de 1 é 0, e um descarte de zero não descartaria nada: o teto mínimo tira ao menos um.
