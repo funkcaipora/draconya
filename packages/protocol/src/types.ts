@@ -1828,6 +1828,11 @@ export const S2C_SCHEMAS = {
    * O logout do jogador foi recusado pelo mundo (OW-11, #832, ADR 0060 d.7). A resposta ao C2S
    * `logout` quando `canLogout` diz não; nada mudou no personagem. `reason` tem os dois motivos
    * do Canary — ver `LOGOUT_REFUSED_REASONS`.
+   *
+   * É também a resposta ao C2S `enter-hunt` e `enter-training` feitos no mundo quando `canLogout` diz
+   * não (OW-20, #841, ADR 0060 d.6a): entrar numa instância sai do mundo, e o Canary tem uma frase só
+   * para as duas portas. E chega ao personagem em luta que derrubou a largada de uma party
+   * (`member-in-fight`). O cliente escreve o motivo uma vez, venha de onde vier.
    */
   'logout-refused': z.object({ reason: z.enum(LOGOUT_REFUSED_REASONS) }),
   /**

@@ -49,14 +49,13 @@ a repassa como `OPEN_WORLD` (default `0`).
 | Papel | O que a flag muda |
 |---|---|
 | `api` | o ticket (solo e de cada membro da party) leva o mundo e os vitais da linha (`worldPosition`, `townId`, `health`, `mana`, `conditions`); a lista e a seleção de personagens reportam o repouso como `'offline'`; a liquidação do ticket aplica o checkpoint sem valor movido sem linha de ledger (OW-17); a party se forma e se larga do **mundo** como da Cidade, e a lista de amigos responde `where: 'world'` (OW-18) |
-| `game` | **o login cai no mundo**, no templo ou na posição salva, em vez da Cidade (OW-18, abaixo); o mundo sai pelo `logout` que passa por `canLogout` e pelo x-log de 60 s de quem ficou sem visualizador, e o personagem vai ao repouso (OW-19); todo extrato — fim de hunt, estado da Cidade, snapshot irrestaurável — leva o mundo e os vitais do dono; o nó **se recusa a subir** se há outro `game` vivo |
+| `game` | **o login cai no mundo**, no templo ou na posição salva, em vez da Cidade (OW-18, abaixo); o mundo sai pelo `logout` que passa por `canLogout` e pelo x-log de 60 s de quem ficou sem visualizador, e o personagem vai ao repouso (OW-19); **entrar numa instância passa por `canLogout` e o fim dela volta ao mundo com visualizador e ao repouso sem (OW-20)**; todo extrato — fim de hunt, estado da Cidade, snapshot irrestaurável — leva o mundo e os vitais do dono; o nó **se recusa a subir** se há outro `game` vivo |
 | `jobs` | escreve as colunas que o extrato trouxer, guardadas por `durable_version`; e o **checkpoint** versionado **sem valor movido** é aplicado só como estado absoluto, **sem linha de ledger** (OW-17, #838): `draconya_jobs_receipts_state_only_total` os conta. O fim de sessão e a saída seguem com a linha |
 
 **Tem de ser a MESMA no `api` e no `game`.** Um `game` ligado com o `api` desligado recebe tickets sem o
 mundo, e por isso o extrato só leva o mundo de quem o ticket trouxe (a `townId` é a marca) — ligar
 metade do par não apaga a posição de ninguém, mas também não persiste nada. Ligar em produção é
-operação à parte: a volta da hunt ao mundo (OW-20) ainda não existe, e o `bench:world` (OW-35) é o portão da
-flag em produção. A entrada pelo repouso (OW-21) existe: o mundo cheio vira fila com posição, e o ticket pode
+operação à parte: o `bench:world` (OW-35) é o portão da flag em produção. A entrada pelo repouso (OW-21) existe: o mundo cheio vira fila com posição, e o ticket pode
 pedir uma hunt idle direta — sem a flag, o pedido de hunt direta é ignorado e o login cai na Cidade.
 
 Desligar depois de ligada é seguro: nenhuma coluna é apagada, e quem voltar a ligar encontra o último
@@ -66,8 +65,9 @@ estado salvo — a vida e a posição de antes, não as de agora.
 
 Com a flag ligada o processo `game` hospeda **um mundo por `world_id`** (`WorldShard`, `game/sessions.ts`), e o
 login cai nele — no templo, ou no tile onde o personagem saiu — no lugar da Cidade. A Cidade continua
-existindo ao lado, até o mundo cobrir todo serviço dela (ADR 0060 d.3a): o fim de uma hunt ainda volta a ela
-até a OW-20. Sem a flag nada disto existe, e o jogo é o de hoje.
+existindo ao lado, até o mundo cobrir todo serviço dela (ADR 0060 d.3a): ninguém chega a ela com a flag ligada —
+o fim de uma hunt vai ao mundo, com visualizador, ou ao repouso (OW-20). Sem a flag nada disto existe, e o jogo é o
+de hoje: o fim de uma hunt volta à Cidade.
 
 **O nó se recusa a subir se há outro `game` vivo.** Um mundo é uma sessão num processo só (invariante 9): com
 dois nós e a flag ligada, cada um criaria o SEU mundo — o "Thais 2" que o ADR 0060 descarta —, e o mesmo

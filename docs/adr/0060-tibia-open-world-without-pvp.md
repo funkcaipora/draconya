@@ -870,3 +870,50 @@ pode passar do prazo da fila (OW-23); o ticket ainda não leva `world_id`, e a f
 **Efeito no que esta decisão escreveu:** nenhum. As decisões 2b e 6b continuam valendo; esta emenda só registra
 que a fila é a do Canary por inteiro (premium e a regra de não furar, inclusive), onde ela mora, e o que o
 `entry` do ticket é e não é.
+
+## Emenda — 2026-10-02 (#841, OW-20): a entrada é o portão do logout, a volta decide pelo visualizador depois de gravar, e o repouso solta sem encerrar
+
+A decisão 6a manda o mundo deixar o personagem entrar numa instância só quando `canLogout` passa, e a 6c manda a
+volta ir ao mundo com visualizador e ao repouso sem. A OW-20 as implementou no `SessionHost`
+(`docs/product/open-world.md`, "O mundo e a hunt idle") e fechou sete detalhes que as decisões deixavam em aberto:
+
+- **A pergunta é feita antes de qualquer efeito, e a resposta é a mensagem do logout.** `transition()` consulta o
+  `sim` (`WorldRuleset#logoutVerdictOf`, que só lê — `requestLogout` emite a saída e soltaria do mundo quem só
+  queria saber se podia caçar) antes da âncora, do destino e do extrato: a recusa não mexe em nada. O motivo vai
+  como `logout-refused` — o MESMO do logout recusado, sem opcode novo —, e não como `system-message`: o Canary
+  tem uma frase só para as duas portas, e o cliente (OW-23) a escreve uma vez. Vale para toda instância, o
+  treino inclusive: o tile `P` (PZ + no-logout) o recusa, porque o no-logout vale por cima da PZ (`player.cpp:6972`).
+- **A decisão de para onde volta é DEPOIS de gravar o extrato.** O visualizador que cai durante o `await` do Redis
+  vale como desanexado; decidir antes poria no mundo, sem ninguém, quem acabou de fechar o navegador — a
+  alternativa que o ADR já descartou ("Fim de hunt desanexada volta ao mundo").
+- **O extrato que acabou de pousar é o checkpoint do repouso.** `#persistReceipt` já leva a âncora, a vida, a mana e
+  as condições do dono (decisão 10f, OW-15); a tabela da 6c ("repouso: checkpoint com posição e vitais + `release`")
+  não pede uma segunda gravação, só soltar o personagem. A morte grava posição nula, vida e mana cheias e nenhuma
+  condição, como `receiptWorldStateOf` já fazia.
+- **Soltar para o repouso não é `release`.** `release` de uma sessão privada a encerra (`session.end('manual-exit')`),
+  e quem sai por dentro de uma party (a morte, a regra de saída) não pode encerrar a hunt dos outros. O repouso
+  esquece o personagem — visualizadores, mapas, snapshot, diretório, slot — sem tocar na sessão, que só some do nó
+  quando não sobra ninguém dela. A metade comum com `release` é a `#unhost`.
+- **O morto chega ao mundo cheio e no templo, e quem chega vivo não é curado.** A hunt que acaba por morte volta ao
+  mundo com `alive = false`, e a Cidade curava em `onEnter`; o mundo não cura ninguém (OW-13). `WorldRuleset#onEnter`
+  devolve vida e mana ao máximo e zera a âncora só de quem chega morto, e é o que faz as duas voltas darem o MESMO
+  personagem — o repouso o grava assim. É a única regra de morte do mundo até a OW-32.
+- **A drenagem leva todos ao repouso, com ou sem visualizador.** O `drainAll` já soltava por `release`; o que a OW-20
+  registra é que é assim de propósito: pôr no mundo de um nó que está caindo não faria sentido, e o cliente volta pelo
+  ticket, que traz a âncora e os vitais do extrato.
+- **A largada de party passa por `canLogout` no `game`, no primeiro ticket, e o `api` não sabe.** O `api` só vê o tipo
+  da sessão. O primeiro ticket cria a hunt com todos e tira cada membro do mundo; é aí que se confere cada um que está
+  no mundo do nó, antes de mover qualquer um, e um recusado derruba a largada inteira (`member-in-fight`, 409 no
+  upgrade, e o culpado recebe o `logout-refused`). O formulário que o `api` gravou continua `hunting` até os tickets
+  expirarem (30 s) e a carência de `disbandIfDead` (45 s) o desfazer — o `game` não escreve o `party-store`, que é do
+  `api` (invariante 9, o espírito dele). E a âncora de cada membro atravessa a largada: a party constrói o
+  personagem do ticket — a linha do banco, um checkpoint atrás —, e sem herdar a de agora o fim da hunt a gravaria
+  por cima, com versão maior.
+
+**O que a OW-20 deixa, com dono:** o texto do `logout-refused` e do `member-in-fight` no cliente, e o `HuntsModal` que
+mostra o `in-fight` (OW-23); a party recusada que só se desfaz pelo prazo (se o dono quiser desfazê-la na hora, é o
+`game` falar com o `party-store`); a morte no mundo, que continua levando a Cidade pelo `member-left` até a OW-32.
+
+**Efeito no que esta decisão escreveu:** nenhum. As decisões 6a e 6c continuam valendo; esta emenda só registra
+quando se pergunta, em que mensagem a recusa volta, onde mora o checkpoint do repouso, por que soltar não é
+`release`, quem cura o morto e onde a largada de party se confere.

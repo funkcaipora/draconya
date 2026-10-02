@@ -349,6 +349,9 @@ export function createGame(
                 // `world-full` sem a posição não acontece (o hospedeiro sempre a leva); se acontecer, o
                 // cliente vê o nó indisponível e tenta de novo, que é o que a fila quer dele.
                 'world-full': '503 Service Unavailable',
+                // A largada de uma party em que um membro do mundo está em luta (OW-20): nada foi movido, e o
+                // cliente do líder mostra o motivo; tentar de novo vale quando a luta acabar.
+                'member-in-fight': '409 Conflict',
               }[refused];
               response.writeStatus(status).end(refused);
               return;

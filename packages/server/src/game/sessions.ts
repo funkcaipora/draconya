@@ -441,8 +441,9 @@ function huntEntryFor(
  *
  * - **desligada** (o default): o login cai na Cidade, `to: 'world'` devolve `null` (o host recusa a
  *   transição) e o jogo é o de hoje, byte a byte. Nenhum `WorldShard` existe.
- * - **ligada**: o login cai no mundo, e `to: 'world'` volta a ele. A Cidade continua existindo — o fim
- *   de uma hunt ainda volta a ela até a OW-20 —, com o MESMO `CityShard` nos dois caminhos.
+ * - **ligada**: o login cai no mundo, e `to: 'world'` volta a ele. A Cidade continua existindo, com o MESMO
+ *   `CityShard` nos dois caminhos, mas nada a alcança: o fim de uma hunt vai ao mundo, com alguém olhando, ou
+ *   ao repouso (`SessionHost#settleOne`, OW-20).
  *
  * O MESMO shard nos dois caminhos é o ponto: quem entra no jogo e quem volta de uma instância chegam no
  * mesmo lugar, e dois shards seriam dois mundos que nunca se veem — defeito invisível até alguém tentar
@@ -808,7 +809,8 @@ function cityFor(shard: CityShard, from: Session, character: CharacterRuntime): 
  * no tile de onde ele saiu.
  *
  * **A volta só com alguém olhando é do hospedeiro** (OW-20, d.6c): este construtor não sabe quem olha, e
- * por isso o fim de uma hunt ainda não passa por aqui — volta à Cidade, como sempre.
+ * quem decide entre chamá-lo e levar o personagem ao repouso é `SessionHost#settleOne`. Quem chega aqui já foi
+ * decidido: é a volta ASSISTIDA.
  */
 function worldFor(worlds: WorldShard, from: Session, character: CharacterRuntime): Session | null {
   if (from.ruleset.type === 'world') return null;

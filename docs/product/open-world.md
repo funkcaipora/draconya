@@ -12,9 +12,10 @@ sem valor movido vira só estado absoluto, sem linha de ledger) e o **mundo hosp
 `WorldShard`, o login que cai no mundo atrás de `OPEN_WORLD`, o grafo com `world` no centro, o serviço
 de Cidade só em PZ, a party e os amigos), a **presença no hospedeiro** (OW-19, #840: o último
 visualizador que se solta, a chegada sem visualizador e o `logout` viram intenção para o `sim`, e a saída
-que ele decide vai ao repouso) e a **entrada pelo repouso** (OW-21, #842: o mundo cheio vira uma fila com
-posição, e a hunt idle é a primeira sessão de quem a pede, sem passar pelo mundo). A volta da hunt ao mundo
-(OW-20) e a apresentação do cliente (OW-23) ainda não saíram do papel.
+que ele decide vai ao repouso), a **entrada pelo repouso** (OW-21, #842: o mundo cheio vira uma fila com
+posição, e a hunt idle é a primeira sessão de quem a pede, sem passar pelo mundo) e o **mundo e a hunt idle**
+(OW-20, #841: entrar numa instância passa por `canLogout`, e o fim dela volta ao mundo com alguém olhando e ao
+repouso sem ninguém). A apresentação do cliente (OW-23) ainda não saiu do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -103,11 +104,11 @@ coluna `state` guarda por default. O diretório continua mandando: quem está nu
 ### O que ainda não existe
 
 - **O checkpoint e a liquidação existem** (OW-16 e OW-17): o dono da sessão grava a âncora na saída e no
-  checkpoint, e o `jobs` liquida o checkpoint sem valor como estado puro (seções abaixo). O que a OW-20
-  acrescenta é a volta da hunt.
+  checkpoint, e o `jobs` liquida o checkpoint sem valor como estado puro (seções abaixo). A volta da hunt é a
+  OW-20 ("O mundo e a hunt idle", abaixo).
 - **A sessão do mundo hospedada existe desde a OW-18**: com a flag ligada o login cai no mundo, que **não cura
-  na entrada**, e a vida do ticket sobrevive. O que ainda cai na Cidade, que cura ao entrar, é o fim de uma
-  hunt (OW-20).
+  na entrada**, e a vida do ticket sobrevive. O fim de uma hunt já não cai na Cidade, que curava ao entrar: vai
+  ao mundo ou ao repouso, com a vida da volta (OW-20).
 - **A escolha do mundo** (`world_id`, OW-50) e a **troca de cidade** (`town_id`): hoje só há `main` e `thais`.
 
 ## O checkpoint do mundo (OW-16, #837)
@@ -401,7 +402,7 @@ de `towns[]`.
 `packages/sim/src/zones.ts` lê a camada `zones` do mapa (OW-09, ver [a Cidade](city.md)) e a
 transforma na regra do Tibia. São funções **puras e só de leitura**: a Cidade segue protect zone por
 construção (ADR 0004) e as hunts não consultam zona. Quem as usa é a saída do mundo — o `logout` e o
-x-log (OW-14, abaixo) —, e virão a entrada do mundo numa hunt idle (OW-20) e o portão de combate
+x-log (OW-14, abaixo) e a entrada do mundo numa hunt idle (OW-20, abaixo) —, e virá o portão de combate
 no-pvp (OW-27).
 
 - **`zoneAt(map, point)`** devolve o tipo da zona do tile — `'protection'`, `'nopvp'`, `'pvp'`,
@@ -708,11 +709,10 @@ no mesmo lugar. O ticket de **party** continua nascendo hunt, com a flag ligada 
 | `hunt`, `training`, `quest`, `boss`, `guild-war` | `city` **e `world`** |
 | `city` | `hunt`, `training`, `quest`, `boss`, `guild-war` (como era) |
 
-O mundo e a Cidade **não se tocam**: quem está numa Cidade sob a flag ligada — o fim de uma hunt ainda
-volta a ela até a OW-20 — sai do jogo e entra de novo. A tabela diz só o que é POSSÍVEL: a entrada numa
+O mundo e a Cidade **não se tocam**: quem está numa Cidade sob a flag ligada sai do jogo e entra de novo. A tabela diz só o que é POSSÍVEL: a entrada numa
 instância a partir do mundo só quando o Tibia deixaria deslogar (`canLogout`, ADR 0060 d.6a) e a volta só com
-alguém olhando (d.6c) são do hospedeiro, e são a OW-20. Até lá, `enter-hunt` e `enter-training` no mundo
-passam sem `canLogout` — o treino exige PZ (abaixo), a hunt não.
+alguém olhando (d.6c) são do hospedeiro, e são a OW-20 ("O mundo e a hunt idle", abaixo): com a flag ligada o
+fim de uma hunt já não volta à Cidade.
 
 ### O serviço de Cidade só vale em PZ
 
@@ -784,8 +784,8 @@ item. Três regras:
 - **A party** se forma e se larga do mundo como da Cidade (`api/party.ts`): onde só `'city'` valia (criar,
   convidar, o matchmaking, o convite social, o `/start` e a entrada numa party em curso), `'world'` passa. O nome
   da recusa (`not-in-city`, `inviter-in-hunt`) não mudou, e a instância (hunt, treino, quest) continua recusada.
-  **Largar a hunt a partir do mundo ainda não passa por `canLogout`**: o `api` só vê o TIPO da sessão, e o gate
-  de quem está em luta é do `game` (OW-20, `member-in-fight`).
+  **Largar a party a partir do mundo passa por `canLogout`, no `game`**: o `api` só vê o TIPO da sessão, e o gate
+  de quem está em luta é do `game` (OW-20, `member-in-fight`, abaixo).
 - **Os amigos** (`api/friends.ts`): `GET /api/friends` responde `where: 'world'` para o amigo no mundo — `'city'`
   na Cidade, `'hunt'` em qualquer instância, `null` offline. O cliente o rotula "No mundo" (`FriendsModal`); o
   resto do HUD do mundo é da OW-23.
@@ -799,14 +799,13 @@ OW-59.
 
 ### O que ainda não existe
 
-- **Mundo ↔ hunt idle** (OW-20): o fim, a morte e a drenagem de uma hunt ainda levam à Cidade (que cura), assistidos
-  ou não; a entrada numa instância a partir do mundo não consulta `canLogout`; a volta só com alguém olhando.
 - **A stamina** (OW-46): o tempo no mundo conta como recuperação na próxima transição e no próximo login — o
   `materializeStamina` da fronteira e o marco do extrato ainda tratam o mundo como "offline" (ADR 0060 d.14b).
 - **O `player-stats.zone` e o `inFight`** (OW-11): o protocolo os tem, e nenhum servidor os emite. O cliente
   da OW-23 depende deles para os ícones de PZ e de luta.
 - **A morte no mundo** (OW-32): sem monstro (OW-25) não há como morrer, e o dia em que houver, a saída por
-  `member-left` leva o personagem à Cidade — a tela de relogin e o repouso no templo são da OW-32.
+  `member-left` leva o personagem à Cidade — a tela de relogin e o repouso no templo são da OW-32. (A morte
+  NA HUNT já volta ao templo, de vida cheia, desde a OW-20.)
 
 ## A presença no hospedeiro (OW-19, #840)
 
@@ -905,8 +904,8 @@ personagem: sai quem o `sim` nomeou, e o resto do mundo continua. O hospedeiro c
   `idle-kick`, e o hospedeiro já os cumpre. O que não existe é quem os emite, e a tela de morte no cliente.
 - **A mensagem de saída no cliente** (OW-23): o `logout-refused` chega e o cliente o ignora sem derrubar
   (`apply.ts`); o texto da recusa e o ícone de luta são dele.
-- **A volta da hunt** (OW-20): a corrida da chegada sem visualizador em `#replace` já é tratada, mas o fim de
-  uma hunt ainda leva à Cidade, e é a OW-20 que decide entre o mundo e o repouso pelo visualizador.
+- **A volta da hunt** (OW-20): feita ("O mundo e a hunt idle", abaixo) — o fim de uma hunt decide entre o mundo e
+  o repouso pelo visualizador.
 
 ## A entrada pelo repouso (OW-21, #842)
 
@@ -993,10 +992,80 @@ handshake falha, como a OW-18 o deixou.
 ### O que ainda não existe
 
 - **O cliente** (OW-23): mostra a posição, respeita o `retryAfterMs` e oferece a hunt idle.
-- **O fim da hunt que começou do repouso** (OW-20): volta ao mundo com alguém olhando, ao repouso sem. Até lá,
-  como toda hunt, volta à Cidade.
 - **A escolha do mundo** (OW-50): a porta é a do `main`; o ticket ainda não leva `world_id`.
 - **Uma métrica da fila**: o tamanho dela é `WorldQueue.size`, e nenhum painel o lê ainda.
+
+## O mundo e a hunt idle (OW-20, #841)
+
+A promessa central da hunt idle é que o personagem desanexado **nunca acaba sozinho no mundo**, onde morreria sem
+ninguém olhando. A OW-20 fecha as duas pontas: de onde se entra na instância e para onde se volta. Tudo está atrás
+de `OPEN_WORLD`; sem a flag o fim de uma hunt volta à Cidade, como sempre ([`hunt.md`](hunt.md)).
+
+### A entrada passa por `canLogout`
+
+Quem entra numa instância sai do mundo, e no Tibia isso é a regra do logout (`Player::canLogout`,
+`canary/src/creatures/players/player.cpp:6960-6979`):
+
+| Tile onde está | Entra numa hunt? |
+|---|---|
+| PZ | sempre, em luta ou não |
+| no-logout (inclusive o `P`, PZ + no-logout, em cima do templo) | nunca |
+| qualquer outro | só fora de luta — a janela de 60 s desde o último golpe dado ou recebido |
+
+É o que impede fugir de uma luta para dentro de uma instância. A pergunta é feita **antes de qualquer efeito**:
+sem âncora gravada, sem hunt construída, sem extrato — a recusa não mexe em nada, e o personagem segue no mundo.
+O veredicto é o do `sim` (`WorldRuleset#logoutVerdictOf`, que só lê), no relógio lógico: o mesmo a 1 Hz e a 10 Hz.
+
+- **A recusa leva o motivo do Canary**: a mensagem `logout-refused { reason }` (`'in-fight'` ou `'no-logout-tile'`),
+  a MESMA que o `logout` recusado devolve (`protocolgame.cpp:1151-1162`), para o cliente escrever uma frase só. Não
+  é um `system-message`.
+- Vale para toda instância: `enter-hunt`, `enter-training` e a transição por API (`TransitionError` `cannot-logout`).
+- A entrada grava a âncora — a posição absoluta de onde saiu — e é ela que a volta usa.
+
+### A volta decide pelo visualizador
+
+No fim da instância — a regra de saída, a morte, o `leave-hunt` — o hospedeiro grava o extrato e
+**depois** olha quem está olhando:
+
+| Situação | Destino | Posição | Vida e mana |
+|---|---|---|---|
+| Com visualizador | a sessão do mundo | a âncora; o templo na morte | as da volta; cheias na morte |
+| Sem visualizador | o **repouso**: o extrato que acabou de pousar é o checkpoint, e o personagem é solto | a âncora; o templo na morte | as da volta; cheias na morte |
+
+- **Ninguém é posto no mundo desassistido.** Lá nada o tiraria de uma luta, e ele ficaria parado e vulnerável por
+  60 s no tile de saída (ADR 0060, "Alternativas": "Fim de hunt desanexada volta ao mundo").
+- **A decisão é depois de gravar o extrato**: o visualizador que cai enquanto o Redis responde vale como desanexado.
+- **O repouso não cura**, e a Cidade curava: a vida e a mana saem do fim da hunt, feridas ou não. Quem morre sai
+  com a vida e a mana cheias, a posição nula (o templo no login) e nenhuma condição — o que o Canary faz
+  (`player.cpp:4034-4041, 4226-4252`), e é o MESMO personagem nas duas voltas: ao mundo, `WorldRuleset#onEnter`
+  devolve ao máximo e ao templo quem chega morto.
+- **A drenagem leva todos ao repouso**, com ou sem visualizador: o `release` fecha o socket com 1001 e o cliente
+  volta pelo ticket, que já traz a âncora e os vitais do extrato. Pôr no mundo de um nó que está caindo não faria
+  sentido.
+- **Quem sai de uma party por dentro** (a morte, a regra de saída) vai ao repouso **sem encerrar a hunt dos
+  outros**: soltar o personagem não é `release`, que encerraria a sessão da party inteira.
+- **O `leave-hunt` e o retry manual** de uma sucessão que falhou vão ao mundo com a flag ligada: quem pediu está
+  olhando.
+
+### A largada de party a partir do mundo
+
+O primeiro ticket da party que chega ao `game` cria a hunt com todos e tira cada membro do mundo. Antes de mover
+qualquer um, todo membro que está no mundo deste nó passa por `canLogout`:
+
+- **um membro recusado derruba a largada inteira**: o `game` responde 409 `member-in-fight` no upgrade, ninguém é
+  movido e a party não nasce. O culpado recebe o `logout-refused` com o motivo; o ticket seguinte, depois de a luta
+  acabar, passa;
+- o ticket de **entrada numa hunt em curso** de quem está em luta é recusado do mesmo jeito;
+- membro **em repouso** — sem sessão neste nó — não tem o que conferir, e entra direto na hunt da party;
+- **a âncora atravessa a largada**: cada membro leva para a hunt o tile de onde saiu do mundo, e é nele que a party
+  o devolve — não no do último checkpoint, que o ticket carrega.
+
+### Em teste
+
+`game/world-idle-hunt.test.ts` (Thais e `rat-cellars` reais, o hospedeiro de produção): a recusa de cada motivo e
+a janela de 60 s; do templo à hunt e de volta ao mesmo tile; a morte com e sem visualizador; o visualizador que cai
+durante a gravação; a party com um membro em luta; a drenagem; a flag desligada.
+`game/world-idle-hunt.postgres.test.ts`: a linha de `characters` que o próximo ticket lê — o tile, a vida e a mana.
 
 ## Parâmetros de balanceamento
 
@@ -1006,7 +1075,7 @@ handshake falha, como a OW-18 o deixou.
 | Mapa do mundo | `thais` | `packages/content/data/worlds/main.json`, `map` |
 | Templo de Thais | `(32369, 32241, 7)`, absoluto | `packages/content/data/worlds/main.json`, `towns[].temple` |
 | Teto de gente | 200, só na entrada do repouso | `packages/content/data/worlds/main.json`, `capacity`, lido pelo `WorldShard` (`packages/server/src/game/sessions.ts`, OW-18) — o `CITY_SHARD_CAPACITY` é o da Cidade |
-| Janela de luta que trava a saída | 60 s desde o último golpe dado ou recebido, fora da PZ | `packages/sim/src/combat/in-fight.ts`, `IN_FIGHT_WINDOW_MS` (o `pzLocked` do Canary) |
+| Janela de luta que trava a saída | 60 s desde o último golpe dado ou recebido, fora da PZ — vale para o logout, o x-log, a entrada numa instância e a largada de party | `packages/sim/src/combat/in-fight.ts`, `IN_FIGHT_WINDOW_MS` (o `pzLocked` do Canary) |
 | Espera do x-log, desde a perda de conexão | 60 s, no relógio lógico (o `noPongTime >= 60000` do Canary) | `packages/sim/src/world-exit.ts`, `XLOG_DELAY_MS` |
 | Taxa de atualização do mundo | 10 Hz, com ou sem visualizador | `packages/sim/src/rulesets/world.ts`, `WORLD_HZ` |
 | Tetos da sessão do mundo | 65.536 eventos por avanço, 8.192 eventos de domínio pendentes, 64 notáveis por personagem (ponto de partida; o `bench:world` fixa) | `packages/sim/src/rulesets/world.ts`, `WORLD_SESSION_LIMITS` |
@@ -1022,8 +1091,12 @@ handshake falha, como a OW-18 o deixou.
 
 ## Em aberto
 
-- A volta da hunt (OW-20): ver o [plano](../open-world-plan.md). É aí que a entrada numa instância passa
-  por `canLogout` e que o fim de uma hunt decide entre o mundo e o repouso pelo visualizador.
+- **O cliente da OW-20** (OW-23): o `logout-refused` que a entrada numa hunt recusada devolve, e o 409
+  `member-in-fight` da largada de party, ainda não têm texto nem tela — o cliente de hoje os ignora. O
+  `HuntsModal` passa a mostrar o motivo.
+- **A party que o `game` recusou** (OW-20): o `api` já gravou o formulário como `hunting` e emitiu os tickets, e
+  o `game` não tem como desfazê-lo — os tickets expiram em 30 s e `disbandIfDead` o remove depois da carência
+  de 45 s. Desfazer na hora pede o `game` falar com o `party-store`, que hoje é do `api`.
 - O `requestExit` que o `WorldRuleset` herda da hunt (a OW-13 o testa) **não é a saída do mundo**:
   ele conclui por `onExitFinished` depois de `exitDelayMs` e da janela de luta, mas não olha o tile —
   um tile de no-logout não o recusa. **O hospedeiro o recusa desde a OW-18**: o `leave-hunt` no mundo
@@ -1032,9 +1105,6 @@ handshake falha, como a OW-18 o deixou.
 - O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
   sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
-- **O fim da hunt que começou do repouso** segue a regra de hoje — a Cidade — até a OW-20, que decide mundo
-  (com alguém olhando) ou repouso (sem). A âncora que a OW-20 vai ler já está no personagem: a hunt direta a
-  leva do ticket até o extrato.
 - **O cliente da fila** (OW-23) ainda não existe: o cliente de hoje ignora o `world-full` e reconecta pelo
   recuo de sempre, que pode passar do prazo da fila (espera mais 15 s) e devolvê-lo ao fim dela. A OW-23 passa a
   respeitar o `retryAfterMs` e a oferecer a hunt idle (`huntAvailable`).

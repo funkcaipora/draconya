@@ -326,7 +326,8 @@ describe('a costura de sessões do nó e a flag OPEN_WORLD (#839)', () => {
     const world = wiring.createSession('a', { level: 1, xp: 0, townId: 'thais' });
     const hunt = wiring.buildSession({ to: 'hunt', huntId: 'rat-cellars' }, world, 'a');
     world.leave('a', 'manual-exit');
-    // O fim de uma hunt ainda volta à Cidade até a OW-20: a cópia é a do shard do nó.
+    // O CONSTRUTOR ainda sabe levar à Cidade (a volta atrás da flag, ADR 0060 d.3a): a cópia é a do shard do nó. Com a
+    // flag ligada quem decide o destino do fim de uma hunt é o hospedeiro (OW-20), e ele nunca pede a Cidade.
     const city = wiring.buildSession({ to: 'city' }, hunt as Session, 'a');
     expect(city?.ruleset.type).toBe('city');
     expect(wiring.cityShard.population).toBe(1);

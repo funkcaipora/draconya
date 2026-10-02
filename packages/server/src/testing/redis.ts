@@ -26,6 +26,7 @@
 //  16  api/party-v2-exit.postgres.test.ts
 //  17  game/host-directory.test.ts
 //  19  api/party-social.test.ts
+//  21  game/world-idle-hunt.postgres.test.ts (#841, OW-20)
 //  25  jobs/world-vitals.postgres.test.ts (#836, OW-15)
 //  26  game/world-presence.postgres.test.ts (#840, OW-19; o 26 que o OW-16 deixou livre abaixo)
 //  27  jobs/checkpoint-settlement.postgres.test.ts (#838, OW-17)
