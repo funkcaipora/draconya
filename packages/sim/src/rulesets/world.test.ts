@@ -377,6 +377,36 @@ describe('a entrada no mundo: onde se saiu, senão o templo (OW-13)', () => {
     expect(outside.health).toBe(10);
   });
 
+  it('quem chega MORTO — o fim de uma hunt por morte — entra cheio e no templo, sem a âncora (OW-20)', () => {
+    const session = newWorld();
+    // O morto de uma hunt: vida zero, `alive` falso, e a âncora do tile onde deslogara fora da PZ.
+    const dead = member('a', { health: 1, mana: 3, worldPosition: abs(8, 4) });
+    dead.health = 0;
+    dead.alive = false;
+
+    session.enter(dead);
+
+    // `player.cpp:4034-4041, 4226-4252`: vida e mana cheias, o templo. A âncora de antes não vale — a posição
+    // de uma morte não é o tile onde se morreu —, e é o que `receiptWorldStateOf` grava para quem morre e vai
+    // ao repouso: os dois caminhos do fim de uma hunt dão o MESMO personagem.
+    expect([dead.alive, dead.health, dead.mana]).toEqual([true, stats.maxHealth, stats.maxMana]);
+    expect(dead.worldPosition).toBeNull();
+    expect(at(dead)).toEqual({ x: 3, y: 2, z: 7 });
+    // E ele entra vivo no que o mundo faz: a sessão o conta presente e a vida cheia não passa do máximo.
+    expect(session.participants).toContain(dead);
+    session.advanceBy(1_000);
+    expect(dead.health).toBe(stats.maxHealth);
+  });
+
+  it('o vivo NÃO é tocado pela regra do morto: a âncora fica, e a vida ferida também', () => {
+    const session = newWorld();
+    const hurt = member('a', { health: 10, mana: 7, worldPosition: abs(8, 4) });
+    session.enter(hurt);
+    expect([hurt.health, hurt.mana]).toEqual([10, 7]);
+    expect(hurt.worldPosition).toEqual(abs(8, 4));
+    expect(at(hurt)).toEqual({ x: 8, y: 4, z: 7 });
+  });
+
   it('entra com a regeneração da hunt, em PZ e fora dela (ADR 0060 d.14d, pergunta 5 do dono)', () => {
     const session = newWorld();
     const inPz = member('a', { health: 10, mana: 7 });

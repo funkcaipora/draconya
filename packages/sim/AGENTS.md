@@ -1431,3 +1431,18 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   da sessão — o hospedeiro traduz no do checkpoint. `'death'` é da OW-32 e `'idle-kick'` da OW-47;
   a união os traz desde já para o hospedeiro tratar os quatro. Saída do mundo tira o personagem da
   party de mundo quando ela existir (OW-43): é o `onLeave`.
+- **O `canLogout` respondido sem agir é `WorldRuleset#logoutVerdictOf`, e o mundo recebe o morto da hunt
+  (OW-20, #841, ADR 0060 d.6a e d.6c).** Duas peças do `WorldRuleset`, nenhuma em `hunt.ts`: a instância
+  continua a de sempre. (1) **`logoutVerdictOf(session, characterId)` só LÊ** — devolve o veredicto de
+  `canLogout` (PZ sempre, no-logout nunca, o resto só sem luta) ou `null` para quem não está na sessão ou
+  morreu —, ao contrário de `requestLogout`, que EMITE `departure-requested`. É a pergunta de quem quer
+  deixar o mundo por outra porta que o `logout`: o hospedeiro a faz na entrada numa instância e na largada
+  de uma party (`SessionHost#transition`, `#partyMemberInFight`), e quem a implementasse por `requestLogout`
+  soltaria do mundo quem só queria saber se podia caçar. Mesmo veredicto a 1 Hz e a 10 Hz (relógio lógico).
+  (2) **`WorldRuleset#onEnter` devolve ao máximo e ao templo quem chega MORTO**: a hunt que acaba por morte
+  volta ao mundo — com alguém olhando — com `alive = false` e `health = 0` (a Cidade curava em `onEnter`; o
+  mundo não cura), e a topologia o recolocaria na âncora de antes. Vida e mana viram o máximo, `alive` volta
+  e `worldPosition` cai para `null`, que é o templo (`player.cpp:4034-4041, 4226-4252`) — o MESMO
+  personagem que `receiptWorldStateOf` grava para quem morre e vai ao repouso. É a única regra de morte do
+  mundo que existe até a OW-32; **só o morto**: quem chega vivo traz a vida do ticket ou da hunt, ferida ou
+  não. Fica antes de `super.onEnter`, que lê o personagem para a regeneração e a colocação.

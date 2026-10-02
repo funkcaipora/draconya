@@ -142,7 +142,45 @@ export class WorldRuleset extends HuntRuleset {
     return localToAbsolute(this.#map, character.position);
   }
 
+  /**
+   * Quem chega ao mundo MORTO — o fim de uma hunt por morte, que volta com alguém olhando (OW-20, ADR 0060
+   * d.6c) — chega como o Canary o põe depois de morrer: vida e mana cheias e no templo
+   * (`canary/src/creatures/players/player.cpp:4034-4041, 4226-4252`). A penalidade já foi paga na hunt
+   * (`#onCharacterDied`), e o mundo não cura quem chega vivo: a vida e a mana são as do ticket ou as da
+   * volta, e é só o morto que é devolvido ao máximo — o mesmo que `receiptWorldStateOf` grava para quem
+   * morre e vai ao repouso, para os dois caminhos do fim de uma hunt darem o MESMO personagem.
+   *
+   * A âncora cai (`worldPosition = null`): a posição de uma morte não é o tile onde se morreu, e a
+   * topologia, sem âncora, coloca no templo (`placeOnEnter`). Antes de `super.onEnter`, que lê o
+   * personagem para criar o runner, a regeneração e a colocação. Só o mundo: a Cidade cura toda chegada
+   * (`city.ts`), e a hunt nunca recebe um morto.
+   */
+  override onEnter(session: Session, character: CharacterRuntime): void {
+    if (!character.alive) {
+      character.health = character.maxHealth;
+      character.mana = character.maxMana;
+      character.alive = true;
+      character.worldPosition = null;
+    }
+    super.onEnter(session, character);
+  }
+
   // --- a saída do Tibia (OW-14, ADR 0060 d.7) ---------------------------------------------------
+
+  /**
+   * O personagem poderia sair AGORA? É `canLogout` (OW-10) respondido sem agir: só LÊ o estado e devolve o
+   * veredicto, sem emitir evento nem soltar o alvo (OW-20, ADR 0060 d.6a). É a pergunta de quem quer
+   * deixar o mundo por outra porta que o `logout` — entrar numa hunt idle, largar uma party —, que no
+   * Tibia passa pela mesma regra: PZ sempre, no-logout nunca, e qualquer outro tile só sem luta.
+   *
+   * `null` para quem não está na sessão ou já morreu (a morte tem a saída dela, OW-32): quem pergunta
+   * decide o que fazer com o personagem que o mundo não conhece. O veredicto é o MESMO a 1 Hz e a
+   * 10 Hz — `canLogout` lê o relógio lógico (invariante 3).
+   */
+  logoutVerdictOf(session: Session, characterId: string): LogoutVerdict | null {
+    const character = this.#presentCharacter(session, characterId);
+    return character === null ? null : canLogout(character, this.#map, session.nowMs);
+  }
 
   /**
    * O jogador pediu para sair (a intenção `logout`): passa por `canLogout` (OW-10, a regra de
