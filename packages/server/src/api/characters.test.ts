@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthService, SESSION_COOKIE } from '../auth/service.js';
 import type { AuthSession, AuthSessionStore } from '../auth/sessions.js';
 import {
@@ -81,6 +81,7 @@ class MemoryRepository implements GameRepository {
       blessings: 0,
       fightMode: 'attack',
       durableVersion: 0,
+      worldId: 'main', worldPosition: null, townId: 'thais', health: null, mana: null, conditions: null,
       createdAt: now,
     };
     this.characters.set(character.id, character);
@@ -327,6 +328,75 @@ describe('character routes', () => {
   it('requires authentication', async () => {
     const { app } = await build();
     expect((await app.inject({ method: 'GET', url: '/api/characters' })).statusCode).toBe(401);
+  });
+
+  describe('o repouso com o mundo aberto (#836, OW-15, ADR 0060 decisão 6)', () => {
+    const cookie = `${SESSION_COOKIE}=token`;
+    async function buildWith(options: Parameters<typeof registerCharacterRoutes>[3]) {
+      const repository = new MemoryRepository();
+      const auth = new AuthService({ repository, sessions: new MemorySessions(), devMode: true });
+      await auth.devLogin('hero@example.com');
+      const created = await repository.createCharacter('a1', 'Resting Hero');
+      const app = Fastify();
+      registerCharacterRoutes(app, auth, repository, options);
+      return { app, id: created.id };
+    }
+    const stateOf = async (app: Awaited<ReturnType<typeof buildWith>>['app']) => {
+      const list = await app.inject({ method: 'GET', url: '/api/characters', headers: { cookie } });
+      return (list.json().characters as Array<{ state: string }>)[0]?.state;
+    };
+
+    it('COM a flag, sem sessão no diretório o personagem está `offline` — o estado sem sessão —, não `city`', async () => {
+      // A coluna `state` (default `'city'`) é só o que sobrou de antes da sessão existir: com o
+      // mundo aberto o repouso é o personagem DESLOGADO. Mutação que mata: ler a coluna.
+      const { app } = await buildWith({ openWorld: true, locateSession: async () => null });
+      expect(await stateOf(app)).toBe('offline');
+    });
+
+    it('SEM a flag — o default — o repouso é `city`, como sempre foi', async () => {
+      for (const openWorld of [undefined, false]) {
+        const { app } = await buildWith({
+          ...(openWorld === undefined ? {} : { openWorld }), locateSession: async () => null,
+        });
+        expect(await stateOf(app)).toBe('city');
+      }
+    });
+
+    it('a sessão no diretório continua mandando: quem está numa hunt, ou no mundo, nunca é `offline`', async () => {
+      for (const type of ['hunt', 'world', 'city']) {
+        const { app } = await buildWith({
+          openWorld: true, locateSession: async () => ({ sessionId: `s-${type}`, type }),
+        });
+        expect(await stateOf(app)).toBe(type);
+      }
+    });
+
+    it('o personagem recém-criado está em repouso, e o `select` consulta o diretório antes de dizer `offline`', async () => {
+      const { app, id } = await buildWith({
+        openWorld: true,
+        locateSession: async (characterId) => (characterId === id ? { sessionId: 's-world', type: 'world' } : null),
+      });
+      const created = await app.inject({
+        method: 'POST', url: '/api/characters', headers: { cookie }, payload: { name: 'Fresh Hero' },
+      });
+      expect(created.json().state).toBe('offline');
+
+      // Quem está no mundo e é selecionado não pode voltar como `offline`.
+      const selected = await app.inject({
+        method: 'POST', url: `/api/characters/${id}/select`, headers: { cookie },
+      });
+      expect(selected.json()).toMatchObject({ state: 'world', sessionId: 's-world' });
+    });
+
+    it('SEM a flag o `select` não consulta o diretório: a resposta é a de antes', async () => {
+      const locateSession = vi.fn(async () => ({ sessionId: 's-hunt', type: 'hunt' }));
+      const { app, id } = await buildWith({ locateSession });
+      const selected = await app.inject({
+        method: 'POST', url: `/api/characters/${id}/select`, headers: { cookie },
+      });
+      expect(selected.json().state).toBe('city');
+      expect(locateSession).not.toHaveBeenCalled();
+    });
   });
 });
 

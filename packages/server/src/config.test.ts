@@ -13,6 +13,27 @@ describe('loadConfiguration', () => {
     expect(configuration.AUTH_DEV_MODE).toBe(false);
   });
 
+  it('keeps the open world OFF by default (#836, OW-15, ADR 0060)', () => {
+    // O default é o jogo de hoje: com a flag desligada nada novo é lido nem escrito. Mutação que
+    // mata: trocar o default para `true`.
+    expect(loadConfiguration(minimumEnvironment as NodeJS.ProcessEnv).OPEN_WORLD).toBe(false);
+  });
+
+  it.each([['1', true], ['true', true], ['0', false], ['false', false]] as const)(
+    'reads OPEN_WORLD=%s as %s',
+    (value, expected) => {
+      const configuration = loadConfiguration({ ...minimumEnvironment, OPEN_WORLD: value } as NodeJS.ProcessEnv);
+      expect(configuration.OPEN_WORLD).toBe(expected);
+    },
+  );
+
+  it('refuses an OPEN_WORLD value that is not a boolean flag, instead of silently turning the world off', () => {
+    for (const value of ['yes', 'on', '2', 'TRUE', '']) {
+      expect(() => loadConfiguration({ ...minimumEnvironment, OPEN_WORLD: value } as NodeJS.ProcessEnv))
+        .toThrow(/OPEN_WORLD/);
+    }
+  });
+
   it('treats blank optional WorkOS credentials as unconfigured', () => {
     const configuration = loadConfiguration({
       ...minimumEnvironment,

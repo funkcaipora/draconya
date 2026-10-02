@@ -42,6 +42,8 @@ import type {
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory, SessionLocation } from '../directory.js';
 import { overlaysOfState, settleSnapshotAsReceipt } from '../snapshot-settlement.js';
+import { carryRestoredConditions, receiptWorldStateOf } from '../world-state.js';
+import type { WorldState } from '../world-state.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem } from '../loot-box.js';
@@ -276,6 +278,14 @@ export interface SessionHostOptions {
    * vez no boot — a versão de conteúdo é fixada e não muda enquanto o processo vive.
    */
   readonly catalogue?: () => S2CProps<'catalogue'>;
+  /**
+   * O mundo aberto (#836, OW-15, ADR 0060): a flag `OPEN_WORLD`. Com ela ligada todo extrato — o de
+   * fim de sessão, o de estado da Cidade e o de um snapshot irrestaurável — leva o mundo e os vitais
+   * do dono (`worldPosition`, `townId`, `health`, `mana`, `conditions`), e o `jobs` os escreve
+   * guardados por `durable_version`: deslogar a 10 HP volta com 10 HP. Ausente ou `false` — o
+   * default — é o extrato de antes, byte a byte: o `game` nunca escreve as colunas novas.
+   */
+  readonly openWorld?: boolean;
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -1624,6 +1634,9 @@ export class SessionHost {
       ? undefined
       : this.#options.createParticipant(member.characterId, member.initialCharacter);
     if (newcomer === undefined) return { created: false, refused: 'session-not-here' };
+    // As condições do ticket vêm como prazo restante (relógio zero, #836): a hunt em curso já andou, e
+    // `enter` não traduz quem nunca esteve numa sessão. Antes do `enter`, que as rearma no `onEnter`.
+    carryRestoredConditions(newcomer, hosted.session);
     try {
       hosted.session.enter(newcomer);
     } catch (error) {
@@ -5490,6 +5503,9 @@ export class SessionHost {
       // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
       // sempre entra na mochila — não sobra nada para carregar aqui.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
+      // O mundo e os vitais do dono (#836, OW-15, ADR 0060 d.10.f), SÓ com `OPEN_WORLD`: a âncora, a
+      // cidade, a vida, a mana e as condições que faltavam. ABSOLUTOS, como o resto do estado acima.
+      ...(owner === undefined ? {} : this.#worldStateOf(owner)),
     });
 
     // Gravado: a versão deste extrato não precisa mais ser lembrada para a próxima tentativa.
@@ -5691,11 +5707,31 @@ export class SessionHost {
       // extrato de hunt, drenado aqui em vez de `#receiptFor` porque o shard nunca passa pelo
       // `Receipt` do `sim` (ADR 0023: a Cidade não gera extrato de progresso).
       ...(owner.removedInstances.length === 0 ? {} : { removedInstances: owner.drainRemovedInstances() }),
+      // O mundo e os vitais do dono (#836, OW-15), como `#persistReceipt`: o extrato de estado é o
+      // estado absoluto INTEIRO, e um que não os levasse apagaria, ao chegar na frente, o que só o
+      // de hunt anterior carregava.
+      ...this.#worldStateOf(owner),
     });
     hosted.dirty.delete(characterId);
     // Como `#persistReceipt`: incorpora o delta à base ANTES do próximo extrato reencontrar uma
     // base antiga mais uma variação já liquidada no ledger.
     if (owner.goldDelta !== 0) owner.settleGoldDelta();
+  }
+
+  /**
+   * O mundo e os vitais que o extrato leva do dono (#836, OW-15, ADR 0060 d.10.f): `{}` com a flag
+   * `OPEN_WORLD` desligada — o extrato de antes —, e o que `receiptWorldStateOf` decide com ela
+   * ligada. As condições saem como PRAZO RESTANTE pelo próprio personagem (`conditionsAsRemaining`):
+   * numa transição o destino é construído antes de a origem encerrar, e só ele sabe de qual relógio
+   * os instantes dele são.
+   *
+   * **A âncora (`owner.worldPosition`) é lida como está.** Quem a mantém é o dono da sessão — a saída
+   * do mundo e o checkpoint escrevem a coordenada de agora (`WorldRuleset#worldPositionOf`) ANTES de
+   * emitir o extrato (OW-16, OW-20) —, e a hunt idle a carrega sem mexer. Daqui o extrato só a leva.
+   */
+  #worldStateOf(owner: CharacterRuntime): WorldState {
+    if (this.#options.openWorld !== true) return {};
+    return receiptWorldStateOf(owner, owner.conditionsAsRemaining());
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
@@ -6157,6 +6193,8 @@ export class SessionHost {
       await settleSnapshotAsReceipt(snapshot, {
         characterId, accountId, receipts, nowMs: this.#wallNow(),
         ...(durableVersion === undefined ? {} : { durableVersion }),
+        // O mundo e os vitais do dono também (#836, OW-15), com a mesma flag do extrato normal.
+        ...(this.#options.openWorld === true ? { openWorld: true } : {}),
       });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida

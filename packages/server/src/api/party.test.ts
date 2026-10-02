@@ -28,7 +28,9 @@ const character = (id: string, accountId: string, over: Partial<CharacterRecord>
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, hazard: null, bosstiary: null, learnedSpells: null,
   familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  durableVersion: 0, createdAt: new Date(),
+  durableVersion: 0,
+  worldId: 'main', worldPosition: null, townId: 'thais', health: null, mana: null, conditions: null,
+  createdAt: new Date(),
   ...over,
 });
 
@@ -41,6 +43,8 @@ function build(over: {
   now?: () => number;
   /** O bônus de Loyalty de cada CONTA (#628). Ausente é a `api` sem conteúdo de Loyalty. */
   loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
+  /** A flag `OPEN_WORLD` (#836, OW-15): o ticket de cada membro leva o mundo e os vitais. */
+  openWorld?: boolean;
 } = {}) {
   const app = Fastify();
   const characters = new Map<string, CharacterRecord>([
@@ -81,6 +85,7 @@ function build(over: {
     },
     getCharacterById: async (characterId) => characters.get(characterId) ?? null,
     ...(over.loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf }),
+    ...(over.openWorld === undefined ? {} : { openWorld: over.openWorld }),
     settleProgress: async () => ({ written: 0, failed: 0 }),
     locateSession: async (characterId) => over.locate?.(characterId) ?? locations.get(characterId) ?? null,
     directory: {
@@ -418,9 +423,12 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     minLevel?: number;
     vocationTargets?: Record<string, number>;
     loyaltyBonusPercentOf?: (accountId: string) => Promise<number | undefined>;
+    openWorld?: boolean;
   } = {}) {
-    const context = build(over.loyaltyBonusPercentOf === undefined
-      ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf });
+    const context = build({
+      ...(over.loyaltyBonusPercentOf === undefined ? {} : { loyaltyBonusPercentOf: over.loyaltyBonusPercentOf }),
+      ...(over.openWorld === undefined ? {} : { openWorld: over.openWorld }),
+    });
     const { as } = context;
     const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
     await as('p1').post(`/api/party/${id}/configure`, {
@@ -498,6 +506,38 @@ describe.runIf(available)('a party em curso, a sala pública e a busca (#402, #5
     expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
 
     expect(issued[issued.length - 1]?.party?.members[0]?.initialCharacter.durableVersion).toBe(5);
+  });
+
+  it('com `OPEN_WORLD`, o ticket de CADA membro — no start e na entrada em curso — leva o mundo e os vitais da linha dele (#836, OW-15)', async () => {
+    // Mutação que mata: esquecer o parâmetro em uma das duas chamadas de `initialCharacterOf`.
+    const out = (id: string, accountId: string, health: number) => character(id, accountId, {
+      worldPosition: { x: 32369, y: 32241, z: 7 }, health, mana: 2, townId: 'thais',
+    });
+    const { as, issued, id, characters } = await startedParty({ openWorld: true });
+    // O `start` já foi emitido com os personagens padrão (cheios): a linha só importa na emissão.
+    expect(issued[0]?.party?.members.map((m) => m.initialCharacter.townId)).toEqual(['thais', 'thais']);
+    for (const member of issued[0]?.party?.members ?? []) {
+      expect(member.initialCharacter).not.toHaveProperty('health');
+    }
+
+    characters.set('p3', out('p3', 'a3', 10));
+    expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    expect(issued[issued.length - 1]?.party?.members[0]?.initialCharacter).toMatchObject({
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 2,
+    });
+  });
+
+  it('SEM `OPEN_WORLD` o ticket da party é o de antes: nem a cidade da linha viaja (#836, OW-15)', async () => {
+    const { as, issued, id, characters } = await startedParty();
+    characters.set('p3', character('p3', 'a3', { health: 10, mana: 2 }));
+    expect((await as('p3').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    for (const ticket of [issued[0]?.party, issued[issued.length - 1]?.party]) {
+      for (const member of ticket?.members ?? []) {
+        for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+          expect(member.initialCharacter).not.toHaveProperty(field);
+        }
+      }
+    }
   });
 
   it('joins a hunting party by public room, reserving the vocation slot, and emits a one-member `join: true` ticket (RF-05, RF-06)', async () => {

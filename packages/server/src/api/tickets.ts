@@ -15,6 +15,7 @@ import {
 } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
+import { worldStateOfRow } from '../world-state.js';
 
 export interface Principal {
   readonly accountId: string;
@@ -85,6 +86,13 @@ export interface TicketRouteDependencies {
    * `api` montado sem Redis de extratos: o ticket leva só a coluna.
    */
   readonly pendingDurableVersion?: (characterId: string) => Promise<number>;
+  /**
+   * A flag `OPEN_WORLD` (#836, OW-15, ADR 0060 d.10.f): com ela ligada o ticket leva o mundo e os
+   * vitais do personagem (`worldPosition`, `townId`, `health`, `mana`, `conditions`), lidos da linha
+   * — é o que faz deslogar a 10 HP voltar com 10 HP. Ausente ou `false` — o default — é o ticket de
+   * antes, byte a byte: o personagem nasce cheio, e as colunas novas não são lidas.
+   */
+  readonly openWorld?: boolean;
   /**
    * O gasto do banco de offline training na emissão do ticket (#631, ADR 0059 d.3, ADR 0052 d.5).
    *
@@ -232,6 +240,7 @@ export function createTicketHandler(
             boostedMonsterId,
             loyaltyBonusPercent,
             pendingDurableVersion,
+            deps.openWorld === true,
           ),
           resolution.node,
         );
@@ -328,6 +337,8 @@ export function initialCharacterOf(
   loyaltyBonusPercent?: number,
   /** A maior versão durável ainda pendente no Redis (#823). Ver `TicketRouteDependencies`. */
   pendingDurableVersion = 0,
+  /** A flag `OPEN_WORLD` (#836, OW-15): leva o mundo e os vitais. Ver `TicketRouteDependencies`. */
+  openWorld = false,
 ): InitialCharacter {
   return {
     level: character.level,
@@ -344,6 +355,11 @@ export function initialCharacterOf(
     // versão. `max` porque os pendentes que o teto de liquidação deixou para trás ainda não
     // subiram a coluna.
     durableVersion: Math.max(character.durableVersion, pendingDurableVersion),
+    // O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f), SÓ com a flag: a posição onde saiu, a
+    // cidade, a vida e a mana com que saiu e as condições que faltavam. Cada campo é conferido ao
+    // sair da linha (`worldStateOfRow`): nulo é "cheio, no templo, sem condição", e o `game` ainda
+    // limita a vida e a mana pelo máximo do level. Sem a flag nada é lido — o ticket é o de antes.
+    ...(openWorld ? worldStateOfRow(character) : {}),
     // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
     // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
     ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),

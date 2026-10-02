@@ -3,10 +3,12 @@
 **Status:** parcial — existem o **mundo como conteúdo** (OW-08, #829: `data/worlds/main.json` com
 tipo, mapa, cidade, templo e teto, validado no boot), a **regra de zona e de saída** do `sim`
 (OW-10, #831: `zoneAt`, `hasZoneFlag` e `canLogout`), a **sessão do mundo** (OW-13, #834:
-`createWorldSession`, a topologia de mundo e a entrada na posição salva ou no templo) e a **saída do
+`createWorldSession`, a topologia de mundo e a entrada na posição salva ou no templo), a **saída do
 Tibia no `sim`** (OW-14, #835: o `logout` por `canLogout` e a perda de conexão, que tenta sair aos
-60 s). Nada hospeda a sessão ainda — o hospedeiro a constrói na OW-18, atrás de `OPEN_WORLD` — e a
-presença no hospedeiro, a durabilidade e a apresentação ainda não saíram do papel.
+60 s) e o **personagem em repouso** (OW-15, #836: as colunas de mundo e vitais em `characters`, o
+ticket e o extrato que as levam). Nada hospeda a sessão ainda — o hospedeiro a constrói na OW-18,
+atrás de `OPEN_WORLD` — e a presença no hospedeiro, o checkpoint e a apresentação ainda não saíram
+do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -17,10 +19,86 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem quatro: o que o mundo **é** como dado, a regra de
+cada peça do plano que sai do papel; hoje existem cinco: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
-topologia de mundo, e a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
-que perdeu a conexão.
+topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
+que perdeu a conexão, e o personagem em repouso — o que a linha de `characters` guarda dele (OW-15).
+
+## O personagem em repouso (OW-15, #836)
+
+O Tibia guarda do jogador deslogado o `loginPosition`, a cidade, a vida, a mana e as condições
+(`canary/src/creatures/players/player.cpp:4041, 12332-12336`). O Draconya os guarda na linha de
+`characters` — é o que faz **deslogar a 10 HP voltar com 10 HP**, no mesmo tile. Hoje o ticket nasce
+cheio (`game/sessions.ts`) e a linha não guarda nada disso. Tudo abaixo é atrás de `OPEN_WORLD`
+([configuração](../runtime-configuration.md)): com a flag desligada — o default — o jogo é o de hoje.
+
+### As colunas (migração `0029_836-world-vitals.sql`)
+
+| Coluna | Tipo | Quer dizer | Nulo |
+|---|---|---|---|
+| `world_id` | `text`, default `'main'` | o mundo a que o personagem pertence, escolhido na criação (OW-50) | — |
+| `world_x`, `world_y`, `world_z` | `integer`, `integer`, `smallint` | a posição **absoluta** do Tibia onde saiu; os três juntos ou nenhum (CHECK) | nasce no templo (o `0,0,0` do Canary) |
+| `town_id` | `text`, default `'thais'` | a cidade: o templo para onde volta ao morrer | — |
+| `health`, `mana` | `integer` | a vida e a mana com que saiu (CHECK não negativo) | cheio |
+| `conditions` | `jsonb` | as condições ativas, como **prazo restante** | nenhuma |
+
+A migração é aditiva (ADR 0014): nenhuma linha é reescrita, o `DEFAULT` preenche as duas `NOT NULL`
+e o resto nasce nulo — `world-vitals-migration.postgres.test.ts` a aplica sobre um banco com
+personagens em `'city'` e confere que nenhuma outra coluna muda. O `upgrade-existing-schema.sql` **não**
+ganha as colunas: é o upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a
+`0029` falhar ao rodar depois dele — o banco legado entra pela migração, como entrou a `durable_version`.
+
+### O caminho: coluna → ticket → sessão → extrato → coluna
+
+| Passo | O que acontece | Onde |
+|---|---|---|
+| Coluna → ticket | o `api` lê a linha e leva `worldPosition`, `townId`, `health`, `mana` e `conditions` — só o que existe e passa na conferência; vida zero é um morto, e o morto entra cheio | `api/tickets.ts`, `initialCharacterOf`; `api/party.ts` para cada membro |
+| Ticket → sessão | a vida e a mana entram **limitadas pelo máximo do level** (e a vida nunca abaixo de 1); a âncora e a cidade vão para o `CharacterRuntime`; as condições entram e o ruleset as rearma como eventos no `onEnter` | `game/sessions.ts`, `characterFromTicket` |
+| Sessão → extrato | todo extrato de estado absoluto inteiro — fim de hunt, estado da Cidade, snapshot irrestaurável — leva os cinco campos | `game/host.ts`, `#worldStateOf`; `snapshot-settlement.ts` |
+| Extrato → coluna | o `jobs` os escreve como campos absolutos, **guardados por `durable_version`**: extrato atrasado nunca devolve a vida de ontem nem o tile de antes | `jobs/ledger.ts` |
+
+- **Ticket sem posição cai no templo.** A coluna nula é o campo ausente no ticket; o personagem entra no
+  mundo pelo `placeOnEnter` (a âncora, senão o templo). O mesmo vale para uma posição que o mapa não tem mais.
+- **O mundo não cura na entrada.** A vida e a mana são as do ticket (a Cidade curava ao entrar,
+  `city.ts:126-130`). A regeneração da hunt começa na entrada, em PZ ou fora dela (ADR 0060 d.14d).
+- **Quem morreu volta ao templo, de vida e mana cheias, sem condição** (`player.cpp:4226-4252`): o
+  extrato leva a posição `null`, a vida e a mana do máximo e `conditions: []`. A vida zero nunca chega à linha.
+- **Nulo e ausente são coisas diferentes no extrato.** `worldPosition: null` zera as três colunas
+  ("volta ao templo") e `conditions: []` grava nulo; omitir o campo deixa a coluna como estava.
+- **A `townId` é a marca de que o `api` leu o mundo.** O ticket a leva sempre com a flag ligada, e sem ela o
+  extrato **não leva nada**: um `api` anterior ou com a flag desligada emitiu um ticket sem o mundo, e
+  gravar `worldPosition: null` apagaria a posição da linha enquanto a vida cheia desfaria a que ela guarda.
+
+### As condições são prazo restante
+
+`ConditionState.expiresAtMs` e `nextTickAtMs` são instantes do relógio **lógico da sessão**, e o repouso
+não conta tempo: o Canary guarda os `ticks` que faltavam (`condition.cpp:300`), e o relógio de cada sessão
+do Draconya nasce em zero. A linha guarda, então, **quanto faltava** — `CharacterRuntime.conditionsAsRemaining()`
+subtrai o relógio a que o personagem está ligado, e a condição que já venceu não vai. A haste que faltava
+8 s e o veneno que faltava 4 s correm de novo, pelo que faltava, na sessão que o recebe.
+
+O caminho de volta tem uma armadilha: `Session.enter` **não** traduz o personagem que veio do ticket (sem
+sessão anterior não há de onde vir), então uma sessão que já andou — o recém-chegado de uma party em curso,
+a Cidade, o mundo — veria toda condição como vencida no instante da entrada, e o ruleset a apagaria.
+`carryRestoredConditions` soma o relógio da sessão **antes** de `enter` (o hospedeiro o faz para o
+recém-chegado e a Cidade; o `WorldShard` da OW-18 tem de fazer o mesmo).
+
+### O repouso é `'offline'`
+
+Com a flag ligada, a lista e a seleção de personagens (`api/characters.ts`) reportam o personagem **sem
+sessão no diretório** como `'offline'` — o estado sem sessão do invariante 8 —, em vez do `'city'` que a
+coluna `state` guarda por default. O diretório continua mandando: quem está numa hunt, ou no mundo, nunca é
+`offline`. O cliente ainda mostra o texto cru (`STATE_TEXT` não conhece `offline`): é da OW-23.
+
+### O que ainda não existe
+
+- **Quem ESCREVE a âncora.** O extrato leva `owner.worldPosition` como está; quem a atualiza com a posição
+  de agora é o dono da sessão, na saída e no checkpoint (`WorldRuleset#worldPositionOf`, OW-16/OW-20).
+- **O checkpoint do mundo** (OW-16) e a **liquidação sem linha de ledger** para quem só mudou de lugar
+  (OW-17): hoje cada extrato ainda é uma linha de ledger.
+- **A sessão do mundo hospedada** (OW-18): com a flag ligada o login ainda cai na Cidade, que cura ao entrar
+  — a vida do ticket só sobrevive numa hunt idle, e na praça é curada.
+- **A escolha do mundo** (`world_id`, OW-50) e a **troca de cidade** (`town_id`): hoje só há `main` e `thais`.
 
 ## O mundo como conteúdo (OW-08, #829)
 
@@ -83,8 +161,9 @@ O templo é o `entryPoint` que a Cidade já usa — `(94, 88, 7)` somado à orig
 recorte —, e um teste prende a igualdade. O mundo e o shard da Cidade rodam sobre o mesmo mapa
 (ADR 0060 d.3.a): o shard vira o primeiro mundo atrás de `OPEN_WORLD`.
 
-Os spawns do Canary entram à parte (OW-25), e a topologia (OW-13) e as colunas de `characters`
-(OW-15) leem este arquivo.
+Os spawns do Canary entram à parte (OW-25), e a topologia (OW-13) lê este arquivo. As colunas de
+`characters` (OW-15) guardam coordenada **absoluta** — a mesma que o `temple` — e a cidade pelo `id`
+de `towns[]`.
 
 ## Zona por tile e `canLogout` (OW-10, #831)
 
@@ -376,12 +455,16 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
 | Taxa de atualização do mundo | 10 Hz, com ou sem visualizador | `packages/sim/src/rulesets/world.ts`, `WORLD_HZ` |
 | Tetos da sessão do mundo | 65.536 eventos por avanço, 8.192 eventos de domínio pendentes, 64 notáveis por personagem (ponto de partida; o `bench:world` fixa) | `packages/sim/src/rulesets/world.ts`, `WORLD_SESSION_LIMITS` |
 | Tiles visitados ao colocar quem entra | 1.089 (o quadrado de 33, o da Cidade) | `packages/sim/src/rulesets/topology.ts`, `WORLD_ENTRY_TILES` |
+| A flag do mundo aberto | desligada (`OPEN_WORLD=0`) | `packages/server/src/config.ts`, `OPEN_WORLD`; [`docs/runtime-configuration.md`](../runtime-configuration.md) |
+| Mundo e cidade de quem existia antes da migração 0029 | `'main'` e `'thais'`, cheio, sem posição nem condição | `packages/server/migrations/0029_836-world-vitals.sql` |
+| Teto de condições por personagem na linha | 64 | `packages/server/src/world-state.ts`, `MAX_CONDITIONS` |
 
 ## Em aberto
 
-- A presença no hospedeiro, a durabilidade e a apresentação (OW-15 a OW-20): ver o
-  [plano](../open-world-plan.md). É aí que a sessão de mundo ganha quem a hospede, que o
-  `departure-requested` vira checkpoint e repouso, e que o `logout-refused` chega ao cliente.
+- A presença no hospedeiro, o checkpoint e a apresentação (OW-16 a OW-20): ver o
+  [plano](../open-world-plan.md). É aí que a sessão de mundo ganha quem a hospede, que a âncora é
+  gravada, que o `departure-requested` vira checkpoint e repouso, e que o `logout-refused` chega ao
+  cliente.
 - O `requestExit` que o `WorldRuleset` herda da hunt (a OW-13 o testa) **não é a saída do mundo**:
   ele conclui por `onExitFinished` depois de `exitDelayMs` e da janela de luta, mas não olha o tile —
   um tile de no-logout não o recusa. O hospedeiro do mundo (OW-19) deve rotear o `logout` por

@@ -204,6 +204,13 @@
       "when": 1791700000000,
       "tag": "0028_823-durable-version",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0029_836-world-vitals",
+      "breakpoints": true
     }
   ]
 }

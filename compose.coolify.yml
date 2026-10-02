@@ -43,6 +43,10 @@ services:
       # O pacote de arte servido pelo `web` (`/things/<versão>`). O boot recusa subir se o
       # conteúdo foi conferido contra outro (packages/server/src/served-pack.ts).
       THINGS_VERSION: ${THINGS_VERSION:-1533}
+      # O mundo aberto do Tibia sem PvP (ADR 0060, docs/open-world-plan.md): DESLIGADO por padrão —
+      # com `0` o jogo é o de hoje. Ligar (`OPEN_WORLD=1`) vale para os três papéis de uma vez, e
+      # este compose os roda juntos; ver docs/runtime-configuration.md.
+      OPEN_WORLD: ${OPEN_WORLD:-0}
       LOG_LEVEL: info
     depends_on:
       postgres: { condition: service_healthy }

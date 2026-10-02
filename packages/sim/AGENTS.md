@@ -138,6 +138,15 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
     o restante passaria a depender da frequência do hospedeiro (invariante 2). O vínculo com o relógio
     é transiente (fora de `getState`) e o restore de snapshot o religa com `bindClock`, SEM traduzir:
     o relógio é o mesmo, e a janela quente atravessa. A entrada recusada desfaz a tradução.
+  - **O repouso é o prazo restante, e `CharacterRuntime.conditionsAsRemaining()` é quem o devolve**
+    (#836, OW-15): as condições com `expiresAtMs`/`nextTickAtMs` menos o relógio a que o personagem
+    está ligado (o instante EXATO da saída se a sessão já o tirou; zero para o do ticket, que nunca
+    entrou numa sessão) — o mesmo `rebase` da transição, para o relógio zero. É o que a linha
+    `characters.conditions` guarda: o repouso não conta tempo, e o relógio de cada sessão nasce em
+    zero. Só LÊ. Só o personagem sabe de qual relógio os instantes dele são (numa transição o
+    destino é construído antes de a origem encerrar), então o hospedeiro nunca subtrai o `nowMs` da
+    sessão por conta própria. O caminho de volta é `Conditions.rebase(0, session.nowMs)` ANTES do
+    `enter`, que não traduz o personagem do ticket (`carryRestoredConditions`, no `server`).
   - O teste que força a escolha é a tabela `SESSION_CLOCK_POLICY` de `session.test.ts`, um
     `Record<keyof CharacterState, 'stamp' | 'duration' | 'none'>`: o campo novo não compila até ser
     classificado. Duração sem âncora num relógio (`fedMs`, `durationRemainingMs`) é `none` e atravessa.
@@ -485,7 +494,9 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   ninguém a reescreve por passo. `WorldRuleset#worldPositionOf` traduz o `position` de agora; quem
   grava a âncora é o dono da sessão, e **a leitura tem de vir ANTES de o personagem ser movido** —
   numa transição o destino é construído antes de a origem encerrar, e o `position` já é o do
-  destino (o mesmo defeito do `onLeave` da Cidade). (3) **Posição salva inutilizável cai no
+  destino (o mesmo defeito do `onLeave` da Cidade). `townId` (#836, OW-15) é a cidade do ticket: um
+  id que o `sim` só carrega entre sessões, para o dono devolvê-la no extrato — nada no `sim` a lê
+  ainda (a morte do mundo, OW-32, é quem busca o templo por ela). (3) **Posição salva inutilizável cai no
   templo, nunca lança**: parede, fora do recorte, andar sem chão e o `0,0,0` do Canary são o
   caminho esperado; só o templo recusado lança (conteúdo quebrado, que o boot já recusa). (4) **O
   mundo não cura na entrada** (a Cidade curava): a vida e a mana são as do ticket, e a regeneração

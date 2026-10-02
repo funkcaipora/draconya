@@ -645,3 +645,16 @@ A decisão 4 lista o que a `SessionTopology` isola. A OW-12 a implementou (`pack
 - **A costura não estende a topologia a todo o roster.** Os usos de roster que só rodam com `partyOptions`, bolsa compartilhada, votação, rota ou líder ficam no ruleset, guardados — o mundo não os passa. Dez usos são roster de party **sem guarda** e ficam abertos, cada um com dono: a XP pelo roster e os `killers` do Bosstiary na OW-28; o alvo de cura de party, as magias de party, o teto de medo, o nível de hazard da party e o custo por golpe de `#armHealersOf` na OW-43. A extração do resto é a dívida registrada na decisão 4, nas OW-61 a OW-65.
 
 **Efeito no que esta decisão escreveu:** nenhum. A decisão 4 continua valendo; esta emenda só registra que a lista de perguntas cresceu em três e onde mora a auditoria.
+
+## Emenda — 2026-10-02 (#836, OW-15): as condições persistem como prazo restante, e a flag `OPEN_WORLD` nasce na primeira peça que precisa dela
+
+A decisão 10.f manda persistir vida, mana e condições (`characters.health/mana/conditions`) e levá-las no ticket. A OW-15 as implementou (`docs/product/open-world.md`, "O personagem em repouso") e fechou quatro detalhes que a decisão deixava em aberto:
+
+- **`conditions` guarda PRAZO RESTANTE, não instante de relógio.** `ConditionState.expiresAtMs` e `nextTickAtMs` são instantes do relógio lógico da sessão que os gravou, e o relógio de cada sessão nasce em zero (ADR 0020). O repouso não conta tempo — o Canary guarda os `ticks` que faltavam (`canary/src/creatures/combat/condition.cpp:300`) —, então a linha leva quanto faltava (`CharacterRuntime.conditionsAsRemaining()`), a condição que já venceu não vai, e quem entra traz o restante para o relógio da sessão que o recebe (`carryRestoredConditions`, antes de `Session.enter`, que não traduz o personagem do ticket). Gravar o instante da sessão ressuscitaria a condição no relógio errado, ou a daria por vencida na entrada de uma sessão que já andou.
+- **A flag `OPEN_WORLD` nasce aqui, e não na OW-18.** A OW-15 é a primeira peça que muda o que o `api` e o `game` leem e escrevem, e o portão do plano diz que todo comportamento novo do mundo fica atrás dela. Ela só guarda o liga/desliga (`packages/server/src/config.ts`, default desligado); a recusa de subir com outro `game` vivo continua da OW-18. Com ela desligada nenhuma coluna nova é lida nem escrita, o ticket e o extrato são os de antes e o repouso é `'city'`.
+- **Quem morreu grava a vida e a mana cheias, a posição nula e nenhuma condição** (`player.cpp:4226-4252`). A vida zero nunca chega à linha, e o ticket trata a que chegar como um morto que entra cheio.
+- **O extrato só leva o mundo de quem o ticket trouxe.** A `town_id` viaja SEMPRE com a flag ligada e é a marca: sem ela o personagem nasceu de um ticket sem o mundo (a flag desligada no `api`, ou um `api` anterior numa implantação em rolagem), e gravar a posição nula ou a vida cheia apagaria o que a linha guarda.
+
+O `upgrade-existing-schema.sql` não ganha as colunas, como não ganhou a `durable_version` (#823): é o upgrade único do schema anterior à FUN-11, e uma coluna que ele criasse faria a migração `0029` falhar ao rodar depois dele.
+
+**Efeito no que esta decisão escreveu:** nenhum. A decisão 10.f continua valendo; esta emenda só registra o formato das condições, onde a flag nasce e as duas regras de segurança do extrato.

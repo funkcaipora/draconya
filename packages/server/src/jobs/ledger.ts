@@ -494,6 +494,40 @@ async function applyProgression(
   // pudesse respeitar. Extrato SEM o campo (nó anterior, ou Cidade que não mexeu) não toca a coluna.
   const fightMode = !absolute || receipt.fightMode === undefined ? {} : { fightMode: receipt.fightMode };
 
+  // O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f): a posição onde saiu, a cidade, a vida, a
+  // mana e as condições que faltavam. ABSOLUTOS e última-escrita-vence, como as bênçãos — vida e
+  // mana DESCEM com o dano, e a posição muda a cada passo, então fundir por máximo ou somar seria um
+  // erro de tipo. Guardados por `absolute` (a versão durável) como todo absoluto: extrato atrasado
+  // nunca devolve a vida de ontem nem o tile de onde se saiu antes. Extrato SEM o campo (a flag
+  // `OPEN_WORLD` desligada, nó anterior) não toca na coluna.
+  //
+  // `worldPosition: null` é EXPLÍCITO e quer dizer "volta ao templo" (o `0,0,0` do Canary): as três
+  // colunas vão a nulo juntas, que é o que o CHECK da migração 0029 exige. `conditions: []` é
+  // "nenhuma" e vira nulo, a representação de quem nunca teve — um `[]` e um `null` na mesma
+  // coluna seriam dois nomes para a mesma coisa.
+  //
+  // Montado campo a campo num objeto só, e não com um `...(cond ? {...} : {})` por coluna como os
+  // demais: o `set` já carrega tantas uniões que mais cinco o fazem passar do que o compilador
+  // aguenta representar.
+  const world: Partial<typeof characters.$inferInsert> = {};
+  if (absolute) {
+    if (receipt.worldPosition === null) {
+      world.worldX = null;
+      world.worldY = null;
+      world.worldZ = null;
+    } else if (receipt.worldPosition !== undefined) {
+      world.worldX = receipt.worldPosition.x;
+      world.worldY = receipt.worldPosition.y;
+      world.worldZ = receipt.worldPosition.z;
+    }
+    if (receipt.townId !== undefined) world.townId = receipt.townId;
+    if (receipt.health !== undefined) world.health = receipt.health;
+    if (receipt.mana !== undefined) world.mana = receipt.mana;
+    if (receipt.conditions !== undefined) {
+      world.conditions = receipt.conditions.length === 0 ? null : receipt.conditions;
+    }
+  }
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -577,6 +611,7 @@ async function applyProgression(
       ...hazard,
       ...blessings,
       ...fightMode,
+      ...world,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

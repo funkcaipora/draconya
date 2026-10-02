@@ -193,6 +193,9 @@ export function createGame(
       ...(dependencies.skillCatalog === undefined
         ? {}
         : { skillCatalog: dependencies.skillCatalog }),
+      // O mundo aberto (#836, OW-15): com a flag ligada todo extrato leva a posição, a cidade, a
+      // vida, a mana e as condições do personagem.
+      openWorld: configuration.OPEN_WORLD,
       metrics,
     });
 

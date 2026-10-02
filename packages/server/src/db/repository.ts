@@ -4,6 +4,7 @@ import type { Database } from './client.js';
 import {
   accounts, characterStorages, characters, friends, itemInstances,
 } from './schema.js';
+import type { AbsolutePoint } from '../world-state.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -115,6 +116,29 @@ export interface CharacterRecord {
    * quem a escreve é só o ledger, na transação do extrato. `0` é nenhum extrato versionado ainda.
    */
   readonly durableVersion: number;
+  /** O mundo a que o personagem pertence (#836, OW-15, ADR 0060 d.2.a): `'main'` é o único hoje. */
+  readonly worldId: string;
+  /**
+   * A posição ABSOLUTA do Tibia onde o personagem saiu (#836, OW-15, ADR 0060 d.3.b), ou `null`
+   * quando ele nasce no templo — as três colunas nulas (o CHECK as quer juntas). Quem a escreve é só
+   * o ledger, com a flag `OPEN_WORLD` ligada.
+   */
+  readonly worldPosition: AbsolutePoint | null;
+  /** A cidade do personagem (#836, OW-15): o templo para onde ele volta ao morrer. `'thais'` é a única. */
+  readonly townId: string;
+  /**
+   * A vida e a mana com que o personagem saiu (#836, OW-15, ADR 0060 d.10.f). `null` é CHEIO — todo
+   * personagem existente, e quem nunca saiu do mundo. Quem as escreve é só o ledger.
+   */
+  readonly health: number | null;
+  readonly mana: number | null;
+  /**
+   * As condições ativas como PRAZO RESTANTE (#836, OW-15), como vieram do banco. `unknown` pela
+   * mesma razão de `charms`: a forma (`ConditionState[]`) é do `sim`, e quem a confere é quem monta o
+   * ticket (`readPersistedConditions`). `null` é nenhuma. Sem método de escrita: quem escreve é o
+   * ledger.
+   */
+  readonly conditions: unknown;
   readonly createdAt: Date;
 }
 
@@ -691,6 +715,16 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     blessings: row.blessings,
     fightMode: row.fightMode,
     durableVersion: row.durableVersion,
+    worldId: row.worldId,
+    // Os três juntos ou nenhum (CHECK `character_world_position_complete`): qualquer nulo é "sem
+    // posição", e o ticket cai no templo. `smallint`/`integer` já chegam como `number`.
+    worldPosition: row.worldX === null || row.worldY === null || row.worldZ === null
+      ? null
+      : { x: row.worldX, y: row.worldY, z: row.worldZ },
+    townId: row.townId,
+    health: row.health,
+    mana: row.mana,
+    conditions: row.conditions,
     createdAt: row.createdAt,
   };
 }

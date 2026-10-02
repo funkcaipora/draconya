@@ -372,3 +372,84 @@ describe('drainRemovedInstances (#724, ADR 0048 d.8)', () => {
     expect(restored.removedInstances).toEqual(['s1:0']);
   });
 });
+
+describe('townId (#836, OW-15)', () => {
+  it('nasce ausente e fica FORA do snapshot — a hunt, que nunca teve a cidade, não ganha uma chave', () => {
+    const hero = new CharacterRuntime(state());
+    expect(hero.townId).toBeNull();
+    expect(hero.getState()).not.toHaveProperty('townId');
+  });
+
+  it('o ticket a põe pelo construtor, e ela atravessa o snapshot quente', () => {
+    const hero = new CharacterRuntime(state({ townId: 'thais' }));
+    expect(hero.townId).toBe('thais');
+    expect(hero.getState()).toMatchObject({ townId: 'thais' });
+    const restored = new CharacterRuntime(JSON.parse(JSON.stringify(hero.getState())) as CharacterState);
+    expect(restored.townId).toBe('thais');
+  });
+});
+
+describe('conditionsAsRemaining (#836, OW-15, ADR 0060 d.10.f)', () => {
+  const haste = { key: 'haste', expiresAtMs: 9_500, speedPercent: 30 };
+  const poison = {
+    key: 'poison', expiresAtMs: 4_000, nextTickAtMs: 3_100,
+    tick: { amount: 3, intervalMs: 1_000, kind: 'damage' as const },
+  };
+
+  it('o personagem que nunca entrou numa sessão (o do ticket) já tem o prazo restante: relógio zero', () => {
+    const hero = new CharacterRuntime(state({ conditions: [haste, poison] }));
+    expect(hero.conditionsAsRemaining()).toEqual([haste, poison]);
+  });
+
+  it('subtrai o relógio da sessão a que está ligado — o que falta, não o instante da sessão', () => {
+    const hero = new CharacterRuntime(state({ conditions: [haste, poison] }));
+    hero.bindClock({ nowMs: 3_000 });
+    expect(hero.conditionsAsRemaining()).toEqual([
+      { ...haste, expiresAtMs: 6_500 },
+      { ...poison, expiresAtMs: 1_000, nextTickAtMs: 100 },
+    ]);
+  });
+
+  it('a condição que já venceu sai, e a que vence exatamente agora também', () => {
+    const hero = new CharacterRuntime(state({ conditions: [haste, poison] }));
+    hero.bindClock({ nowMs: 4_000 });
+    expect(hero.conditionsAsRemaining()).toEqual([{ ...haste, expiresAtMs: 5_500 }]);
+    hero.bindClock({ nowMs: 20_000 });
+    expect(hero.conditionsAsRemaining()).toEqual([]);
+  });
+
+  it('o próximo tique que já devia ter corrido sai com restante NEGATIVO, que o `armConditions` trata com `Math.max(0, …)`', () => {
+    const hero = new CharacterRuntime(state({ conditions: [{ ...poison, nextTickAtMs: 2_000 }] }));
+    hero.bindClock({ nowMs: 3_000 });
+    expect(hero.conditionsAsRemaining()[0]).toMatchObject({ expiresAtMs: 1_000, nextTickAtMs: -1_000 });
+  });
+
+  it('depois que a sessão o tirou, o relógio é o instante EXATO da saída — não o `nowMs` de uma origem que continuou andando', () => {
+    const origin = { nowMs: 3_000 };
+    const hero = new CharacterRuntime(state({ conditions: [haste] }));
+    hero.bindClock(origin);
+    hero.markDeparture(origin);
+    origin.nowMs = 8_000;
+    expect(hero.conditionsAsRemaining()).toEqual([{ ...haste, expiresAtMs: 6_500 }]);
+  });
+
+  it('só LÊ: as condições vivas do personagem não mudam, e a devolvida é uma cópia', () => {
+    const hero = new CharacterRuntime(state({ conditions: [haste] }));
+    hero.bindClock({ nowMs: 3_000 });
+    const before = hero.conditions.getState();
+    const remaining = hero.conditionsAsRemaining();
+    expect(hero.conditions.getState()).toEqual(before);
+    expect(hero.conditions.getState()).toEqual([haste]);
+    expect(remaining).not.toEqual(before);
+  });
+
+  it('o que a transição fez antes de a origem encerrar vale: já no relógio do destino, é DELE que se subtrai', () => {
+    // O destino é construído antes de a origem encerrar: `moveToClock` já levou as condições para o
+    // relógio novo, e é esse relógio — não o de onde ele veio — o "agora" do personagem.
+    const hero = new CharacterRuntime(state({ conditions: [{ ...haste, expiresAtMs: 5_000 }] }));
+    hero.bindClock({ nowMs: 1_000 });
+    hero.moveToClock({ nowMs: 500 });
+    expect(hero.conditions.getState()).toEqual([{ ...haste, expiresAtMs: 4_500 }]);
+    expect(hero.conditionsAsRemaining()).toEqual([{ ...haste, expiresAtMs: 4_000 }]);
+  });
+});

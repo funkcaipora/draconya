@@ -50,6 +50,14 @@ export interface CharacterRouteOptions {
    * conferido no boot contra o catálogo. Ausente — ou vazio — é nascer de mãos vazias.
    */
   readonly startingKit?: readonly StartingKitPiece[];
+  /**
+   * A flag `OPEN_WORLD` (#836, OW-15, ADR 0060 decisão 6): com ela ligada o repouso é reportado como
+   * `'offline'` — o personagem sem sessão no diretório está DESLOGADO, e não "na cidade". A coluna
+   * `state` (default `'city'`) é só o que sobrou de antes da sessão existir, e com o mundo aberto ela
+   * não quer dizer nada: o repouso é o estado sem sessão (invariante 8). Ausente ou `false` é o
+   * comportamento de antes, byte a byte.
+   */
+  readonly openWorld?: boolean;
 }
 
 export function registerCharacterRoutes(
@@ -59,6 +67,7 @@ export function registerCharacterRoutes(
   options: CharacterRouteOptions = {},
 ): void {
   const { isCharacterActive, locateSession, settleProgress, defaultBotConfig, startingKit } = options;
+  const openWorld = options.openWorld === true;
 
   /**
    * Liquida e diz se ALGO foi escrito. Falhar aqui NÃO recusa a resposta, ao contrário do
@@ -92,7 +101,7 @@ export function registerCharacterRoutes(
     if (settled) characters = await repository.listCharacters(principal.accountId);
 
     const located = await Promise.all(characters.map(async (character) => toDto(
-      character, (await locateSession?.(character.id)) ?? null,
+      character, (await locateSession?.(character.id)) ?? null, openWorld,
     )));
     return reply.send({ characters: located });
   });
@@ -121,7 +130,7 @@ export function registerCharacterRoutes(
         ...(defaultBotConfig === undefined ? {} : { botConfig: defaultBotConfig }),
         ...(startingKit === undefined ? {} : { kit: startingKit }),
       });
-      return reply.code(201).send(toDto(character));
+      return reply.code(201).send(toDto(character, null, openWorld));
     } catch (error) {
       if (error instanceof CharacterNameTakenError) {
         return reply.code(409).send({ error: 'name-taken' });
@@ -147,7 +156,10 @@ export function registerCharacterRoutes(
     const character = await settle(params.data.id, request.log)
       ? await repository.getCharacter(principal.accountId, params.data.id) ?? found
       : found;
-    return reply.send(toDto(character));
+    // Com o mundo aberto o estado é um fato do diretório e não da coluna (#836, OW-15): responder
+    // `'offline'` para quem está no mundo seria mentir. Sem a flag a resposta é a de antes.
+    const location = openWorld ? (await locateSession?.(character.id)) ?? null : null;
+    return reply.send(toDto(character, location, openWorld));
   });
 
   app.delete('/api/characters/:id', async (request, reply) => {
@@ -178,6 +190,7 @@ function validCharacterName(value: string): boolean {
 function toDto(
   character: CharacterRecord,
   location: { sessionId: string; type: string } | null = null,
+  openWorld = false,
 ) {
   return {
     id: character.id,
@@ -192,8 +205,10 @@ function toDto(
     premiumUntil: character.premiumUntil?.toISOString() ?? null,
     staminaMs: character.staminaMs,
     staminaUpdatedAt: character.staminaUpdatedAt.toISOString(),
-    // O diretório manda; a coluna é só o que sobrou de antes de a sessão existir.
-    state: location?.type ?? character.state,
+    // O diretório manda; a coluna é só o que sobrou de antes de a sessão existir. Com o mundo aberto
+    // (#836, OW-15) nem ela vale: sem sessão no diretório o personagem está em REPOUSO, deslogado —
+    // `'offline'`, o estado sem sessão do invariante 8 — e não "na cidade".
+    state: location?.type ?? (openWorld ? 'offline' : character.state),
     sessionId: location?.sessionId ?? character.sessionId,
     createdAt: character.createdAt.toISOString(),
   };

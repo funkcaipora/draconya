@@ -95,6 +95,22 @@ const EnvironmentSchema = z.object({
    */
   THINGS_VERSION: z.string().default('1533'),
 
+  /**
+   * O mundo aberto do Tibia sem PvP (ADR 0060). DESLIGADO por default: com a flag desligada tudo
+   * funciona exatamente como antes — a Cidade é o espaço compartilhado, o ticket nasce cheio, o
+   * repouso é `'city'`, e nenhuma coluna de mundo é lida nem escrita. Ligada, o personagem passa a
+   * existir no mundo em repouso (posição, cidade, vida, mana e condições, #836 OW-15), e as peças
+   * seguintes do plano (`docs/open-world-plan.md`) se apoiam nela.
+   *
+   * Aceita `1`/`true` e `0`/`false`: o plano chama de `OPEN_WORLD=1`. Quem a lê são o `api` (o ticket
+   * leva os vitais, a lista de personagens reporta o repouso como `'offline'`) e o `game` (todo
+   * extrato leva a posição, a cidade, a vida, a mana e as condições); o `jobs` não a lê — escreve as
+   * colunas que o extrato trouxer. Tem de ser a MESMA nos dois: um `game` ligado com o `api` desligado
+   * emite extratos sobre personagens que nasceram cheios, e é por isso que o extrato só leva o mundo de
+   * quem o ticket trouxe (`receiptWorldStateOf`).
+   */
+  OPEN_WORLD: z.enum(['1', '0', 'true', 'false']).default('false').transform((v) => v === '1' || v === 'true'),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });

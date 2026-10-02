@@ -12,7 +12,9 @@ const CHARACTER: CharacterRecord = {
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   ammo: null, supplyStock: null, ammunitionStock: null, charms: null, hazard: null, bosstiary: null, learnedSpells: null,
   familiar: null, training: null, fedMs: 0, blessings: 0, fightMode: 'attack',
-  durableVersion: 0, createdAt: new Date(),
+  durableVersion: 0,
+  worldId: 'main', worldPosition: null, townId: 'thais', health: null, mana: null, conditions: null,
+  createdAt: new Date(),
 };
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
@@ -206,6 +208,65 @@ describe('POST /api/tickets', () => {
     // Sem Redis de extratos ligado, é a coluna — e `0` é versão, não ausência.
     expect(await issuedWith(4, undefined)).toBe(4);
     expect(await issuedWith(0, undefined)).toBe(0);
+  });
+
+  describe('o mundo e os vitais da linha no ticket (#836, OW-15, ADR 0060 d.10.f)', () => {
+    const POISON = { key: 'poison', expiresAtMs: 4_000, tick: { amount: 3, intervalMs: 1_000, kind: 'damage' } };
+    /** Um personagem que saiu do mundo a 10 HP, no templo, envenenado. */
+    const OUT_AT_TEN = {
+      ...CHARACTER,
+      worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 3, conditions: [POISON],
+    };
+    const issuedWith = async (row: typeof CHARACTER, openWorld: boolean | undefined) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        ...(openWorld === undefined ? {} : { openWorld }),
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation(row)) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown>;
+    };
+
+    it('COM a flag, o ticket leva a posição, a cidade, a vida, a mana e as condições que a linha guarda', async () => {
+      const initial = await issuedWith(OUT_AT_TEN, true);
+      expect(initial).toMatchObject({
+        worldPosition: { x: 32369, y: 32241, z: 7 }, townId: 'thais', health: 10, mana: 3, conditions: [POISON],
+      });
+    });
+
+    it('SEM a flag — o default —, o ticket é o de antes: nenhum campo novo, nem a cidade', async () => {
+      // O portão do plano: com a flag desligada tudo funciona como hoje, byte a byte. Mutação que
+      // mata: ler as colunas novas sem olhar a flag.
+      for (const openWorld of [undefined, false]) {
+        const initial = await issuedWith(OUT_AT_TEN, openWorld);
+        for (const field of ['worldPosition', 'townId', 'health', 'mana', 'conditions']) {
+          expect(initial).not.toHaveProperty(field);
+        }
+      }
+    });
+
+    it('personagem que nunca saiu do mundo: leva só a cidade — cheio, no templo, sem condição', async () => {
+      const initial = await issuedWith(CHARACTER, true);
+      expect(initial).toMatchObject({ townId: 'thais' });
+      for (const field of ['worldPosition', 'health', 'mana', 'conditions']) {
+        expect(initial).not.toHaveProperty(field);
+      }
+    });
+
+    it('uma linha torta não tranca o login: o campo ruim some, e os bons seguem', async () => {
+      const initial = await issuedWith({
+        ...OUT_AT_TEN, health: 0, conditions: [{ key: 'haste' }],
+      }, true);
+      // Vida zero é um morto, e o morto entra cheio. A posição e a mana boas ficam.
+      expect(initial).toMatchObject({ worldPosition: { x: 32369, y: 32241, z: 7 }, mana: 3 });
+      expect(initial).not.toHaveProperty('health');
+      expect(initial).not.toHaveProperty('conditions');
+    });
   });
 
   it('a postura de luta da linha entra no ticket; um valor fora dos três modos fica de fora (#550)', async () => {

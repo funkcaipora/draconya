@@ -24,6 +24,8 @@ import type {
   HazardState, LearnedSpellsState, OfflineTrainingState,
 } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
+import { readTicketWorldState } from './world-state.js';
+import type { TicketWorldState } from './world-state.js';
 
 export interface TicketClaim {
   readonly accountId: string;
@@ -63,8 +65,16 @@ export interface PartyTicket {
   }>;
 }
 
-/** Estado persistido necessário para criar a primeira sessão sem confiar no cliente. */
-export interface InitialCharacter {
+/**
+ * Estado persistido necessário para criar a primeira sessão sem confiar no cliente.
+ *
+ * **O mundo e os vitais (#836, OW-15, ADR 0060 d.10.f) vêm de `TicketWorldState`:** `worldPosition`,
+ * `townId`, `health`, `mana` e `conditions`, lidos de `characters` pelo `api` e SÓ com `OPEN_WORLD`
+ * ligado — com a flag desligada o ticket é o de antes, byte a byte. Ausente é "nasce como antes":
+ * cheio, no templo, sem condição. `characterFromTicket` limita a vida e a mana pelo máximo do level
+ * e devolve as condições à sessão como prazo restante.
+ */
+export interface InitialCharacter extends TicketWorldState {
   readonly level: number;
   readonly xp: number;
   /**
@@ -811,6 +821,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
       && initial['durableVersion'] >= 0
       ? { durableVersion: initial['durableVersion'] }
       : {}),
+    // O mundo e os vitais (#836, OW-15): campo a campo, a mesma régua do resto — torto vira AUSENTE
+    // (cheio, no templo, sem condição), nunca ticket recusado. É `readTicketWorldState` que confere,
+    // o mesmo código que o `api` e o `sim` assumem: posição no mapa do Tibia, vida maior que zero,
+    // condições com prazo restante positivo.
+    ...readTicketWorldState(initial),
   };
 }
 
