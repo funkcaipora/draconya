@@ -34,6 +34,31 @@ describe('loadConfiguration', () => {
     }
   });
 
+  it('checkpoints the world every 60 s by default (#837, OW-16, ADR 0060 d.10d)', () => {
+    // O que a decisão compra — 3,3 transações por segundo com 200 personagens — e o que o mundo perde
+    // numa queda. Mutação que mata: trocar o default por 10 000 (o intervalo do snapshot da hunt).
+    expect(loadConfiguration(minimumEnvironment as NodeJS.ProcessEnv).WORLD_CHECKPOINT_MS).toBe(60_000);
+  });
+
+  it('reads WORLD_CHECKPOINT_MS in milliseconds, between one second and one hour', () => {
+    for (const [value, expected] of [['1000', 1_000], ['10000', 10_000], ['3600000', 3_600_000]] as const) {
+      const configuration = loadConfiguration(
+        { ...minimumEnvironment, WORLD_CHECKPOINT_MS: value } as NodeJS.ProcessEnv,
+      );
+      expect(configuration.WORLD_CHECKPOINT_MS).toBe(expected);
+    }
+  });
+
+  it('refuses a WORLD_CHECKPOINT_MS that is not a sane cadence, instead of checkpointing in a loop or never', () => {
+    // 0 viraria um `setInterval` de 0 ms (um lote por volta do laço de eventos); NaN e negativo o
+    // fariam disparar de imediato; mais de uma hora é o intervalo do Canary, e daí para cima o mundo
+    // perderia horas numa queda.
+    for (const value of ['0', '999', '-5', 'abc', '1.5', '3600001', '']) {
+      expect(() => loadConfiguration({ ...minimumEnvironment, WORLD_CHECKPOINT_MS: value } as NodeJS.ProcessEnv))
+        .toThrow(/WORLD_CHECKPOINT_MS/);
+    }
+  });
+
   it('treats blank optional WorkOS credentials as unconfigured', () => {
     const configuration = loadConfiguration({
       ...minimumEnvironment,

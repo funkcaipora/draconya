@@ -59,11 +59,25 @@ export function creditsAggregates(ruleset: RulesetTraits): boolean {
  *
  * Só a sessão privada: a que se compartilha não tem como guardar a si mesma por personagem — o
  * snapshot seria a praça inteira, uma cópia por participante, a cada intervalo (ADR 0023). O
- * progresso do mundo chega ao banco por checkpoint, com timer próprio (ADR 0060 d.10a, OW-16), e
- * não por snapshot.
+ * progresso do mundo chega ao banco por checkpoint, com timer próprio (ADR 0060 d.10a, OW-16 —
+ * `checkpointsProgress`), e não por snapshot.
  */
 export function keepsSnapshot(ruleset: RulesetTraits): boolean {
   return !leavesOnExit(ruleset);
+}
+
+/**
+ * O progresso desta sessão chega ao Redis por CHECKPOINT: um lote a cada `WORLD_CHECKPOINT_MS` com o
+ * extrato de todo personagem sujo, e antecipado inteiro em saída, transição, morte e drenagem
+ * (ADR 0060 d.10d, OW-16). É a sessão que sai por personagem E credita — o mundo.
+ *
+ * Não é `creditsAggregates` (a hunt também credita, e uma vez só, no `end`) nem `!keepsSnapshot` (a
+ * Cidade também não guarda snapshot, e não credita nada): é a conjunção das duas respostas que só o
+ * mundo dá. A Cidade grava estado ao sair (`#saveDurableReceipt`), a hunt grava no `end` e tem snapshot
+ * a cada dez segundos; nenhuma das duas tem lote.
+ */
+export function checkpointsProgress(ruleset: RulesetTraits): boolean {
+  return leavesOnExit(ruleset) && progressOf(ruleset) === 'checkpointed';
 }
 
 /**

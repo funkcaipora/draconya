@@ -113,6 +113,16 @@ const EnvironmentSchema = z.object({
    */
   OPEN_WORLD: z.enum(['1', '0', 'true', 'false']).default('false').transform((v) => v === '1' || v === 'true'),
 
+  /**
+   * A cadência do checkpoint do mundo, em milissegundos (#837, OW-16, ADR 0060 d.10d): de quanto em
+   * quanto tempo o `game` grava num `MULTI` só o extrato de todo personagem sujo do mundo. O default é
+   * 60 000 (60 s) — o que a decisão compra, 3,3 transações por segundo com 200 personagens caçando — e
+   * é também o que o mundo PERDE numa queda do nó. O Canary salva de hora em hora
+   * (`canary/config.lua.dist:356-362`), e é por isso que o teto é uma hora. Só o `game` a lê, e só tem
+   * efeito com `OPEN_WORLD` ligado: sem ele nenhuma sessão é `checkpointed`.
+   */
+  WORLD_CHECKPOINT_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(60_000),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });

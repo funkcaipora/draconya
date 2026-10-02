@@ -196,6 +196,9 @@ export function createGame(
       // O mundo aberto (#836, OW-15): com a flag ligada todo extrato leva a posição, a cidade, a
       // vida, a mana e as condições do personagem.
       openWorld: configuration.OPEN_WORLD,
+      // A cadência do lote de checkpoint do mundo (#837, OW-16): sem efeito até existir uma sessão
+      // `checkpointed`, que só nasce com a flag ligada.
+      worldCheckpointMs: configuration.WORLD_CHECKPOINT_MS,
       metrics,
     });
 

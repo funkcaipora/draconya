@@ -32,8 +32,8 @@ precisa fornecer um endereço `wss`. O runtime permite hosts e caminhos por nó;
 de staging continua validando `wss://<APP_ORIGIN>/ws`. WSS descreve o endereço **público**:
 o TLS pode terminar no proxy, enquanto o `game` escuta HTTP/WebSocket na rede interna.
 
-`CONTENT_DIR`, `THINGS_VERSION`, `NODE_ID`, `LOG_LEVEL`, `NODE_ENV` e `OPEN_WORLD` (adiante) continuam
-comuns ao boot.
+`CONTENT_DIR`, `THINGS_VERSION`, `NODE_ID`, `LOG_LEVEL`, `NODE_ENV`, `OPEN_WORLD` e `WORLD_CHECKPOINT_MS`
+(adiante) continuam comuns ao boot.
 `THINGS_DIR` pertence a importação, inventário e testes de assets; não aparece no objeto
 `Configuration` do servidor. Sua remoção não muda os scripts nem a localização dos assets.
 
@@ -55,12 +55,31 @@ a repassa como `OPEN_WORLD` (default `0`).
 **Tem de ser a MESMA no `api` e no `game`.** Um `game` ligado com o `api` desligado recebe tickets sem o
 mundo, e por isso o extrato só leva o mundo de quem o ticket trouxe (a `townId` é a marca) — ligar
 metade do par não apaga a posição de ninguém, mas também não persiste nada. Ligar em produção é
-operação à parte: as peças seguintes do plano (checkpoint, `WorldShard`, presença) ainda não
-existem, e o ADR 0060 só a quer ligada com UM processo `game` até a trava de mundo (OW-59) — a recusa
+operação à parte: as peças seguintes do plano (`WorldShard`, presença) ainda não existem — o checkpoint
+já existe, mas só roda quando há uma sessão `checkpointed` —, e o ADR 0060 só a quer ligada com UM processo `game` até a trava de mundo (OW-59) — a recusa
 de subir com outro `game` vivo é da OW-18.
 
 Desligar depois de ligada é seguro: nenhuma coluna é apagada, e quem voltar a ligar encontra o último
 estado salvo — a vida e a posição de antes, não as de agora.
+
+### O checkpoint do mundo: `WORLD_CHECKPOINT_MS` (#837, OW-16)
+
+`WORLD_CHECKPOINT_MS` é de quanto em quanto tempo, em milissegundos, o `game` grava o **lote de
+checkpoint** do mundo: o extrato de todo personagem sujo (moveu, mudou de vida, mana ou condição, rendeu
+algo), num `MULTI` só do Redis. **O padrão é `60000`** (60 s), o valor que o [ADR 0060](adr/0060-tibia-open-world-without-pvp.md)
+d.10d escolheu: com 200 personagens caçando são até 3,3 transações por segundo (a 10 s seriam 20) e até 288
+mil linhas de ledger por dia por mundo. É também **o que o mundo perde numa queda do nó** — até um
+intervalo, de todo mundo ao mesmo tempo, e todos voltam ao mesmo instante. O Canary salva de hora em hora
+(`canary/config.lua.dist:356-362`), e é por isso que o teto é uma hora.
+
+| Aceita | Recusa o boot |
+|---|---|
+| inteiro de `1000` (1 s) a `3600000` (1 h) | `0`, negativo, decimal, texto, vazio, acima de uma hora |
+
+Só o `game` a lê, e só tem efeito com `OPEN_WORLD` ligado: sem a flag nenhuma sessão é `checkpointed`, e o
+timer não encontra o que gravar. **A saída, a transição e a drenagem não esperam o tique** — gravam o lote
+inteiro na hora (`docs/product/open-world.md`, "O checkpoint do mundo"). A hunt idle não é afetada: ela
+continua com o snapshot de 10 s e o extrato do fim (ADR 0018:57), que é outro mecanismo.
 
 ## Exemplos de produção
 

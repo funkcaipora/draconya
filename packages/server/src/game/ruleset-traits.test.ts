@@ -3,7 +3,7 @@ import { createCityRuleset, createHuntSession } from '@draconya/sim';
 import type { Ruleset } from '@draconya/sim';
 import { testContent } from '../testing/content.js';
 import {
-  creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
+  checkpointsProgress, creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
 } from './ruleset-traits.js';
 import type { RulesetTraits } from './ruleset-traits.js';
 
@@ -30,6 +30,23 @@ describe('os predicados que o hospedeiro lê no ruleset (OW-04)', () => {
     expect(offersCityServices(traits)).toBe(services);
   });
 
+  it.each([
+    // nome, traços, checkpointsProgress (OW-16): só o shard que credita grava em lote
+    ['hunt / treino (privada)', PRIVATE, false],
+    ['Cidade (shard)', CITY, false],
+    ['mundo (shard checkpointed)', WORLD, true],
+    ['shard com `progress: "none"` declarado', { shared: true, progress: 'none' } as const, false],
+  ] as const)('o checkpoint em lote é só do mundo (OW-16): %s', (_name, traits, checkpoints) => {
+    expect(checkpointsProgress(traits)).toBe(checkpoints);
+  });
+
+  it('a sessão privada que declara `checkpointed` não vira lote: `progress` só tem leitura em quem sai por personagem', () => {
+    // Mesma regra de `creditsAggregates`: a hunt credita no `end`, e o hospedeiro grava o extrato dela
+    // uma vez só. Um `checkpointed` num ruleset privado não pode fazê-la gravar em lote.
+    expect(checkpointsProgress({ shared: false, progress: 'checkpointed' })).toBe(false);
+    expect(checkpointsProgress({ progress: 'checkpointed' })).toBe(false);
+  });
+
   it('`progress: "none"` declarado num shard é o mesmo que ausente: não credita', () => {
     expect(creditsAggregates({ shared: true, progress: 'none' })).toBe(false);
     expect(creditsAggregates(CITY)).toBe(false);
@@ -53,6 +70,7 @@ describe('os predicados que o hospedeiro lê no ruleset (OW-04)', () => {
   it('o mundo troca UMA resposta da Cidade: a do agregado — as outras quatro não mudam', () => {
     // É a razão de os predicados existirem. Se a diferença entre Cidade e mundo vazar para outra
     // pergunta, um ramo do hospedeiro passou a decidir por `progress` sem que ninguém tenha dito.
+    // (`checkpointsProgress`, da OW-16, é a MESMA diferença — shard que credita — lida por outro lado.)
     expect(leavesOnExit(WORLD)).toBe(leavesOnExit(CITY));
     expect(keepsSnapshot(WORLD)).toBe(keepsSnapshot(CITY));
     expect(usesAreaOfInterest(WORLD)).toBe(usesAreaOfInterest(CITY));

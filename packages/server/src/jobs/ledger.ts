@@ -504,7 +504,7 @@ async function applyProgression(
   // A GUARDA DE VERSÃO (#823, OW-02, ADR 0060 decisão 10e). XP, gold, `acquired` e
   // `removedInstances` são DELTAS — protegidos por `UNIQUE (session_id, seq)`, valem em qualquer
   // ordem e entram SEMPRE. Todo campo ABSOLUTO (ammo, alma, estoques, comida, charms, bênçãos,
-  // postura, equipamento, layout, overlays, storages, stamina, skills) é última-escrita-vence, e
+  // postura, equipamento, layout, overlays, quantidades, storages, stamina, skills) é última-escrita-vence, e
   // "a última" precisa ser a de MAIOR versão, não a que o `SCAN` ou o `SMEMBERS` entregou por
   // último: só se escreve quando o extrato é mais novo que o que a coluna já viu, e a coluna sobe
   // na mesma transação. Extrato atrasado entra só com os deltas.
@@ -756,6 +756,15 @@ async function applyProgression(
       ));
   }
 
+  // A quantidade de cada instância carregada (#837, OW-16): o `acquired` acima é CUMULATIVO no mundo —
+  // a sessão nunca termina, e todo item que o personagem pega nela leva o prefixo dela — e a inserção
+  // não toca a linha que já existe, então a pilha que cresceu ou diminuiu depois do primeiro
+  // checkpoint em que apareceu só chega aqui. ABSOLUTO e INTEIRO, como o layout: o extrato mais velho
+  // descartado pela guarda não perde nada, porque o mais novo diz a quantidade de todas.
+  if (absolute && receipt.quantities !== undefined) {
+    await applyQuantities(tx, receipt.characterId, receipt.quantities);
+  }
+
   // O layout de equipamento (FUN-82). Escopado por dono dentro do próprio `applyEquipment`:
   // um extrato não move item de outra pessoa nem que traga o id dela.
   if (absolute && receipt.equipment !== undefined) {
@@ -818,6 +827,32 @@ async function applyProgression(
         : {}),
     })
     .where(eq(characters.id, receipt.characterId));
+}
+
+/**
+ * A quantidade de cada instância que o extrato lista (#837). Escopada por dono, como o layout: um
+ * extrato com o id de um item alheio não escreve nada nele. ABSOLUTA só para as instâncias LISTADAS —
+ * a que o banco tem e o mapa não lista não é tocada (a que acabou chega por `removedInstances`), e a
+ * que o mapa lista e o banco não tem não nasce aqui (nasce por `acquired`). Só entra quantidade que o
+ * banco aceita: inteiro de 1 até o da coluna `integer` (o `parseReceipt` já filtra, e aqui é a guarda
+ * de quem grava).
+ */
+async function applyQuantities(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  characterId: string,
+  quantities: Readonly<Record<string, number>>,
+): Promise<void> {
+  const owned = await tx
+    .select({ id: itemInstances.id, quantity: itemInstances.quantity })
+    .from(itemInstances)
+    .where(eq(itemInstances.ownerCharacterId, characterId));
+  for (const row of owned) {
+    if (!Object.hasOwn(quantities, row.id)) continue;
+    const next = quantities[row.id];
+    if (typeof next !== 'number' || !Number.isSafeInteger(next) || next < 1 || next > 2_147_483_647) continue;
+    if (next === row.quantity) continue;
+    await tx.update(itemInstances).set({ quantity: next }).where(eq(itemInstances.id, row.id));
+  }
 }
 
 /**
