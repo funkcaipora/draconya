@@ -24,10 +24,10 @@ import { FakeSocket } from './testing.js';
 // saiu, que são o que o próximo ticket lê (OW-15). É o critério "sai aos 60 s, com posição e vida salvas"
 // da issue, medido onde ele importa: o que o jogador encontra quando volta.
 //
-// O Redis é o banco 29 (`testing/redis.ts`), e nada aqui o apaga ou varre inteiro: todo personagem nasce com
+// O Redis é o banco 26 (`testing/redis.ts`), e nada aqui o apaga ou varre inteiro: todo personagem nasce com
 // UUID, e a liquidação é POR PERSONAGEM — o caminho do ticket.
 const logger = createLogger('silent', 'test');
-const { redis, available: redisReady } = await connectTestRedis(29);
+const { redis, available: redisReady } = await connectTestRedis(26);
 
 let db: TestDatabase | null = null;
 let ready = false;
