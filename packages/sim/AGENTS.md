@@ -464,6 +464,33 @@ Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no
   quem sai e roda a cascata pendente, e isso mexe em estado privado dele. A topologia nunca chama
   `session.leave` por conta própria numa saída decidida pelo ruleset — o `member-left` e a ordem
   dos extratos (#193) se perderiam.
+- **O mundo aberto é o `HuntRuleset` com a topologia de mundo, e a identidade mora em
+  `WorldRuleset`** (`rulesets/world.ts`, OW-13, ADR 0060 d.2 e d.4): `createWorldSession` monta a
+  sessão `type: 'world'`, `shared`, `progress: 'checkpointed'`, 10 Hz sempre, que NUNCA termina —
+  esvaziar, morrer e concluir a saída tiram só quem saiu (`host.depart`), nunca `session.end`.
+  Oito armadilhas. (1) **A hunt não muda**: `HuntRuleset.type` é só um campo de tipo largo
+  (`'hunt' | 'world'`), `contentOptionsOf` é o que `createHuntRuleset` já montava, e o portão é o
+  mesmo da costura (FUN-63, 1 Hz = 10 Hz, `bench:hunts`). Opção NOVA de conteúdo que a hunt passe a
+  ler entra em `contentOptionsOf`, e não só em `createHuntRuleset` — senão o mundo a esquece. (2)
+  **`CharacterRuntime.worldPosition` é uma ÂNCORA em coordenada absoluta, não a posição ao vivo**:
+  ninguém a reescreve por passo. `WorldRuleset#worldPositionOf` traduz o `position` de agora; quem
+  grava a âncora é o dono da sessão, e **a leitura tem de vir ANTES de o personagem ser movido** —
+  numa transição o destino é construído antes de a origem encerrar, e o `position` já é o do
+  destino (o mesmo defeito do `onLeave` da Cidade). (3) **Posição salva inutilizável cai no
+  templo, nunca lança**: parede, fora do recorte, andar sem chão e o `0,0,0` do Canary são o
+  caminho esperado; só o templo recusado lança (conteúdo quebrado, que o boot já recusa). (4) **O
+  mundo não cura na entrada** (a Cidade curava): a vida e a mana são as do ticket, e a regeneração
+  da hunt corre em PZ e fora dela. (5) **`acceptsCityServices` lê o BIT da PZ** (`hasZoneFlag`),
+  não `zoneAt`: o tile `P` (PZ + no-logout) é `'protection'` no tipo e aceita serviço, e o
+  no-logout continua recusando a saída (`canLogout` lê o mesmo bit). É a pergunta; quem recusa a
+  intenção é o hospedeiro (OW-18). (6) **`creditKill`/`rewardEligible`/`lootRecipient` do mundo são
+  PROVISÓRIOS**: só o dono do golpe final, sem sorteio, até o crédito do Canary (OW-28). Sortear
+  ali mudaria o `session.rng` do mundo inteiro. (7) **`startsInstanceSchedules` é `false`**: o
+  mundo não semeia spawn com quem entra, e sem pontos de spawn (OW-25) ele anda sem monstro; o
+  spawn inicial da criação é da OW-31. (8) **A fila estável (`tieBreak: 'stable'`, OW-06) ainda não
+  é pedida**: `createWorldSession` é o lugar, e o #827 ainda não pousou. Os tetos da sessão
+  (`WORLD_SESSION_LIMITS`) são ponto de partida; o `bench:world` (OW-35) os fixa. O `id` da sessão é
+  o da ENCARNAÇÃO: o ledger é `UNIQUE (session_id, seq)` e o `seq` recomeça em zero.
 - **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
   acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile

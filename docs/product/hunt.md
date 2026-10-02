@@ -696,8 +696,10 @@ código de antes da costura, **sem tocar numa condição**: a hunt, solo e party
 de sempre (as sequências do FUN-63, 1 Hz = 10 Hz, a retomada de snapshot
 e o `pnpm bench:hunts` são o portão). A topologia não vai no snapshot e não muda o formato dele.
 
-Hoje só a instância existe. O mundo aberto (ADR 0060) usa o mesmo motor com outra topologia, e é a
-OW-13 que a escreve; esta costura só abre a porta.
+A instância é a topologia de hoje. O mundo aberto (ADR 0060) usa o mesmo motor com outra, a
+`worldTopology` da OW-13 (`docs/product/open-world.md`, "A sessão do mundo"): a hunt só ganhou um
+campo `type` de tipo largo e o `contentOptionsOf` extraído de `createHuntRuleset`, e o portão
+acima continua o mesmo.
 
 | Pergunta | Na instância (o de hoje) |
 |---|---|

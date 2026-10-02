@@ -147,8 +147,9 @@ O que ficou escrito é a regra do gold, que vale para todo serviço que move gol
   sem checkpoint no meio.
 
 O ramo do mundo (sair por extrato de delta, transição, drenagem) já existe no hospedeiro e é
-exercitado em teste com um ruleset de mentira; falta o ruleset real (OW-13/OW-18) e o checkpoint
-com timer (OW-16).
+exercitado em teste com um ruleset de mentira; o ruleset real existe desde a OW-13
+(`WorldRuleset`, `docs/product/open-world.md`), e falta quem o hospede (OW-18) e o checkpoint com
+timer (OW-16).
 
 ### Desconectar não tira ninguém da praça na hora
 

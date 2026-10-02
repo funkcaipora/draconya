@@ -82,7 +82,9 @@ export function usesAreaOfInterest(ruleset: RulesetTraits): boolean {
  * uma.
  *
  * É a pergunta "esta sessão é lugar de serviço?" no nível da SESSÃO. No mundo, ela não basta: o
- * serviço exige estar num tile de PZ, e essa conferência é do tile, não da sessão (OW-13).
+ * serviço exige estar num tile de PZ, e essa conferência é do tile, não da sessão — é
+ * `Ruleset.acceptsCityServices(session, characterId)`, que o `sim` responde desde a OW-13 e o
+ * hospedeiro passa a chamar quando hospedar o mundo (OW-18).
  */
 export function offersCityServices(ruleset: RulesetTraits): boolean {
   return ruleset.shared === true;

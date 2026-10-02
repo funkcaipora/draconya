@@ -74,6 +74,37 @@ São os 9 usos de classe A da tabela (10 com o acréscimo de `#hazardPoints`, ab
 - **`lootRecipient` consome `session.rng`** na instância (party `split`): o número e a ordem dos sorteios são contrato (FUN-63). Uma topologia nova que sorteie precisa decidir isso, e a de mundo não deve sortear.
 - **A topologia não vai no snapshot.** `huntRulesetFromSnapshot` e `changeDifficulty` montam o ruleset com o default (`instanceTopology`). Isto está certo para a instância, e a sessão de mundo é `checkpointed` e não tem snapshot (ADR 0060 d.10a); quem criar uma sessão que retoma com outra topologia passa a opção na própria montagem.
 
+## A topologia de mundo (OW-13) e as armadilhas acima
+
+`worldTopology` (`packages/sim/src/rulesets/topology.ts`) é a segunda resposta às mesmas perguntas, e
+a OW-13 passou por cada armadilha acima:
+
+| Membro | Instância | Mundo (OW-13) |
+|---|---|---|
+| `creditKill` | todo presente | só o dono do golpe final — **provisório até a OW-28** |
+| `rewardEligible` | solo: o pagável; party: todo presente vivo e com stamina | só o dono do golpe final, vivo e com stamina; monstro morto por monstro não paga ninguém |
+| `lootRecipient` | solo: o matador; `split`: um sorteado | o dono do cadáver, se pode receber; **nunca sorteia** (`session.rng` intocado) |
+| `leaderOf` | o líder da party, ou o mais antigo | `undefined` |
+| `onEmpty` | a sessão acaba | nada |
+| `onLeaderGone` | o mais antigo assume | nada |
+| `onCharacterDied` | solo encerra; party solta o morto | **sempre** solta o morto com o extrato (`host.depart`); o resto da morte é a OW-32 |
+| `onExitFinished` | idem, para a saída concluída | **sempre** solta quem concluiu; a saída do Canary é a OW-14 |
+| `startsInstanceSchedules` | com o primeiro corredor | nunca |
+| `placeOnEnter` | o primeiro na rota, o segundo no livre mais próximo | a âncora absoluta, senão o templo, a pé |
+| `runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime` | sim | não |
+| `namesOwnerInEvents` | só com mais de um presente | sempre |
+
+- **`leaderOf` devolvendo `undefined`** é o caso do mundo, e os testes de `world.test.ts` rodam a
+  sessão sem líder inteira (entrada, caminhada, saída, morte).
+- **`onEmpty` que não encerra** deixa a sessão viva e vazia: o teste esvazia, avança 5 s e recebe
+  quem chega depois.
+- **`requestExit` continua valendo** com `runsExitRules: false`: o teste conclui a saída do último
+  presente e a sessão segue de pé — a instância solo acabaria.
+- **`lootRecipient` do mundo não sorteia**, e o teste confere o estado do `rng` antes e depois.
+- **A topologia não vai no snapshot**, e a sessão de mundo não tem snapshot (ADR 0060 d.10a).
+  `WorldRuleset` recusa a construção sem a topologia de mundo (ausente é a de instância, e um mundo
+  com ela acabaria na primeira morte solo).
+
 ## Acréscimos depois de `00c70359`
 
 A `origin/tibia-parity` andou enquanto a OW-12 estava aberta (o último merge foi em `c3829ae3`), e duas entregas acrescentaram seis usos de código de `session.participants` ao `hunt.ts`: o Hazard (#632) e a condição de forma (outfit). Pela mesma régua:
