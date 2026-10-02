@@ -56,8 +56,10 @@ export interface ConnectionOptions {
   readonly openSocket?: (url: string) => SocketLike;
   /**
    * Por onde a primeira sessão do personagem nasce (#846, OW-23): `'world'` (o default) ou `{ hunt }`. Vai no
-   * pedido de ticket de CADA conexão — o servidor só o respeita para quem não tem sessão, então repeti-lo numa
-   * reconexão é inofensivo.
+   * pedido de ticket só ENQUANTO a primeira sessão não existe: uma queda antes do primeiro `session-state` pede
+   * de novo com o mesmo `entry`, e depois dele os pedidos voltam ao mundo. O servidor honra o `entry` de quem
+   * não tem sessão — e quem a teve e a perdeu (a hunt acabou, a Cidade foi recolhida) também não tem uma:
+   * repeti-lo ali começaria uma caçada que ninguém pediu.
    */
   readonly entry?: TicketEntry;
   readonly requestTicket?: (apiUrl: string, characterId: string, entry: TicketEntry) => Promise<string>;
@@ -114,6 +116,10 @@ export function createConnection(options: ConnectionOptions): Connection {
   const random = options.random ?? Math.random;
   const entry = options.entry ?? 'world';
 
+  // Já houve sessão NESTA conexão (um `session-state` chegou)? Dali em diante o `entry` pedido deixou de valer:
+  // a sessão que ele iniciaria existiu e acabou, e o ticket de uma volta pede o mundo, que é o pedido de sempre.
+  // Local à conexão — escolher outra hunt na fila (`huntInsteadOfWaiting`) recria a conexão, e ela nasce sem.
+  let sessionStarted = false;
   let socket: SocketLike | null = null;
   let cancelRetry: (() => void) | null = null;
   let attempt = 0;
@@ -166,7 +172,7 @@ export function createConnection(options: ConnectionOptions): Connection {
       wsUrl = offered;
     } else {
       try {
-        wsUrl = await requestTicket(options.apiUrl, options.characterId, entry);
+        wsUrl = await requestTicket(options.apiUrl, options.characterId, sessionStarted ? 'world' : entry);
       } catch {
         // Ticket recusado pode ser transitório (nó reiniciando) ou definitivo (sem sessão).
         // Tentar de novo com espera é o comportamento certo para os dois: o definitivo vira
@@ -203,6 +209,7 @@ export function createConnection(options: ConnectionOptions): Connection {
       // animar dez minutos de eventos é o erro que o AGENTS.md do pacote nomeia.
       for (const message of decoded) {
         applyMessage(message, nowMs);
+        if (message.type === 'session-state') sessionStarted = true;
         if (message.type === 'world-full') queueRetryAfterMs = message.retryAfterMs;
       }
     };

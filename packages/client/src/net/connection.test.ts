@@ -294,6 +294,23 @@ describe('o mundo aberto na conexão (OW-23, #846)', () => {
     }).buffer.slice(0),
   });
 
+  const sessionState = () => ({
+    data: encodeS2C({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, promoted: false, speed: 0, skills: {},
+        magicLevel: { level: 0, percentToNext: 0 }, soul: 0, soulMax: 0,
+      },
+      world: { groundItems: [], tileUpdates: [], fields: [], mapId: 'rat-cellars', creatures: [] },
+      aggregates: {
+        durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0,
+        suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+      },
+      notableEvents: [],
+    }).buffer.slice(0),
+  });
+
   describe('por onde a primeira sessão nasce (entry)', () => {
     it('pede o ticket com o mundo, que é o default — a conexão de sempre', async () => {
       const { connection, entries } = harness();
@@ -302,15 +319,64 @@ describe('o mundo aberto na conexão (OW-23, #846)', () => {
       expect(entries).toEqual(['world']);
     });
 
-    it('pede o ticket com a hunt idle quando o jogador a escolheu, em toda reconexão', async () => {
+    it('pede o ticket com a hunt idle enquanto a primeira sessão não existe, mesmo depois de uma queda', async () => {
       const { connection, sockets, entries, runPending } = harness({ entry: { hunt: 'rat-cellars' } });
       connection.start();
       await flush();
-      sockets[0]?.onclose?.({});
+      sockets[0]?.onopen?.({});
+      // Caiu antes do `session-state`: não houve sessão alguma, e calar o `entry` na segunda tentativa faria a
+      // hunt escolhida virar o mundo.
+      sockets[0]?.onclose?.({ code: 1006 });
       runPending();
       await flush();
-      // O servidor só respeita o `entry` de quem não tem sessão: repeti-lo numa reconexão é inofensivo, e
-      // calar na segunda faria a hunt escolhida virar o mundo se a primeira sessão ainda não existisse.
+      expect(entries).toEqual([{ hunt: 'rat-cellars' }, { hunt: 'rat-cellars' }]);
+    });
+
+    it('depois que a sessão existiu, a volta pede o mundo: o `entry` não inicia uma caçada que ninguém pediu', async () => {
+      const { connection, sockets, entries, runPending } = harness({ entry: { hunt: 'rat-cellars' } });
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(sessionState());
+      // A hunt acabou e a Cidade foi recolhida sem visualizador: o servidor já não tem sessão, e honraria o
+      // `entry` repetido como um pedido novo — gastando suprimento de quem só dormiu o notebook.
+      // Mutação que mata: pedir `entry` em toda `connect()`, como antes.
+      sockets[0]?.onclose?.({ code: 1006 });
+      runPending();
+      await flush();
+      sockets[1]?.onopen?.({});
+      sockets[1]?.onclose?.({ code: 1006 });
+      runPending();
+      await flush();
+      expect(entries).toEqual([{ hunt: 'rat-cellars' }, 'world', 'world']);
+    });
+
+    it('o ticket oferecido que falhou também cai no mundo, e não na hunt de antes', async () => {
+      const { connection, sockets, entries, runPending } = harness({ entry: { hunt: 'rat-cellars' } });
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(sessionState());
+      offerWsUrl('ws://party/?ticket=p');
+      sockets[0]?.onclose?.({ code: 1006 });
+      runPending();
+      await flush();
+      // O ticket de party foi usado (não pediu à api); a queda seguinte pede o ticket normal, do mundo.
+      sockets[1]?.onclose?.({ code: 1006 });
+      runPending();
+      await flush();
+      expect(entries).toEqual([{ hunt: 'rat-cellars' }, 'world']);
+    });
+
+    it('a fila (world-full) não é sessão: a hunt escolhida continua sendo pedida', async () => {
+      const { connection, sockets, entries, runPending } = harness({ entry: { hunt: 'rat-cellars' } });
+      connection.start();
+      await flush();
+      sockets[0]?.onopen?.({});
+      sockets[0]?.onmessage?.(worldFull());
+      sockets[0]?.onclose?.({ code: 4001 });
+      runPending();
+      await flush();
       expect(entries).toEqual([{ hunt: 'rat-cellars' }, { hunt: 'rat-cellars' }]);
     });
   });
