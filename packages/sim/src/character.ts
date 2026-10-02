@@ -259,6 +259,16 @@ export interface CharacterState {
    */
   readonly worldPosition?: Point;
   /**
+   * A cidade do personagem (#836, OW-15, ADR 0060 d.6): o `id` de `content.worlds[].towns[]`, cujo
+   * templo é para onde ele volta ao morrer (`canary/src/creatures/players/player.cpp:4041`). É a
+   * `characters.town_id` que o ticket traz — o `sim` só a carrega entre sessões, como `vocationId`,
+   * para o dono da sessão devolvê-la no extrato (nada no `sim` a LÊ ainda: a morte do mundo, OW-32,
+   * é quem vai buscar o templo por ela). Ausente é ticket sem o campo (a flag `OPEN_WORLD`
+   * desligada, ou um `api` anterior): o personagem não carrega cidade e o extrato não a escreve.
+   * Opcional, então o `SNAPSHOT_FORMAT_VERSION` não subiu.
+   */
+  readonly townId?: string;
+  /**
    * Haste, postura, magic shield e cura ao longo do tempo (#155), com vencimento LÓGICO. O
    * evento que as faz vencer está na fila da sessão, que também vai no snapshot. Ausente é
    * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`. O `expiresAtMs` é do relógio da sessão que o
@@ -556,6 +566,11 @@ export class CharacterRuntime {
    * dono da sessão a escreve (invariante 9). Ver `CharacterState.worldPosition`.
    */
   worldPosition: Point | null;
+  /**
+   * A cidade do personagem (#836, OW-15). `null` é "o ticket não disse" — nada a devolver no
+   * extrato. Atravessa toda transição como está. Ver `CharacterState.townId`.
+   */
+  townId: string | null;
   /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions`. */
   readonly conditions: Conditions;
   /**
@@ -664,6 +679,7 @@ export class CharacterRuntime {
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.worldPosition = state.worldPosition ?? null;
+    this.townId = state.townId ?? null;
     this.conditions = Conditions.fromState(state.conditions);
     // A trava de stairhop de um snapshot anterior ao #622 (ver `CharacterState.attackLockedUntil`):
     // vira a condição `pacified`, e uma que JÁ existe (o snapshot novo) manda mais.
@@ -779,6 +795,32 @@ export class CharacterRuntime {
       if (previous !== null) this.#rebaseClock(toMs, fromMs);
       this.#clockLink = previous;
     };
+  }
+
+  /**
+   * As condições ativas como PRAZO RESTANTE, para persistir (#836, OW-15, ADR 0060 d.10.f): o
+   * `expiresAtMs` e o `nextTickAtMs` de cada uma viram os milissegundos que FALTAM agora, e a que já
+   * venceu sai. É o que a linha `characters.conditions` guarda — instante de relógio de sessão
+   * nenhuma, porque o repouso não conta tempo (o Canary guarda os `ticks` que faltavam,
+   * `condition.cpp:300`) e o relógio lógico de cada sessão nasce em zero. O mesmo `rebase` que a
+   * transição faz, só que para o relógio ZERO: quem lê na entrada traz o restante para o relógio da
+   * sessão nova com `conditions.rebase(0, session.nowMs)`.
+   *
+   * O "agora" é o do relógio a que o personagem está ligado (`moveToClock`/`bindClock`): o instante
+   * exato da saída se a sessão já o tirou (`markDeparture`), senão o `nowMs` dela — a mesma origem
+   * que `moveToClock` usa. É por isso que isto mora aqui e não no hospedeiro: numa transição o
+   * destino é construído ANTES de a origem encerrar, e a essa altura os instantes já estão no
+   * relógio do destino — só o próprio personagem sabe de qual relógio os seus são. Sem sessão
+   * (o personagem que veio do ticket e nunca entrou), os instantes já são o restante (relógio zero).
+   *
+   * Só LÊ: devolve uma cópia, e as condições vivas não mudam.
+   */
+  conditionsAsRemaining(): readonly ConditionState[] {
+    const link = this.#clockLink;
+    const nowMs = link === null ? 0 : (link.departedAtMs ?? link.clock.nowMs);
+    const remaining = Conditions.fromState(this.conditions.getState());
+    remaining.rebase(nowMs, 0);
+    return remaining.getState();
   }
 
   #rebaseClock(fromMs: number, toMs: number): void {
@@ -1069,6 +1111,7 @@ export class CharacterRuntime {
       // Omitida quando ausente, como `conditions`: a hunt, que nunca esteve no mundo, não ganha
       // uma chave que o construtor já repõe sozinho.
       ...(this.worldPosition === null ? {} : { worldPosition: this.worldPosition }),
+      ...(this.townId === null ? {} : { townId: this.townId }),
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
       // Como `conditions`: omitido quando ainda vale `FULL_BLOCK_CHARGE` (nunca bloqueou), para
       // não inflar todo snapshot existente com dois zeros que o construtor já repõe sozinho.
