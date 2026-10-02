@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { CharacterRuntime, Rng, Session, totalXpForLevel } from '@draconya/sim';
-import type { Point, Ruleset } from '@draconya/sim';
+import type { CarriedItem, Point, Ruleset } from '@draconya/sim';
 import { compileItem, itemSchema } from '@draconya/content';
 import { afterAll, describe, expect, it } from 'vitest';
-import { accounts, characters, ledger } from '../db/schema.js';
+import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore } from '../receipts.js';
 import type { SessionReceipt } from '../receipts.js';
@@ -60,10 +60,13 @@ const WORLD: Ruleset = {
   },
 };
 
-const item = (id: string, value: number, appearanceId: number) => ({
-  ...compileItem(itemSchema.parse({ kind: 'other', weight: 1, id, name: id, value })), appearanceId,
+const item = (id: string, value: number, appearanceId: number, stackable = false) => ({
+  ...compileItem(itemSchema.parse({ kind: 'other', weight: 1, id, name: id, value, ...(stackable ? { stackable } : {}) })),
+  appearanceId,
 });
-const itemCatalog = new Map([item('gem', 30, 3), item('stone', 20, 4)].map((entry) => [entry.id, entry]));
+const itemCatalog = new Map(
+  [item('gem', 30, 3), item('stone', 20, 4), item('cheese', 5, 5, true)].map((entry) => [entry.id, entry]),
+);
 
 async function seedCharacter(database: NonNullable<typeof db>, level = 8): Promise<{ characterId: string; accountId: string }> {
   const accountId = randomUUID();
@@ -80,6 +83,8 @@ async function seedCharacter(database: NonNullable<typeof db>, level = 8): Promi
 
 /** Um mundo hospedado com a loja de extratos no Redis de verdade, e os heróis que o teste pedir. */
 function hostedWorld(options: Partial<SessionHostOptions> = {}) {
+  /** O que cada personagem traz do ticket na mochila: o que um login anterior deixou no banco. */
+  const carrying = new Map<string, readonly CarriedItem[]>();
   const session = new Session({
     id: `world-${randomUUID()}`, contentVersion: content.version, ruleset: WORLD, rng: Rng.fromSeed('w'), createdAtMs: 0,
   });
@@ -92,11 +97,13 @@ function hostedWorld(options: Partial<SessionHostOptions> = {}) {
         id: characterId, position: { x: 94, y: 88, z: 7 }, health: 100, maxHealth: 100, mana: 20, maxMana: 20,
         level: 8, xp: totalXpForLevel(8, content.progression), gold: 0, goldDelta: 0, alive: true, cooldowns: {},
         townId: 'thais',
+        ...(carrying.has(characterId) ? { inventory: { backpack: [...(carrying.get(characterId) ?? [])], equipped: {} } } : {}),
       }));
       return session;
     },
   });
-  const enter = async (ids: { characterId: string; accountId: string }) => {
+  const enter = async (ids: { characterId: string; accountId: string }, brought: readonly CarriedItem[] = []) => {
+    if (brought.length > 0) carrying.set(ids.characterId, brought);
     await host.prepare(ids.characterId, { level: 8, xp: 0, townId: 'thais', durableVersion: 0 }, ids.accountId);
     const viewer = host.attach(new FakeSocket(), ids.characterId);
     host.flush();
@@ -111,11 +118,18 @@ const lootGold = (session: Session, hero: CharacterRuntime, amount: number) => {
   hero.goldDelta += amount;
   session.credit(hero.id, 'goldGained', amount);
 };
-const give = (hero: CharacterRuntime, instanceId: string, itemId: 'gem' | 'stone') => {
+const give = (hero: CharacterRuntime, instanceId: string, itemId: 'gem' | 'stone' | 'cheese', quantity = 1) => {
   const added = hero.inventory.add(
-    { instanceId, itemId, quantity: 1 }, itemCatalog, hero, { backpackSlots: 0, satchelSlots: 0, row: 1 },
+    { instanceId, itemId, quantity }, itemCatalog, hero, { backpackSlots: 0, satchelSlots: 0, row: 1 },
   );
   expect(added.ok).toBe(true);
+};
+/** A quantidade de cada instância do personagem no banco — a linha de `item_instance`, não o ledger. */
+const stacksOf = async (database: NonNullable<typeof db>, characterId: string) => {
+  const rows = await database.database.db
+    .select({ id: itemInstances.id, quantity: itemInstances.quantity })
+    .from(itemInstances).where(eq(itemInstances.ownerCharacterId, characterId));
+  return new Map(rows.map((row) => [row.id, row.quantity]));
 };
 
 const rowOf = async (database: NonNullable<typeof db>, characterId: string) => {
@@ -290,6 +304,78 @@ describe.runIf(ready)('o checkpoint do mundo chega ao ledger exatamente uma vez 
     expect(await sweep(database, real, ids.characterId)).toEqual({ written: 1, failed: 0 });
     expect((await ledgerOf(database, ids.characterId)).map((row) => row.delta)).toEqual([100]);
     expect(await rowOf(database, ids.characterId)).toMatchObject({ gold: 100 });
+  });
+
+  it('a pilha que nasceu na sessão guarda a quantidade de AGORA: pegar, checkpoint, pegar de novo, comer, sair', async () => {
+    // O `acquired` é cumulativo e o ledger não toca a linha que já existe: o caso que o prefixo da sessão
+    // cria — todo item que o personagem pega no mundo leva o mesmo prefixo, e a pilha mantém o id ao
+    // empilhar. Sem `quantities`, o banco ficaria com 1 e o personagem perderia 2 queijos no login.
+    const database = db as NonNullable<typeof db>;
+    const ids = await seedCharacter(database);
+    const world = hostedWorld();
+    const { hero } = await world.enter(ids);
+    const stack = `${world.session.id}:p1:0`;
+
+    give(hero, stack, 'cheese', 1);
+    await world.host.checkpointWorlds();
+    give(hero, stack, 'cheese', 2); // empilha: a mesma instância, agora com 3
+    await world.host.checkpointWorlds();
+    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 2, failed: 0 });
+    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 3]]));
+
+    hero.inventory.consumeOne(stack); // comeu uma — o `sim` não reporta isto
+    await world.host.release(ids.characterId, 1000, 'logout');
+    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 1, failed: 0 });
+
+    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 2]]));
+  });
+
+  it('comer a última unidade apaga a linha: o item não volta no login seguinte', async () => {
+    const database = db as NonNullable<typeof db>;
+    const ids = await seedCharacter(database);
+    const world = hostedWorld();
+    const { hero } = await world.enter(ids);
+    const stack = `${world.session.id}:p1:0`;
+
+    give(hero, stack, 'cheese', 1);
+    await world.host.checkpointWorlds();
+    await sweep(database, world.receipts, ids.characterId);
+    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[stack, 1]]));
+
+    hero.inventory.consumeOne(stack);
+    await world.host.checkpointWorlds(); // o checkpoint, e não só o logout, leva a remoção
+    await sweep(database, world.receipts, ids.characterId);
+    expect(await stacksOf(database, ids.characterId)).toEqual(new Map());
+
+    // E o `acquired` cumulativo que ainda vem na saída não a ressuscita.
+    await world.host.release(ids.characterId, 1000, 'logout');
+    await sweep(database, world.receipts, ids.characterId);
+    expect(await stacksOf(database, ids.characterId)).toEqual(new Map());
+  });
+
+  it('a pilha de um login anterior também: o que se come do mundo desce no banco, e a última some', async () => {
+    // O prefixo da sessão só alcança o que ELA criou; o queijo que veio da hunt de ontem tem outro id e
+    // não está no `acquired` — e é o mais comum de se comer.
+    const database = db as NonNullable<typeof db>;
+    const ids = await seedCharacter(database);
+    const yesterday = `hunt-ontem:${randomUUID()}:0`;
+    const last = `hunt-ontem:${randomUUID()}:1`;
+    await database.database.db.insert(itemInstances).values([
+      { id: yesterday, itemId: 'cheese', ownerCharacterId: ids.characterId, origin: 'loot', quantity: 5 },
+      { id: last, itemId: 'cheese', ownerCharacterId: ids.characterId, origin: 'loot', quantity: 1 },
+    ]);
+    const world = hostedWorld();
+    const { hero } = await world.enter(ids, [
+      { instanceId: yesterday, itemId: 'cheese', quantity: 5 }, { instanceId: last, itemId: 'cheese', quantity: 1 },
+    ]);
+
+    hero.inventory.consumeOne(yesterday);
+    hero.inventory.consumeOne(yesterday);
+    hero.inventory.consumeOne(last);
+    await world.host.release(ids.characterId, 1000, 'logout');
+    expect(await sweep(database, world.receipts, ids.characterId)).toEqual({ written: 1, failed: 0 });
+
+    expect(await stacksOf(database, ids.characterId)).toEqual(new Map([[yesterday, 3]]));
   });
 
   it('o personagem parado na PZ não escreve nada: nem Redis, nem ledger', async () => {

@@ -129,7 +129,9 @@ Um personagem está **sujo** se mudou algo que o banco ainda não tem:
   que só envelhece não suja, uma que entra ou sai sim;
 - **rendeu algo** — qualquer agregado da sessão além de `durationMs` (XP, gold, abate, item, morte,
   suprimento, dano, cura), ou uma instância vendida e ainda não gravada;
-- **mexeu em estado durável por uma intenção** (`dirty`): equipar, comprar, escolher, vender.
+- **mexeu em estado durável por uma intenção** (`dirty`): equipar, comprar, escolher, vender;
+- **mudou o que carrega** — a quantidade de uma pilha ou uma instância que entrou ou saiu do inventário
+  (comer na PZ, sem render nada, também conta).
 
 **Personagem parado na PZ, sem render nada, não gera linha** — a linha dele seria o estado que o banco
 já tem. A base é o estado com que ele chegou (`#markArrival`: o do ticket, ou o de uma sessão que acabou
@@ -153,6 +155,32 @@ checkpoint acrescenta:
 - **`reason: 'checkpoint'`** nas linhas periódicas (o `EndReason` do `sim` não tem como dizer "ninguém
   saiu"). Vira o `type` `session-checkpoint` da linha de ledger; a saída leva o motivo dela
   (`manual-exit`, `drain`, `death`).
+
+### O inventário: `acquired` cumulativo, `quantities` e o que saiu
+
+O `acquired` de cada linha é **cumulativo**: a sessão do mundo nunca termina, então todo item que o
+personagem pega nela leva o prefixo dela e entra na linha de todo checkpoint, e o ledger o insere sem tocar
+a linha que já existe (`ON CONFLICT DO NOTHING`). Isso torna a *existência* da linha idempotente, mas não a
+*quantidade* — a pilha que o loot engordou (`Inventory.#place` junta na instância existente) ou que o
+jogador comeu ficaria com a quantidade do primeiro checkpoint em que apareceu, e a que acabou ficaria de pé
+e voltaria no login. A linha do mundo leva, além do `acquired`:
+
+- **`quantities`** — `instanceId → quantidade` de **toda** instância carregada agora (mochila, bolsa e
+  corpo, a de login anterior inclusive). Estado absoluto **inteiro**, e não delta: o ledger só escreve
+  absoluto de extrato mais novo que a coluna e descarta o velho por completo, e um delta se perderia com
+  ele. `jobs/ledger.ts` o aplica em `applyQuantities` (escopada por dono, só a instância listada, só
+  inteiro de 1 até o da coluna), atrás da guarda `absolute` como o layout.
+- **`removedInstances` ampliado** — o que o `sim` reportou (venda, descarte, perda na morte) **mais toda
+  instância que estava no inventário no último extrato e já não está** (`inventoryDeltaOf`). Comer a última
+  unidade (`Inventory.consumeOne`), o anel que venceu (`destroy`) e a carga gasta não passam por
+  `removedInstances` no `sim`, e o hospedeiro não precisa conhecer cada caminho: a diferença entre dois
+  inventários os pega todos. A base é a `CheckpointMark.items` — o inventário com que o personagem chegou
+  ou o do último extrato montado — e só entra o que o **próprio jogo carregou**: uma linha que o banco
+  tenha e a sessão nunca viu não é apagada.
+
+Só o mundo leva os dois: a hunt e a Cidade emitem o extrato de sempre, byte a byte. (Comer de uma pilha
+persistida dentro de uma hunt continua sem refletir no banco até o fim dela — defeito anterior ao mundo e
+fora desta issue.)
 
 ### Como chega ao Redis
 

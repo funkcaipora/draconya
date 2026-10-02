@@ -304,6 +304,25 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('removedInstances');
   });
 
+  it('carries the quantity of every carried instance through Redis and back, dropping what the column rejects (#837)', async () => {
+    // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: sem a linha em `parseReceipt` a pilha do mundo
+    // volta a ficar com a quantidade do primeiro checkpoint, sem erro nenhum. E o `ledger` grava o valor
+    // direto na coluna `integer`: zero, fração, texto e o que estoura a coluna são dado torto e somem.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    await store.save(receiptOf(randomUUID(), characterId, {
+      quantities: { 'w:p1:0': 3, 'w:p1:1': 1, zero: 0, half: 1.5, text: '4', huge: 2_147_483_648 } as never,
+    }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 3, quantities: [1, 2] as never }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.quantities).toEqual({ 'w:p1:0': 3, 'w:p1:1': 1 });
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('quantities');
+    expect(found.find((receipt) => receipt.seq === 3)).not.toHaveProperty('quantities');
+  });
+
   it('carries the soul points through Redis and back, and a receipt without one stays without (#593)', async () => {
     // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: alma gravada tem de voltar inteira,
     // e o extrato sem ela não pode ganhar a chave — diferente do Bestiário, o ledger NÃO funde

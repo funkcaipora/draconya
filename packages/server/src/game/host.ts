@@ -59,7 +59,8 @@ import {
   checkpointsProgress, creditsAggregates, keepsSnapshot, leavesOnExit, offersCityServices, usesAreaOfInterest,
 } from './ruleset-traits.js';
 import {
-  CheckpointState, WORLD_CHECKPOINT_MS, hasActivity, markOf, sameMark, worldPositionOf,
+  CheckpointState, WORLD_CHECKPOINT_MS, carriedQuantities, hasActivity, inventoryDeltaOf, markOf, sameMark,
+  worldPositionOf,
 } from './world-checkpoint.js';
 import type { PendingLine } from './world-checkpoint.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
@@ -5477,6 +5478,17 @@ export class SessionHost {
     // e "resposta perdida" precisa repetir exatamente o que já pode ter sido gravado (#823).
     const claim = `${characterId}|${receipt.sessionId}|${receipt.seq}`;
     const durableVersion = this.#claimDurableVersion(characterId, claim);
+    // O que o inventário do dono deve ao banco além do `acquired` (#837): só o mundo, que emite o mesmo
+    // `acquired` cumulativo a cada minuto. A hunt e a Cidade seguem como antes, byte a byte.
+    const inventory = owner === undefined || hosted.checkpoint === null
+      ? undefined
+      : inventoryDeltaOf(
+        // A marca é a do ÚLTIMO extrato: quem chama só a troca DEPOIS de montar a linha.
+        hosted.checkpoint.marks.get(characterId)?.items,
+        carriedQuantities(owner.inventory.getState()),
+        receipt.removedInstances,
+      );
+    const removedInstances = inventory?.removed ?? receipt.removedInstances;
     return {
       claim,
       owner,
@@ -5491,7 +5503,11 @@ export class SessionHost {
         notableEvents: receipt.notableEvents,
         // As instâncias vendidas/descartadas nesta hunt (#724, ADR 0048 d.8): o `jobs` as apaga
         // na MESMA transação da linha de ledger. Drenado por `#receiptFor` (invariante 9/10).
-        ...(receipt.removedInstances.length === 0 ? {} : { removedInstances: receipt.removedInstances }),
+        //
+        // No mundo leva também o que SAIU do inventário sem o `sim` o reportar — a comida que acabou, o
+        // anel que venceu — (`inventoryDeltaOf`): o `acquired` abaixo é cumulativo, e sem isto a linha
+        // dessa instância ficaria no banco e o item voltaria no próximo login.
+        ...(removedInstances.length === 0 ? {} : { removedInstances }),
         ...(owner?.staminaMs === undefined || owner.staminaMs === null
           ? {}
           : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
@@ -5577,6 +5593,10 @@ export class SessionHost {
         // (`chooseVocation`, `#grantKitPiece`, `#settle`, em `sim`) usam `forceAdd` e o item
         // sempre entra na mochila — não sobra nada para carregar aqui.
         ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
+        // A quantidade de CADA instância carregada, só no mundo (#837): o `acquired` acima é cumulativo e o
+        // ledger não toca na linha que já existe, então a pilha que cresceu ou diminuiu depois do primeiro
+        // checkpoint em que apareceu só chega ao banco por aqui. ABSOLUTO e inteiro, como o `layout`.
+        ...(inventory === undefined ? {} : { quantities: inventory.quantities }),
         // O mundo e os vitais do dono (#836, OW-15, ADR 0060 d.10.f), SÓ com `OPEN_WORLD`: a âncora, a
         // cidade, a vida, a mana e as condições que faltavam. ABSOLUTOS, como o resto do estado acima.
         ...(owner === undefined ? {} : this.#worldStateOf(owner)),
@@ -5702,13 +5722,16 @@ export class SessionHost {
     const lines = state.unsaved;
     state.unsaved = [];
     for (const { characterId, receipt, departed } of departures) {
-      state.marks.delete(characterId);
       const accountId = this.#accountIdByCharacter.get(characterId);
-      if (accountId === undefined) continue;
-      // O extrato de saída leva o estado absoluto INTEIRO: não sobra marca de `dirty` para um extrato
-      // de estado que ninguém grava.
-      hosted.dirty.delete(characterId);
-      lines.push(this.#receiptLine(characterId, hosted, receipt, accountId, departed));
+      if (accountId !== undefined) {
+        // O extrato de saída leva o estado absoluto INTEIRO: não sobra marca de `dirty` para um extrato
+        // de estado que ninguém grava.
+        hosted.dirty.delete(characterId);
+        lines.push(this.#receiptLine(characterId, hosted, receipt, accountId, departed));
+      }
+      // A marca sai DEPOIS da linha: o que o personagem carregava no último extrato é o que a linha
+      // compara com o que ele carrega agora (`#receiptLine`).
+      state.marks.delete(characterId);
     }
     if (!everyone) return lines;
     const ruleset = hosted.session.ruleset;
@@ -5725,8 +5748,9 @@ export class SessionHost {
       const receipt = hosted.session.checkpoint(owner.id, 'manual-exit');
       if (receipt === null) continue;
       hosted.dirty.delete(owner.id);
-      state.marks.set(owner.id, markOf(owner, position));
       lines.push(this.#receiptLine(owner.id, hosted, receipt, accountId, owner, 'checkpoint'));
+      // A marca nova DEPOIS da linha, que lê a antiga como o inventário do último extrato.
+      state.marks.set(owner.id, markOf(owner, position));
     }
     return lines;
   }

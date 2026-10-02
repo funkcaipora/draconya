@@ -385,7 +385,7 @@ ticket (`InitialCharacter.durableVersion = max(characters.durable_version, maior
 pendente)`, lido pelo `api` DEPOIS de liquidar) e sobe a cada extrato gravado, de qualquer sessão
 do personagem neste nó — a `seq` é por sessão e recomeça. O `jobs` (`writeReceipts`) agrupa os
 extratos por personagem e liquida em ordem de versão; todo campo ABSOLUTO (ammo, alma, estoques,
-comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, storages,
+comida, charms, familiar, treino, bênçãos, postura, equipamento, layout, overlays, quantidades, storages,
 stamina, skills, e o mundo e os vitais da OW-15) só é escrito quando `receipt.durableVersion >
 characters.durable_version`, e a coluna sobe na MESMA transação. Os deltas (XP, gold, `acquired`, `removedInstances`) e o que é
 monotônico por natureza (Bestiário e Bosstiary pelo máximo, magias aprendidas pela união, vocação
@@ -977,7 +977,8 @@ Armadilhas, todas com teste que as mata (`world-checkpoint.test.ts`, mutação c
 
 - **"Sujo" é o personagem e a sessão, nunca um visualizador** (invariante 3). `#isDirty`: `dirty` (intenção
   durável), sem marca, instância vendida, qualquer agregado além de `durationMs` (`hasActivity`), ou a marca
-  (`CheckpointMark`: posição absoluta, vida, mana, `alive`, CHAVES das condições) difere da gravada. Quem
+  (`CheckpointMark`: posição absoluta, vida, mana, `alive`, CHAVES das condições, e o que ele carrega —
+  `instanceId → quantidade`) difere da gravada. Quem
   gravar `#presentMoves`/`viewers` aqui quebra o mundo desanexado. `durationMs` corre para todo presente e
   **não** suja — um parado na PZ teria o agregado "não zero" a partir do primeiro segundo. As condições
   entram pela chave, não pelo prazo (o prazo encolhe sempre). **O `goldDelta` não é sinal**: ele só é
@@ -1015,6 +1016,19 @@ Armadilhas, todas com teste que as mata (`world-checkpoint.test.ts`, mutação c
 - **Cada linha leva o `acquired` inteiro da sessão**, não só o que caiu desde o último lote: a inserção em
   `item_instance` é idempotente (`onConflictDoNothing`), então repetir é correto — mas o tamanho do comando
   cresce com a mochila, e é um dos números que o `bench:world` (OW-35) mede.
+- **Idempotente na EXISTÊNCIA da linha, não na QUANTIDADE** (revisão da #915). A pilha que o loot engorda
+  mantém o `instanceId` (`Inventory.#place`), e `acquired` + `DO NOTHING` congelaria a quantidade do primeiro
+  checkpoint em que ela apareceu. Por isso a linha do mundo leva também **`quantities`** — `instanceId →
+  quantidade` de TODA instância carregada, absoluta e INTEIRA (nunca delta: a guarda de versão do ledger
+  descarta o extrato velho por completo, e um delta se perderia com ele), aplicada por `applyQuantities`
+  atrás de `absolute` — e um `removedInstances` AMPLIADO: o que o `sim` reportou mais o que estava no
+  inventário do último extrato e já não está (`inventoryDeltaOf` contra `CheckpointMark.items`). Comer
+  (`Inventory.consumeOne`) e o anel que vence (`destroy`) NÃO passam por `removedInstances` no `sim`; a
+  diferença entre dois inventários pega todos sem o hospedeiro conhecer cada caminho, e só apaga o que o
+  PRÓPRIO jogo carregou (nunca uma linha que o banco tenha e a sessão não viu). A marca é lida por
+  `#receiptLine` e só é TROCADA depois dele (`#buildCheckpoint`) — inverter a ordem compara o inventário
+  contra ele mesmo. Só o mundo (`hosted.checkpoint !== null`) os leva: o extrato da hunt e da Cidade é
+  byte a byte o de antes.
 
 Teste: `receipts.test.ts` (o `MULTI`, a queda antes do `EXEC`, no Redis de verdade),
 `game/world-checkpoint.test.ts` (o mecanismo, ruleset de mentira), `game/world-checkpoint-real.test.ts` (a

@@ -15,7 +15,7 @@
 // (invariante 3): "sujo" olha o personagem e os agregados da sessão, nunca `#presentMoves` — que sem
 // visualizador nem roda.
 
-import type { Aggregates, CharacterRuntime, Point } from '@draconya/sim';
+import type { Aggregates, CharacterRuntime, InventoryState, Point } from '@draconya/sim';
 import type { SessionReceipt } from '../receipts.js';
 
 /**
@@ -41,9 +41,59 @@ export function worldPositionOf(ruleset: object, character: CharacterRuntime): P
 }
 
 /**
+ * O que o personagem CARREGA, `instanceId → quantidade`: mochila, bolsa e o corpo (o equipado conta —
+ * é uma instância e tem linha de `item_instance` como as outras). É o que o extrato do mundo leva em
+ * `quantities` e o que o checkpoint compara para saber o que SAIU do inventário.
+ */
+export function carriedQuantities(inventory: InventoryState): Map<string, number> {
+  const carried = new Map<string, number>();
+  for (const item of inventory.backpack) if (item !== null) carried.set(item.instanceId, item.quantity);
+  for (const item of inventory.satchel ?? []) if (item !== null) carried.set(item.instanceId, item.quantity);
+  for (const item of Object.values(inventory.equipped)) carried.set(item.instanceId, item.quantity);
+  return carried;
+}
+
+/**
+ * O que o inventário do dono deve ao banco, além do que o `sim` já contou em `removedInstances` (#837).
+ *
+ * O `acquired` do extrato é CUMULATIVO — a sessão do mundo nunca termina, e todo item que o personagem
+ * pega nela leva o prefixo dela —, e o ledger o insere sem tocar na linha que já existe. Sozinho ele
+ * congela a quantidade de uma pilha no primeiro checkpoint em que ela apareceu, e deixa de pé a linha
+ * da que acabou. Estes dois campos fecham a conta:
+ *
+ * - `quantities`: a quantidade de TODA instância carregada AGORA — estado absoluto INTEIRO, e não
+ *   delta, porque o ledger só escreve absoluto de extrato mais novo e descarta o velho por completo
+ *   (premissa da guarda de versão, `jobs/ledger.ts`): um delta se perderia com ele;
+ * - `removed`: o que o `sim` já reportou MAIS toda instância que estava no inventário no último extrato
+ *   (`baseline`) e já não está — a comida que acabou, o anel que venceu, a carga gasta. Nenhum desses
+ *   caminhos passa por `removedInstances` (`Inventory.consumeOne`, `destroy`), e o host não precisa
+ *   saber quais são: a diferença entre dois inventários os pega todos. Só entra o que o PRÓPRIO jogo
+ *   carregou, nunca uma linha que o banco tenha e a sessão não conheça.
+ */
+export interface InventoryDelta {
+  readonly quantities: Record<string, number>;
+  readonly removed: string[];
+}
+
+/**
+ * `baseline` é o inventário do último extrato (ou da chegada); `undefined` é "não sei" — o personagem
+ * sem marca —, e então só o que o `sim` reportou é removido: apagar sem saber o que o banco tem seria
+ * adivinhar. `reported` é o `removedInstances` que o `sim` drenou.
+ */
+export function inventoryDeltaOf(
+  baseline: ReadonlyMap<string, number> | undefined, current: ReadonlyMap<string, number>,
+  reported: readonly string[],
+): InventoryDelta {
+  const removed = new Set(reported);
+  if (baseline !== undefined) for (const instanceId of baseline.keys()) if (!current.has(instanceId)) removed.add(instanceId);
+  return { quantities: Object.fromEntries(current), removed: [...removed] };
+}
+
+/**
  * O estado de um personagem que o ÚLTIMO lote gravou, no que o checkpoint decide por comparação:
- * onde ele estava, a vida, a mana e QUAIS condições tinha. É o que permite dizer "este personagem não
- * mexeu em nada" sem reserializar o extrato inteiro de duzentos personagens a cada minuto.
+ * onde ele estava, a vida, a mana, QUAIS condições tinha e o que carregava. É o que permite dizer
+ * "este personagem não mexeu em nada" sem reserializar o extrato inteiro de duzentos personagens a
+ * cada minuto.
  *
  * A condição entra pela CHAVE, e não pelo prazo restante: o prazo encolhe a cada segundo, e compará-lo
  * deixaria todo personagem com uma haste ativa sujo para sempre. A que entra ou sai muda a assinatura;
@@ -59,6 +109,12 @@ export interface CheckpointMark {
   readonly alive: boolean;
   /** As chaves das condições ativas, em ordem. */
   readonly conditions: string;
+  /**
+   * O que ele carregava, `instanceId → quantidade` (`carriedQuantities`). Mudar a quantidade de uma
+   * pilha — comer, empilhar — suja o personagem, e a diferença contra o próximo inventário é o que
+   * sobrou de `removedInstances` (`inventoryDeltaOf`).
+   */
+  readonly items: ReadonlyMap<string, number>;
 }
 
 /** O estado de `character` como o checkpoint o compara. `position` é a de agora (`worldPositionOf`). */
@@ -69,13 +125,18 @@ export function markOf(character: CharacterRuntime, position: Point | undefined)
     mana: character.mana,
     alive: character.alive,
     conditions: character.conditions.getState().map((condition) => condition.key).sort().join('|'),
+    items: carriedQuantities(character.inventory.getState()),
   };
 }
 
 /** Os dois estados são o mesmo, no que o checkpoint compara? */
 export function sameMark(a: CheckpointMark, b: CheckpointMark): boolean {
-  return a.position === b.position && a.health === b.health && a.mana === b.mana
-    && a.alive === b.alive && a.conditions === b.conditions;
+  if (a.position !== b.position || a.health !== b.health || a.mana !== b.mana
+    || a.alive !== b.alive || a.conditions !== b.conditions || a.items.size !== b.items.size) {
+    return false;
+  }
+  for (const [instanceId, quantity] of a.items) if (b.items.get(instanceId) !== quantity) return false;
+  return true;
 }
 
 /**

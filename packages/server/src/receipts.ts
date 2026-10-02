@@ -278,6 +278,18 @@ export interface SessionReceipt extends WorldState {
    * ledger. Ausente/vazio é "nada vendido nem descartado" — a maioria dos extratos.
    */
   readonly removedInstances?: readonly string[];
+  /**
+   * A quantidade de TODA instância que o personagem carrega agora — mochila, bolsa e corpo —,
+   * `instanceId → quantidade` (#837, OW-16). Só o checkpoint do mundo a leva. ABSOLUTO e INTEIRO,
+   * como `layout`: o `jobs` só o escreve quando o extrato é mais novo que o que a coluna já viu
+   * (`applyQuantities`, `jobs/ledger.ts`), e o velho descartado não perde nada.
+   *
+   * Existe porque o `acquired` é cumulativo e o ledger o insere sem tocar na linha que já existe: a
+   * pilha que cresceu ou diminuiu DEPOIS do primeiro checkpoint em que apareceu ficaria com a
+   * quantidade desse primeiro. Instância que o banco tem e o mapa não lista não é tocada — a que
+   * acabou sai por `removedInstances`.
+   */
+  readonly quantities?: Readonly<Record<string, number>>;
 }
 
 /** Um lugar de container, como o extrato e o banco o guardam (#160). */
@@ -559,6 +571,20 @@ async function execResults(pipeline: ChainableCommander): Promise<unknown[]> {
   });
 }
 
+/** O maior que a coluna `item_instance.quantity` (`integer`) guarda. */
+const MAX_QUANTITY = 2_147_483_647;
+
+/** As entradas de `quantities` que o banco aceita: inteiro de 1 até o da coluna. O resto é dado torto e some. */
+function readQuantities(raw: Readonly<Record<string, unknown>>): Record<string, number> {
+  const quantities: Record<string, number> = {};
+  for (const [instanceId, quantity] of Object.entries(raw)) {
+    if (typeof quantity === 'number' && Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= MAX_QUANTITY) {
+      quantities[instanceId] = quantity;
+    }
+  }
+  return quantities;
+}
+
 function parseReceipt(raw: string): SessionReceipt | null {
   let parsed: unknown;
   try {
@@ -687,6 +713,13 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // `item_instance` correspondente nunca seria apagado, e ninguém veria por quê.
     ...(Array.isArray(value['removedInstances'])
       ? { removedInstances: value['removedInstances'] as string[] }
+      : {}),
+    // A quantidade de cada instância carregada (#837): lista de PERMISSÃO, pela razão das skills —
+    // sem esta linha o campo some no caminho de volta e a pilha do mundo volta a ficar com a
+    // quantidade do primeiro checkpoint, sem erro nenhum. Só o que o banco aceita (inteiro de 1 até o
+    // da coluna) sobrevive: o ledger o grava direto na coluna, e o resto é dado torto.
+    ...(typeof value['quantities'] === 'object' && value['quantities'] !== null && !Array.isArray(value['quantities'])
+      ? { quantities: readQuantities(value['quantities'] as Record<string, unknown>) }
       : {}),
     // O mundo e os vitais (#836, OW-15): lista de PERMISSÃO, pela razão das skills — e conferidos
     // campo a campo pela MESMA leitura que o ticket usa, porque o ledger os grava direto nas colunas

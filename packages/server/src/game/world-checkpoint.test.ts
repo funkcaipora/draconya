@@ -1,5 +1,5 @@
 import { CharacterRuntime, Rng, Session } from '@draconya/sim';
-import type { Aggregates, ConditionState, Point, Ruleset } from '@draconya/sim';
+import type { Aggregates, CarriedItem, ConditionState, Point, Ruleset } from '@draconya/sim';
 import { compileItem, itemSchema } from '@draconya/content';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../log.js';
@@ -47,7 +47,15 @@ const gem = {
   ...compileItem(itemSchema.parse({ kind: 'other', weight: 1, id: 'gem', name: 'Gem', value: 30 })),
   appearanceId: 3,
 };
-const itemCatalog = new Map([[gem.id, gem]]);
+/** Empilhável: o que o personagem pega e come, e o que o `acquired` cumulativo do mundo repete. */
+const cheese = {
+  ...compileItem(itemSchema.parse({
+    kind: 'other', weight: 1, id: 'cheese', name: 'Cheese', value: 5, stackable: true,
+  })),
+  appearanceId: 4,
+};
+const itemCatalog = new Map([gem, cheese].map((entry) => [entry.id, entry]));
+const ROOM = { backpackSlots: 0, satchelSlots: 0, row: 1 } as const;
 
 /** Um extrato como o `ReceiptStore` o recebe — só o que estes testes leem. */
 interface SavedReceipt {
@@ -58,6 +66,8 @@ interface SavedReceipt {
   readonly durableVersion?: number;
   readonly aggregates: Aggregates;
   readonly removedInstances?: readonly string[];
+  readonly acquired?: readonly { readonly instanceId: string; readonly itemId: string; readonly quantity: number }[];
+  readonly quantities?: Readonly<Record<string, number>>;
   readonly worldPosition?: Point | null;
   readonly townId?: string;
   readonly health?: number;
@@ -69,6 +79,8 @@ interface CharacterOptions {
   readonly position?: Point;
   readonly health?: number;
   readonly townId?: string;
+  /** O que ele traz do ticket na mochila (o que um login anterior deixou no banco). */
+  readonly carrying?: readonly CarriedItem[];
 }
 
 interface Fixture {
@@ -124,6 +136,7 @@ function build(
         health: chosen.health ?? 100, maxHealth: 100, mana: 10, maxMana: 10,
         level: 8, xp: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
         ...(chosen.townId === undefined ? {} : { townId: chosen.townId }),
+        ...(chosen.carrying === undefined ? {} : { inventory: { backpack: [...chosen.carrying], equipped: {} } }),
       }));
       return session;
     },
@@ -416,6 +429,167 @@ describe('o checkpoint do mundo no hospedeiro (#837, OW-16)', () => {
       expect(lines.map((line) => line.durableVersion)).toEqual([6, 7, 8, 9]);
       expect(new Set(lines.map((line) => `${line.sessionId}:${line.seq}`)).size).toBe(4);
       expect(netGold(lines)).toBe(30);
+    });
+  });
+
+  describe('o inventário: a pilha que muda depois do primeiro checkpoint (#837)', () => {
+    // O `acquired` é CUMULATIVO — a sessão do mundo nunca termina, e todo item que o personagem pega nela
+    // leva o prefixo dela — e o ledger o insere sem tocar na linha que já existe. A quantidade e o que
+    // acabou chegam por `quantities` e `removedInstances`.
+    const stack = 'world-1:p1:0';
+    const pickUp = (hero: CharacterRuntime, quantity: number, instanceId = stack) => {
+      const added = hero.inventory.add({ instanceId, itemId: 'cheese', quantity }, itemCatalog, hero, ROOM);
+      expect(added.ok).toBe(true);
+    };
+
+    it('cada linha leva a quantidade de AGORA de toda instância carregada — a pilha cresce e diminui', async () => {
+      const f = build();
+      const { hero } = await f.enter('p1');
+
+      pickUp(hero, 1);
+      await f.host.checkpointWorlds();
+      pickUp(hero, 2); // o loot empilha: a instância é a mesma, a quantidade é 3
+      await f.host.checkpointWorlds();
+      hero.inventory.consumeOne(stack);
+      await f.host.checkpointWorlds();
+
+      const lines = linesOf(f);
+      expect(lines.map((line) => line.quantities)).toEqual([{ [stack]: 1 }, { [stack]: 3 }, { [stack]: 2 }]);
+      // O `acquired` repete a instância a cada linha — é o que o ledger não pode tomar por quantidade nova.
+      expect(lines.map((line) => line.acquired?.map((item) => item.instanceId))).toEqual([[stack], [stack], [stack]]);
+    });
+
+    it('mexer SÓ no inventário suja: comer na PZ, sem render nada, chega ao banco', async () => {
+      const f = build();
+      const { hero } = await f.enter('p1');
+      pickUp(hero, 3);
+      await f.host.checkpointWorlds();
+      expect(f.batches).toHaveLength(1);
+
+      hero.inventory.consumeOne(stack); // nenhum agregado, nenhuma posição, nenhuma vida
+      await f.host.checkpointWorlds();
+
+      expect(f.batches).toHaveLength(2);
+      expect(linesOf(f)[1]?.quantities).toEqual({ [stack]: 2 });
+
+      // E depois de gravado volta a limpo.
+      await f.host.checkpointWorlds();
+      expect(f.batches).toHaveLength(2);
+    });
+
+    it('a pilha que acabou sai por `removedInstances`, mesmo sem o `sim` a reportar — comer não a reporta', async () => {
+      const f = build();
+      const { hero } = await f.enter('p1');
+      pickUp(hero, 1);
+      await f.host.checkpointWorlds();
+
+      expect(hero.inventory.consumeOne(stack)?.quantity).toBe(1);
+      expect(hero.removedInstances).toEqual([]); // o `sim` não a contou
+      await f.host.checkpointWorlds();
+
+      const line = linesOf(f)[1];
+      expect(line?.removedInstances).toEqual([stack]);
+      expect(line?.quantities).toEqual({});
+      expect(line?.acquired).toEqual([]);
+    });
+
+    it('vale também para a pilha que o personagem trouxe de um login anterior: o prefixo da sessão não decide', async () => {
+      const f = build();
+      // Veio do ticket: o id é de outra sessão, então NÃO está no `acquired` — e está na base de chegada.
+      const { hero } = await f.enter('p1', {
+        carrying: [{ instanceId: 'hunt-7:p1:3', itemId: 'cheese', quantity: 5 }],
+      });
+
+      hero.inventory.consumeOne('hunt-7:p1:3');
+      await f.host.checkpointWorlds();
+      for (let eaten = 0; eaten < 4; eaten += 1) hero.inventory.consumeOne('hunt-7:p1:3');
+      await f.host.checkpointWorlds();
+
+      const lines = linesOf(f);
+      expect(lines[0]?.quantities).toEqual({ 'hunt-7:p1:3': 4 });
+      expect(lines[0]?.acquired).toEqual([]);
+      expect(lines[1]?.removedInstances).toEqual(['hunt-7:p1:3']);
+      expect(lines[1]?.quantities).toEqual({});
+    });
+
+    it('o que o personagem NUNCA carregou não é removido: só entra o que estava no inventário e saiu', async () => {
+      const f = build();
+      const { hero } = await f.enter('p1');
+      hero.position = { x: 11, y: 10, z: 7 };
+
+      await f.host.checkpointWorlds();
+
+      expect(only(only(f.batches)).removedInstances).toBeUndefined();
+    });
+
+    it('o que o `sim` reportou e já saiu do inventário não duplica o id', async () => {
+      const f = build();
+      const { viewer, hero } = await f.enter('p1');
+      pickUp(hero, 1, 'g1');
+      await f.host.checkpointWorlds();
+
+      f.host.handle(viewer, { type: 'discard-item', instanceId: 'g1' });
+      f.host.flush();
+      await f.host.checkpointWorlds();
+
+      expect(linesOf(f)[1]?.removedInstances).toEqual(['g1']);
+    });
+
+    it('a linha de saída leva a diferença do inventário — comer a última antes de sair não ressuscita no login', async () => {
+      const f = build();
+      const { hero } = await f.enter('p1');
+      pickUp(hero, 1);
+      await f.host.checkpointWorlds();
+
+      hero.inventory.consumeOne(stack);
+      await f.host.release('p1', 1000, 'logout');
+
+      const exit = linesOf(f).find((line) => line.reason === 'manual-exit');
+      expect(exit?.removedInstances).toEqual([stack]);
+      expect(exit?.quantities).toEqual({});
+    });
+
+    it('a diferença é contra o último extrato MONTADO: o lote que falhou volta inteiro e o seguinte não a repete', async () => {
+      let down = false;
+      const f = build(WORLD, {
+        store: (batches) => ({
+          save: async () => {},
+          saveBatch: async (batch: readonly SavedReceipt[]) => {
+            if (down) throw new Error('Redis unavailable');
+            batches.push([...batch]);
+          },
+        }),
+      });
+      const { hero } = await f.enter('p1');
+      pickUp(hero, 1);
+      await f.host.checkpointWorlds();
+
+      down = true;
+      hero.inventory.consumeOne(stack);
+      await f.host.checkpointWorlds(); // a linha com o `removedInstances` fica em `unsaved`
+      down = false;
+      pickUp(hero, 4, 'world-1:p1:1');
+      await f.host.checkpointWorlds();
+
+      // A linha atrasada vai na frente, com o que ela leva; a nova só leva o que é dela.
+      const lines = linesOf(f);
+      expect(lines.map((line) => line.removedInstances)).toEqual([undefined, [stack], undefined]);
+      expect(lines[2]?.quantities).toEqual({ 'world-1:p1:1': 4 });
+    });
+
+    it('a hunt não leva `quantities` nem a diferença: o extrato dela é o de antes, byte a byte', async () => {
+      const f = build(HUNT);
+      const { hero } = await f.enter('p1');
+      pickUp(hero, 2);
+      hero.inventory.consumeOne(stack);
+      lootGold(f.session, hero, 10);
+
+      await f.host.release('p1', 1000, 'logout');
+
+      const line = only(f.singles);
+      expect(line.quantities).toBeUndefined();
+      expect(line.removedInstances).toBeUndefined();
+      expect(f.batches).toEqual([]);
     });
   });
 

@@ -2780,3 +2780,122 @@ describe.runIf(ready)('extrato atrasado não desfaz estado mais novo (#823, OW-0
     });
   });
 });
+
+describe.runIf(ready)('a quantidade de cada instância carregada é absoluta (#837, OW-16)', () => {
+  const sweepOf = (database: NonNullable<typeof db>, receipts: ReceiptStore) => ({
+    database: database.database.db, receipts, logger, progression,
+  });
+  const quantitiesOf = async (database: NonNullable<typeof db>, characterId: string) => {
+    const rows = await database.database.db
+      .select({ id: itemInstances.id, quantity: itemInstances.quantity })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+    return new Map(rows.map((row) => [row.id, row.quantity]));
+  };
+  const cheeseOf = (instanceId: string, quantity: number) => ({ instanceId, itemId: 'cheese', quantity });
+
+  it('a pilha que o `acquired` já inseriu ganha a quantidade do extrato seguinte — e perde quando se come', async () => {
+    // O `acquired` do mundo é CUMULATIVO: a mesma instância chega a cada checkpoint, e o `INSERT ... DO
+    // NOTHING` não toca a linha que já existe. Sem `quantities` a pilha ficava com a quantidade do
+    // PRIMEIRO checkpoint. Mutação que mata: tirar `applyQuantities`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const stack = `${sessionId}:p1:0`;
+
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 1, durableVersion: 1, acquired: [cheeseOf(stack, 1)], quantities: { [stack]: 1 },
+    }));
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 2, durableVersion: 2, acquired: [cheeseOf(stack, 3)], quantities: { [stack]: 3 },
+    }));
+    expect(await settleCharacterProgress(characterId, sweepOf(database, receipts))).toEqual({ written: 2, failed: 0 });
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[stack, 3]]));
+
+    // Comeu uma, e o `acquired` cumulativo ainda repete a instância.
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 3, durableVersion: 3, acquired: [cheeseOf(stack, 2)], quantities: { [stack]: 2 },
+    }));
+    await settleCharacterProgress(characterId, sweepOf(database, receipts));
+
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[stack, 2]]));
+  });
+
+  it('a pilha que acabou some pelo `removedInstances`, e o `acquired` repetido atrás dela não a traz de volta', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const stack = `${sessionId}:p1:0`;
+
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 1, durableVersion: 1, acquired: [cheeseOf(stack, 1)], quantities: { [stack]: 1 },
+    }));
+    // A linha seguinte já não carrega a pilha: o `acquired` a omite, e o host a manda por `removedInstances`.
+    await receipts.save(receiptOf(sessionId, characterId, {
+      seq: 2, durableVersion: 2, acquired: [], quantities: {}, removedInstances: [stack],
+    }));
+    await settleCharacterProgress(characterId, sweepOf(database, receipts));
+
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map());
+  });
+
+  it('extrato ATRASADO não devolve a quantidade velha: a guarda de versão vale para o mapa', async () => {
+    // v2 chega antes de v1. O absoluto mais novo (3) já está na linha, e o velho (1) entra só com os
+    // deltas. Mutação que mata: escrever `quantities` fora de `absolute`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const stack = `${sessionId}:p1:0`;
+    await database.database.db.insert(itemInstances).values({
+      id: stack, itemId: 'cheese', ownerCharacterId: characterId, origin: 'loot', quantity: 1,
+    });
+
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 2, durableVersion: 2, quantities: { [stack]: 3 } }));
+    await writePendingReceipts(sweepOf(database, receipts));
+    await receipts.save(receiptOf(sessionId, characterId, { seq: 1, durableVersion: 1, quantities: { [stack]: 1 } }));
+    await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[stack, 3]]));
+  });
+
+  it('só toca a instância DO DONO que o mapa lista — a de outro personagem e a não listada ficam como estão', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const other = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const listed = `${randomUUID()}:p1:0`;
+    const unlisted = `${randomUUID()}:p1:1`;
+    const foreign = `${randomUUID()}:p2:0`;
+    await database.database.db.insert(itemInstances).values([
+      { id: listed, itemId: 'cheese', ownerCharacterId: characterId, origin: 'loot', quantity: 5 },
+      { id: unlisted, itemId: 'cheese', ownerCharacterId: characterId, origin: 'loot', quantity: 7 },
+      { id: foreign, itemId: 'cheese', ownerCharacterId: other, origin: 'loot', quantity: 9 },
+    ]);
+
+    await receipts.save(receiptOf(randomUUID(), characterId, {
+      durableVersion: 1, quantities: { [listed]: 4, [foreign]: 1 },
+    }));
+    await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[listed, 4], [unlisted, 7]]));
+    expect(await quantitiesOf(database, other)).toEqual(new Map([[foreign, 9]]));
+  });
+
+  it('extrato SEM `quantities` (a hunt, um nó anterior) não toca a quantidade', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const stack = `${randomUUID()}:p1:0`;
+    await database.database.db.insert(itemInstances).values({
+      id: stack, itemId: 'cheese', ownerCharacterId: characterId, origin: 'loot', quantity: 5,
+    });
+
+    await receipts.save(receiptOf(randomUUID(), characterId, { durableVersion: 1 }));
+    await writePendingReceipts(sweepOf(database, receipts));
+
+    expect(await quantitiesOf(database, characterId)).toEqual(new Map([[stack, 5]]));
+  });
+});
