@@ -15,8 +15,9 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, FindResult, FollowState, GridPoint, ManualActionResult, MemberLeft,
-  PartyEvent, Point, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType, WorldPoint,
+  Aggregates, CombatEvent, DepartureRequested, EndReason, FindResult, FollowState, GridPoint, LogoutRefused,
+  ManualActionResult, MemberLeft, PartyEvent, Point, PresenceEvent, Receipt, Session, SessionSnapshot,
+  SessionType, WorldPoint,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type {
@@ -29,7 +30,7 @@ import type {
 } from '@draconya/content';
 import {
   blessingCost, buyItem, containerRulesFor, DEFAULT_FIGHT_MODE, hasBlessing, holdStamina, isEmptyFamiliarState,
-  PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
+  NO_WORLD_POSITION, PartyFullError, shareCostsOf, skillFactorFor, splitLootOf, withBlessing,
 } from '@draconya/sim';
 import type {
   AmmoRefusal, BuyRefusal, CarriedItem, CharacterRuntime, CharmAssignRefusal, CharmBestiaryEntry,
@@ -65,6 +66,7 @@ import {
   worldPositionOf,
 } from './world-checkpoint.js';
 import type { PendingLine } from './world-checkpoint.js';
+import { endReasonOf, worldPresenceOf } from './world-presence.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
 /**
@@ -1079,6 +1081,23 @@ export type BotConfigLoadResult =
   | { readonly ok: true; readonly config: BotConfigV2; readonly removed: readonly RemovedBotSlot[] }
   | { readonly ok: false; readonly reason: string };
 
+/**
+ * Como o personagem sai do MUNDO quando o `sim` decidiu a saída (#840, OW-19): o `EndReason` do extrato
+ * que o checkpoint grava, e a posição ABSOLUTA em que a decisão foi tomada — a âncora do próximo login.
+ * Ausente é a posição de agora (`#anchorWorldPosition`).
+ */
+export interface ReleaseDeparture {
+  readonly reason: EndReason;
+  readonly worldPosition?: Point;
+}
+
+/** O que se precisa para tentar de novo uma saída do mundo cujo `release` falhou (#840, OW-19). */
+interface FailedDeparture {
+  readonly sessionId: string;
+  readonly closeReason: string;
+  readonly departure?: ReleaseDeparture;
+}
+
 /** Quem acabou de sair de uma sessão `checkpointed`, com o extrato que o `sim` emitiu (#837, OW-16). */
 interface CheckpointDeparture {
   readonly characterId: string;
@@ -1302,8 +1321,13 @@ export interface PrepareResult {
    * Presente só quando a admissão FOI recusada (#402) — `created` fica `false` junto, e o
    * handshake do WebSocket fecha com o status do motivo. Aditivo de propósito (DT-03): os
    * consumidores antigos continuam lendo `created` como booleano direto.
+   *
+   * `leaving` (#840, OW-19) é o personagem que está saindo do MUNDO — o x-log venceu, ou o
+   * `logout` passou — no instante em que o ticket chegou: a saída vence, o ticket é recusado com um
+   * 503 e a reconexão do cliente pede outro, que já encontra o personagem em repouso.
    */
-  readonly refused?: 'party-full' | 'content-version' | 'session-not-here' | 'world-full' | 'hunt-unavailable';
+  readonly refused?:
+    | 'party-full' | 'content-version' | 'session-not-here' | 'leaving' | 'world-full' | 'hunt-unavailable';
   /**
    * Só com `refused: 'world-full'` (OW-21): o lugar do personagem na fila do mundo (de 1 em diante) e quanto
    * esperar antes de tentar de novo — uma duração, medida agora. O `game` os leva ao cliente na mensagem
@@ -1458,6 +1482,25 @@ export class SessionHost {
    * sessão escreve aqui, e o marcador sai no `finally`, com sucesso ou falha.
    */
   readonly #settling = new Set<string>();
+  /**
+   * Personagens que estão SAINDO do mundo por um `departure-requested` (#840, OW-19): o checkpoint e o
+   * `release` já correm, e a promessa é a dessa saída — quem chega no meio (o `prepare` de uma reconexão)
+   * espera por ela em vez de reanexar a um personagem que está indo embora. O `logout` e a tentativa de
+   * x-log podem cair no mesmo ciclo, e a segunda saída de quem já está saindo não tem o que gravar. Só o
+   * processo dono da sessão escreve aqui, e o marcador sai no `finally`, com sucesso ou falha — e a
+   * promessa nunca rejeita (a falha vira `#failedDepartures`).
+   */
+  readonly #departing = new Map<string, Promise<void>>();
+  /**
+   * Saídas do mundo cujo `release` FALHOU (#840, OW-19): o `sim` já tirou o personagem — o único
+   * `departure-requested` dele já foi emitido — e o Redis recusou o extrato, então o personagem continua
+   * mapeado aqui (diretório e slot de pé, renovados) sem existir no `sim`. Sem ninguém para pedir de novo
+   * — o x-log não tem jogador —, o que fica registrado aqui é o que faz a saída ser TENTADA outra vez:
+   * pelo ciclo de checkpoint (`#retryDepartures`) e pelo `prepare` de quem reconecta. Sai quando o
+   * `release` termina, por qualquer caminho. `sessionId` é a sessão em que o personagem estava: uma
+   * entrada que não bate com o mapa de hoje é de uma saída que outro caminho já cumpriu.
+   */
+  readonly #failedDepartures = new Map<string, FailedDeparture>();
   #lastLagWarningMs = Number.NEGATIVE_INFINITY;
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
@@ -1600,6 +1643,16 @@ export class SessionHost {
     party?: PartyTicket,
     entry?: TicketEntry,
   ): Promise<PrepareResult> {
+    // Quem está SAINDO do mundo não é reanexado nem recriado por um ticket que chegou no meio (#840,
+    // OW-19): o x-log vence 60 s depois de o navegador fechar, justo quando o cliente reconecta sozinho.
+    // A saída vence — o `sim` já decidiu e o checkpoint corre —, e o ticket é recusado com um 503 que o
+    // cliente repete. Esperar a saída acabar não basta para seguir adiante: o `release` devolveu o slot
+    // que este ticket reservara, e a entrada é do `api`, que emite o ticket seguinte.
+    // Só espera quando há o que esperar: o caminho comum segue síncrono até o primeiro `await` do diretório.
+    if (this.#departing.has(characterId) || this.#failedDepartures.has(characterId)) {
+      if (await this.#awaitDeparture(characterId)) return { created: false, refused: 'leaving' };
+    }
+
     // `entry` só vale para quem NÃO tem sessão aqui (OW-21): quem reconecta reencontra a sua — o mundo, a hunt
     // em que estava —, e o pedido de outra coisa é ignorado, porque o personagem está em exatamente uma sessão
     // (invariante 8) e trocar de sessão é transição, com `canLogout`, não handshake.
@@ -1620,6 +1673,14 @@ export class SessionHost {
         });
       } else {
         await this.#register(characterId, existing, accountId);
+        // A saída pode ter começado — ou até terminado — enquanto o diretório respondia: o personagem que
+        // o `existing` descreve já não está aqui, e responder `created: false` mandaria o upgrade para um
+        // `attach` sem sessão (que derrubaria o processo) ou para uma sessão que acabou de ser solta. Só
+        // `undefined` conta como saída: um mapa que passou a apontar para OUTRA sessão é a sucessão (a morte
+        // da hunt, a transição), e o `attach` a encontra — como sempre foi.
+        if (this.#departing.has(characterId) || this.sessionFor(characterId) === undefined) {
+          return { created: false, refused: 'leaving' };
+        }
         return { created: false };
       }
     }
@@ -1649,6 +1710,28 @@ export class SessionHost {
       }
     }
     return { created: true };
+  }
+
+  /**
+   * O personagem está saindo do mundo (#840, OW-19)? Espera a saída que está em voo — e, se a última FALHOU
+   * (`#failedDepartures`), a tenta de novo agora, porque quem reconecta é a oportunidade que o x-log, sem
+   * jogador, não teve. Devolve `true` se havia saída, em qualquer desfecho: o chamador recusa o ticket, e a
+   * reconexão seguinte o encontra já em repouso — ou, se o Redis ainda recusa, outra vez aqui.
+   */
+  async #awaitDeparture(characterId: string): Promise<boolean> {
+    let leaving = this.#departing.get(characterId);
+    if (leaving === undefined) {
+      const failed = this.#failedDepartures.get(characterId);
+      if (failed === undefined) return false;
+      // A mesma régua de `#retryDepartures`: outro caminho já cumpriu aquela saída.
+      if (this.#sessionIdByCharacter.get(characterId) !== failed.sessionId) {
+        this.#failedDepartures.delete(characterId);
+        return false;
+      }
+      leaving = this.#releaseFromWorld(characterId, failed.closeReason, failed.departure);
+    }
+    await leaving;
+    return true;
   }
 
   /**
@@ -1784,6 +1867,13 @@ export class SessionHost {
       hosted = this.#hostedSession(characterId);
     }
     if (hosted === undefined) throw new Error(`session for ${characterId} was not prepared`);
+    // O personagem que sai do mundo não ganha visualizador novo (#840, OW-19): o ticket que passou pelo
+    // `prepare` ANTES de o x-log vencer chega aqui depois — a saída já tirou o personagem do `sim`, e o
+    // visualizador ficaria olhando uma sessão que nunca mais o atualiza. Quem chama (`open` do servidor)
+    // fecha o socket e o cliente reconecta; o que não pode é a exceção escapar do handler.
+    if (this.#departing.has(characterId) || this.#failedDepartures.has(characterId)) {
+      throw new Error(`${characterId} is leaving the world`);
+    }
     const metrics = this.#options.metrics;
     const viewer = new Viewer(socket, characterId, {
       ...this.#options.viewer,
@@ -1794,6 +1884,10 @@ export class SessionHost {
     hosted.viewers.add(viewer);
     hosted.session.attach(viewer.id);
     this.#restingSince.set(characterId, null);
+    // O PRIMEIRO visualizador do personagem devolve o controle ao jogador (#840, OW-19): no mundo ele
+    // cancela o x-log e acorda a automação. A segunda aba não muda nada — ele já tinha ninguém e agora
+    // tem alguém, e só essa troca é presença.
+    if (this.#watchers(hosted, characterId) === 1) this.#restorePresence(hosted, characterId);
 
     viewer.sendNow({
       type: 'welcome',
@@ -1844,12 +1938,19 @@ export class SessionHost {
     const hosted = sessionId === undefined ? undefined : this.#sessions.get(sessionId);
     if (hosted === undefined) return;
 
-    hosted.viewers.delete(viewer);
+    // `false` = o visualizador já tinha saído: o `release` e a transição o tiram do conjunto de propósito
+    // e, ao fechar o socket, o `close` do servidor chama este método de volta. Quem foi SOLTO não é quem
+    // perdeu a conexão, e tratá-lo como tal submeteria `presence-lost` de um personagem que está saindo.
+    const wasWatching = hosted.viewers.delete(viewer);
     hosted.session.detach(viewer.id);
     // Repouso é do PERSONAGEM: a outra aba dele ainda pode estar olhando, e num shard os
     // outros jogadores da praça certamente estão.
     if (this.#watchers(hosted, viewer.characterId) === 0) {
       this.#restingSince.set(viewer.characterId, this.#now());
+      // No mundo o último visualizador que se solta é uma INTENÇÃO de servidor ao `sim` (#840, OW-19,
+      // ADR 0060 d.7), no instante lógico da sessão. O personagem NÃO sai daqui: fica parado e vulnerável,
+      // e é o `sim` quem decide se, e quando, ele sai (60 s depois, por `canLogout`).
+      if (wasWatching) this.#losePresence(hosted, viewer.characterId);
     }
     this.#logger.debug(
       { characterId: viewer.characterId, sessionId, viewers: hosted.viewers.size },
@@ -1872,14 +1973,177 @@ export class SessionHost {
   }
 
   /**
+   * O `logout` do jogador (#840, OW-19, ADR 0060 d.7).
+   *
+   * Na hunt e na Cidade é o de sempre: sair do jogo encerra a sessão e devolve o slot (`#logout`). No
+   * MUNDO o `logout` é uma intenção que o `sim` decide — passa por `canLogout`, a regra de
+   * `Player::canLogout` (`canary/src/creatures/players/player.cpp:6960-6979`) — e resulta em UM de dois
+   * eventos de domínio: `departure-requested`, que o hospedeiro cumpre (`#departFromWorld`), ou
+   * `logout-refused`, que vira a mensagem do protocolo para quem pediu. O hospedeiro não olha o tile
+   * nem a luta: se o personagem pode sair, é do `sim`.
+   *
+   * O evento é drenado AGORA, e não no próximo ciclo, para o jogador ter a resposta na hora — a mesma
+   * razão do `leave-hunt` (`#requestLeaveHunt`).
+   *
+   * **Sem veredicto** — `requestLogout` devolve `null` e não emite nada: o `sim` não conhece o personagem,
+   * ou ele morreu — o `logout` é o `release` de sempre, e não um pedido sem resposta. O caso que importa é
+   * a saída que FALHOU: o `release` já tirou o personagem do `sim` (`Session.leave`) e o Redis recusou o
+   * extrato, o personagem continua mapeado aqui e o `sim` não o conhece mais. Quem repete essa saída é o
+   * hospedeiro (`#failedDepartures`: o ciclo de checkpoint e o `prepare` de quem reconecta) — o extrato que
+   * não pousou vai na frente (`#leaveWithReceipt`) —, e este ramo cobre o `logout` que chega a um
+   * personagem que o `sim` não decide, que sem ele seria engolido em silêncio. Quem já está saindo (o duplo
+   * clique, o x-log em voo, a transição) não pede nada.
+   */
+  #requestLogout(viewer: Viewer): void {
+    const { characterId } = viewer;
+    const hosted = this.#hostedSession(characterId);
+    const presence = hosted === undefined ? undefined : worldPresenceOf(hosted.session.ruleset);
+    if (hosted === undefined || presence === undefined) {
+      void this.#logout(characterId);
+      return;
+    }
+    if (this.#departing.has(characterId) || this.#transitions.has(characterId)) return;
+    if (presence.requestLogout(hosted.session, characterId) === null) {
+      void this.#releaseFromWorld(characterId, 'logout');
+      return;
+    }
+    this.#presentMoves(hosted);
+  }
+
+  /**
+   * O `release` de quem sai do mundo, uma saída por vez (#840, OW-19): marca o personagem em `#departing`
+   * até terminar, e a promessa devolvida é a da saída — nunca rejeita. Falhar deixa o personagem onde
+   * estava — sem visualizador, e já fora do `sim` —, o extrato que não pousou vai na frente do lote
+   * seguinte (OW-16), e a saída fica em `#failedDepartures` para ser tentada de novo: pelo ciclo de
+   * checkpoint, pelo `prepare` de quem reconecta. Um log não basta — o x-log não tem jogador que peça outra
+   * vez, e o slot da conta ficaria preso, renovado a cada ciclo, até o processo reiniciar.
+   */
+  #releaseFromWorld(characterId: string, closeReason: string, departure?: ReleaseDeparture): Promise<void> {
+    const sessionId = this.#sessionIdByCharacter.get(characterId);
+    // O marcador nasce ANTES de o `release` rodar (que começa a correr já na chamada): qualquer coisa que
+    // o `release` provoque de forma síncrona — o `close` do socket, o `detach` — já o encontra.
+    let finish!: () => void;
+    const leaving = new Promise<void>((resolve) => { finish = resolve; });
+    this.#departing.set(characterId, leaving);
+    void this.release(characterId, 1000, closeReason, departure).then(() => {
+      this.#failedDepartures.delete(characterId);
+    }, (error: unknown) => {
+      this.#logger.error(
+        { err: error, characterId, reason: closeReason }, 'Failed to move the character to rest; will retry',
+      );
+      if (sessionId !== undefined) {
+        this.#failedDepartures.set(characterId, {
+          sessionId, closeReason, ...(departure === undefined ? {} : { departure }),
+        });
+      }
+    }).finally(() => {
+      this.#departing.delete(characterId);
+      finish();
+    });
+    return leaving;
+  }
+
+  /**
+   * Tenta de novo as saídas do mundo que falharam (#840, OW-19) — o que o ciclo de checkpoint faz antes
+   * dos lotes, para o extrato que não pousou ir na frente do deles e a saída acabar quando o Redis volta,
+   * sem ninguém pedir. O `release` repetido é seguro: o `sim` já não conhece o personagem (`leave` devolve
+   * `null`), e o que ficou em `unsaved` é gravado antes de o diretório e o slot serem soltos.
+   */
+  async #retryDepartures(): Promise<void> {
+    const retries: Promise<void>[] = [];
+    for (const [characterId, failed] of [...this.#failedDepartures]) {
+      if (this.#departing.has(characterId)) continue;
+      // Outro caminho já soltou este personagem (a drenagem, uma nova sessão): não há o que repetir, e
+      // repetir soltaria a sessão que ele tem hoje.
+      if (this.#sessionIdByCharacter.get(characterId) !== failed.sessionId) {
+        this.#failedDepartures.delete(characterId);
+        continue;
+      }
+      this.#logger.warn({ characterId, sessionId: failed.sessionId }, 'Retrying a departure that failed');
+      retries.push(this.#releaseFromWorld(characterId, failed.closeReason, failed.departure));
+    }
+    await Promise.all(retries);
+  }
+
+  /**
+   * Cumpre o `departure-requested` do mundo (#840, OW-19, ADR 0060 d.7): grava o checkpoint e solta o
+   * personagem para o REPOUSO, com a posição que veio no evento. É a metade de I/O de uma saída que o
+   * `sim` decidiu — o logout que `canLogout` deixou, o x-log aos 60 s, e, quando existirem, a morte e o
+   * idle kick (OW-32, OW-47) —, e vale haja ou não visualizador: o x-log é justamente o caso em que não
+   * há (invariante 3).
+   *
+   * **O checkpoint e o `release` são um passo só.** `release` sai pela sessão `checkpointed` e ANTECIPA o
+   * lote inteiro (`#saveReceipt` → `#saveCheckpointBatch`, OW-16): quem sai leva a linha dele — vida,
+   * mana, condições, o que carrega, a posição — junto do checkpoint de todo outro personagem sujo, num
+   * `MULTI` só. A posição é a DO EVENTO, a do instante em que o `sim` decidiu, e não a de quando este
+   * método roda: entre os dois o personagem sem dono pode ter andado (o medo, um empurrão), e a âncora do
+   * próximo login é onde ele estava quando saiu.
+   *
+   * Idempotente por personagem: o `logout` e a tentativa de x-log podem cair no mesmo ciclo, e a segunda
+   * saída de quem já está saindo não tem o que gravar. Quem está no meio de uma transição também já está
+   * deixando o mundo, e soltá-lo agora soltaria a sessão DE DESTINO, que o `release` resolve pelo
+   * personagem.
+   */
+  #departFromWorld(hosted: HostedSession, event: DepartureRequested): void {
+    const { characterId, reason } = event;
+    if (this.#departing.has(characterId) || this.#transitions.has(characterId)) return;
+    // Só quem ainda está NESTA sessão: o pedido pode ter saído de um mundo que o personagem já deixou
+    // (o x-log que venceu no mesmo ciclo de uma saída, uma transição que terminou).
+    if (this.#sessionIdByCharacter.get(characterId) !== hosted.session.id) return;
+    const noPosition = event.worldPosition.x === NO_WORLD_POSITION.x
+      && event.worldPosition.y === NO_WORLD_POSITION.y
+      && event.worldPosition.z === NO_WORLD_POSITION.z;
+    this.#logger.info(
+      { characterId, sessionId: hosted.session.id, reason }, 'Character leaving the world',
+    );
+    void this.#releaseFromWorld(characterId, reason, {
+      reason: endReasonOf(reason),
+      // `{0, 0, 0}` é o "sem posição" do Canary (um mapa sem `source.region`): quem lê a âncora o trata
+      // como ausente, e o checkpoint cai na posição de agora.
+      ...(noPosition ? {} : { worldPosition: event.worldPosition }),
+    });
+  }
+
+  /**
+   * O `logout` do jogador foi recusado pelo mundo (`logout-refused`, #840): vira a mensagem do protocolo
+   * para QUEM PEDIU — a recusa não é da sessão, e os outros duzentos do mundo não têm o que fazer com
+   * ela. Nada mudou no personagem.
+   */
+  #presentLogoutRefused(hosted: HostedSession, event: LogoutRefused): void {
+    const message = { type: 'logout-refused', reason: event.reason } as const;
+    for (const viewer of hosted.viewers.of(event.characterId)) viewer.send(message);
+  }
+
+  /**
+   * Ninguém mais olha o personagem — ou ele chegou sem ninguém (#840, OW-19, ADR 0060 d.7). No mundo
+   * isto é `presence-lost`, uma INTENÇÃO de servidor entregue ao `sim` no instante lógico da sessão: o
+   * alvo é solto, a automação para e o personagem tenta sair aos 60 s. Em qualquer outra sessão é
+   * nada — a hunt idle sobrevive ao navegador fechado, e a Cidade tem o recolhimento por repouso.
+   */
+  #losePresence(hosted: HostedSession, characterId: string): void {
+    worldPresenceOf(hosted.session.ruleset)?.presenceLost(hosted.session, characterId);
+  }
+
+  /** O inverso de `#losePresence`: há alguém olhando de novo, e o `sim` devolve o controle ao jogador. */
+  #restorePresence(hosted: HostedSession, characterId: string): void {
+    worldPresenceOf(hosted.session.ruleset)?.presenceRestored(hosted.session, characterId);
+  }
+
+  /**
    * Tira a sessão deste nó e devolve o slot da conta. Encerra antes de soltar, para o
    * ruleset ter a chance de creditar o que for dele.
    *
    * Fecha TODOS os visualizadores do personagem, não só quem pediu: sair do jogo é do
    * personagem, não da aba. Deixar a outra aba aberta olhando uma sessão que já não existe
    * seria uma tela que não atualiza mais e não diz por quê.
+   *
+   * `departure` é de quem sai do MUNDO por decisão do `sim` (#840, OW-19): o motivo do extrato e a
+   * posição em que a saída foi decidida, que vira a âncora do próximo login. Sem ele, a saída é
+   * `manual-exit` e a âncora é a posição de agora, como antes.
    */
-  async release(characterId: string, closeCode?: number, closeReason?: string): Promise<void> {
+  async release(
+    characterId: string, closeCode?: number, closeReason?: string, departure?: ReleaseDeparture,
+  ): Promise<void> {
     const hosted = this.#hostedSession(characterId);
     if (hosted === undefined) return;
     const accountId = this.#accountIdByCharacter.get(characterId);
@@ -1892,7 +2156,9 @@ export class SessionHost {
       // na praça não pode levar a praça junto, e nada há a creditar: a Cidade não gera
       // progresso (§37). O que ela gera é ESTADO (#154) — e ele sai antes de o participante
       // sair, porque `leave` o tira da lista. O mundo, que credita, sai por extrato de delta.
-      await this.#departFromSharedSession(characterId, hosted, 'manual-exit');
+      await this.#departFromSharedSession(
+        characterId, hosted, departure?.reason ?? 'manual-exit', departure?.worldPosition,
+      );
       this.#announceDeparture(hosted, characterId);
       // A cópia vazia deixa de ser hospedada. A próxima entrada cria outra, já na versão de
       // conteúdo do momento — ver `CityShard.admit`.
@@ -1911,6 +2177,7 @@ export class SessionHost {
     }
 
     this.#sessionIdByCharacter.delete(characterId);
+    this.#failedDepartures.delete(characterId);
     this.#walkingUntil.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
@@ -1992,7 +2259,10 @@ export class SessionHost {
         // encerrava nada, o slot de personagem ativo não tinha NENHUMA forma de voltar
         // (FUN-52): dois personagens que já tivessem conectado esgotavam o teto até o
         // processo reiniciar, e nem apagar o personagem funcionava.
-        void this.#logout(viewer.characterId);
+        //
+        // No MUNDO não é assim (#840, OW-19): o `logout` é uma INTENÇÃO que passa por `canLogout`, e quem
+        // sai, ou recusa, é o `sim` — ver `#requestLogout`.
+        this.#requestLogout(viewer);
         return;
       case 'walk':
         // INTENÇÃO: direção, nunca posição resolvida (invariante 4). Processada NA CHEGADA,
@@ -3810,6 +4080,10 @@ export class SessionHost {
     if (hosted.viewers.size === 0) {
       for (const event of events) {
         if (event.kind === 'member-left') hosted.departures.push(event);
+        // A saída do MUNDO também não é apresentação (#840, OW-19): é o checkpoint e o repouso, e vale sem
+        // ninguém olhando — o x-log é justamente esse caso. Sem este ramo a saída de quem perdeu a conexão
+        // nunca sairia de um mundo vazio de visualizadores.
+        else if (event.kind === 'departure-requested') this.#departFromWorld(hosted, event);
         // A bolsa é ESTADO, não apresentação (#400): sem ninguém olhando, o último
         // `party-bag-changed` ainda é guardado para o `session-state` de quem reanexar levar
         // as reservas — `getState()` não as carrega.
@@ -3872,12 +4146,14 @@ export class SessionHost {
           hosted.departures.push(event);
           continue;
         case 'departure-requested':
+          // A saída do MUNDO (OW-14, #835, lida aqui desde a OW-19, #840): o `sim` decidiu, e o checkpoint
+          // e o repouso são I/O. É gameplay e vale SEM visualizador — o ramo sem ninguém acima o trata
+          // também —, e fica POR PERSONAGEM: sai quem o `sim` nomeou, e o resto do mundo continua.
+          this.#departFromWorld(hosted, event);
+          continue;
         case 'logout-refused':
-          // A saída do MUNDO (OW-14, #835): só a sessão `world` os emite — o hospedeiro a hospeda desde a
-          // OW-18, atrás de `OPEN_WORLD` —, e ainda não os lê. Quem os lê é a presença
-          // no hospedeiro (OW-19): `departure-requested` é gameplay e vale SEM visualizador — o
-          // x-log é justamente o caso em que não há —, então o ramo sem visualizador acima também
-          // vai ganhar o caso dele; `logout-refused` vira a mensagem do protocolo para quem pediu.
+          // A recusa do `logout` (OW-14): só quem pediu a lê.
+          this.#presentLogoutRefused(hosted, event);
           continue;
         case 'equipment-changed':
           // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
@@ -5299,6 +5575,11 @@ export class SessionHost {
       this.#sendState(successor, viewer);
     }
     this.#restingSince.set(characterId, following.length > 0 ? null : this.#now());
+    // Chegou ao mundo sem ninguém olhando (#840, OW-19): o visualizador que seguia o personagem se soltou
+    // enquanto a transição esperava o extrato, e a queda dele já passou — nenhum `detach` a entregará.
+    // É a corrida que o ADR 0060 d.6c descreve (entre a desconexão e a chegada), e o personagem a
+    // resolve como quem caiu: `presence-lost` na hora da chegada.
+    if (following.length === 0) this.#losePresence(successor, characterId);
 
     // A morte é MARCO de snapshot (FUN-27). Perder a transição por estar entre dois
     // intervalos é o pior caso: o jogador volta vivo, na hunt, e a penalidade aparece do nada
@@ -5389,9 +5670,11 @@ export class SessionHost {
     closeReason?: string,
   ): void {
     for (const viewer of [...hosted.viewers.of(characterId)]) {
-      if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
+      // Sai do conjunto ANTES de o socket fechar: o `close` do servidor chama `detach`, e quem já foi
+      // solto não é um visualizador que perdeu a conexão (`detach`, #840).
       hosted.viewers.delete(viewer);
       hosted.session.detach(viewer.id);
+      if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
     }
   }
 
@@ -5798,6 +6081,11 @@ export class SessionHost {
    * extratos dela ficam em `unsaved` e vão na frente do próximo lote.
    */
   async checkpointWorlds(): Promise<void> {
+    // As saídas que falharam vão ANTES dos lotes (#840, OW-19): o extrato de quem sai que não pousou é o
+    // mais velho, e a saída que acaba aqui já leva o lote da sessão junto. Sem nenhuma — o caso comum —
+    // nada é esperado: o lote é montado na mesma volta síncrona de sempre, e o que o personagem ganha
+    // depois dela entra no seguinte (`world-checkpoint.test.ts`).
+    if (this.#failedDepartures.size > 0) await this.#retryDepartures();
     for (const hosted of [...this.#sessions.values()]) {
       const state = hosted.checkpoint;
       if (state === null || hosted.session.ended !== null) continue;
@@ -5936,13 +6224,16 @@ export class SessionHost {
    * âncora que o extrato leva e o login seguinte usa (ADR 0060 d.3.b). É a leitura que tem de vir
    * ANTES de o personagem ser movido: numa transição o destino é construído antes de a origem
    * encerrar, e depois disso o `position` já é o de lá. Sessão que não é do mundo, ou ruleset que não
-   * sabe a posição absoluta, não faz nada.
+   * sabe a posição absoluta, não faz nada. `decidedAt` — a posição em que o `sim` decidiu a saída
+   * (`departure-requested`, #840) — vale no lugar da de agora.
    */
-  #anchorWorldPosition(hosted: HostedSession, characterId: string): void {
+  #anchorWorldPosition(hosted: HostedSession, characterId: string, decidedAt?: Point): void {
     if (hosted.checkpoint === null) return;
     const owner = hosted.session.participants.find((participant) => participant.id === characterId);
     if (owner === undefined) return;
-    const position = worldPositionOf(hosted.session.ruleset, owner);
+    // `decidedAt` é a posição em que o `sim` decidiu a saída (#840): o personagem sem dono pode ter andado
+    // desde então, e a âncora do próximo login é onde ele estava quando saiu.
+    const position = decidedAt ?? worldPositionOf(hosted.session.ruleset, owner);
     if (position !== undefined) owner.worldPosition = position;
   }
 
@@ -5969,9 +6260,11 @@ export class SessionHost {
    * - **com ele** (o mundo): `leave` emite o extrato de DELTA — só o que o personagem rendeu
    *   desde o último checkpoint —, e o hospedeiro o grava (`#leaveWithReceipt`).
    */
-  async #departFromSharedSession(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+  async #departFromSharedSession(
+    characterId: string, hosted: HostedSession, reason: EndReason, decidedAt?: Point,
+  ): Promise<void> {
     if (creditsAggregates(hosted.session.ruleset)) {
-      await this.#leaveWithReceipt(characterId, hosted, reason);
+      await this.#leaveWithReceipt(characterId, hosted, reason, false, decidedAt);
       return;
     }
     await this.#saveDurableReceipt(characterId, hosted, reason);
@@ -5993,12 +6286,13 @@ export class SessionHost {
    * **No mundo** (#837, OW-16) a saída grava a posição de agora como âncora ANTES de o personagem sair
    * (`#anchorWorldPosition`) — o login seguinte volta ao tile de onde se saiu — e o extrato vai dentro
    * do lote de checkpoint inteiro (`#saveReceipt`). `anchored` é de quem já a gravou: a transição o faz
-   * antes de construir o destino, e depois dele o `position` já é o de lá.
+   * antes de construir o destino, e depois dele o `position` já é o de lá. `decidedAt` é a posição em
+   * que o `sim` decidiu a saída (#840, o `departure-requested`): vale no lugar da de agora.
    */
   async #leaveWithReceipt(
-    characterId: string, hosted: HostedSession, reason: EndReason, anchored = false,
+    characterId: string, hosted: HostedSession, reason: EndReason, anchored = false, decidedAt?: Point,
   ): Promise<void> {
-    if (!anchored) this.#anchorWorldPosition(hosted, characterId);
+    if (!anchored) this.#anchorWorldPosition(hosted, characterId, decidedAt);
     const departure = hosted.session.leave(characterId, reason);
     if (departure === null) {
       await this.#awaitExitSaves(hosted, characterId);
@@ -6780,6 +7074,12 @@ export class SessionHost {
     // células, e sem isso quem chegasse depois não teria como encontrá-lo.
     this.#announceArrival(hosted, characterId);
     this.#markArrival(hosted, characterId);
+    // Chegou ao mundo SEM ninguém olhando (#840, OW-19): o ticket foi consumido e o websocket ainda não
+    // conectou — ou nunca vai. É a chegada que o ADR 0060 d.7 manda tratar como a queda de quem já
+    // estava: `presence-lost` na hora. O primeiro visualizador a devolve (`attach`); sem ele, o
+    // personagem tenta sair aos 60 s. Sem isto, o login cujo socket nunca abre ficaria parado e vulnerável
+    // no mundo para sempre, porque a Cidade tem o recolhimento por repouso e o mundo não.
+    if (this.#watchers(hosted, characterId) === 0) this.#losePresence(hosted, characterId);
 
     this.#logger.info(
       { characterId, sessionId: session.id, type: session.ruleset.type },
