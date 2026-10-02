@@ -112,7 +112,10 @@ Duas coisas, e a distinção entre elas é a arquitetura inteira:
 - o **visualizador** é um socket olhando essa sessão, e entra e sai sem consequência nenhuma.
 
 Duas abas do mesmo personagem são dois visualizadores da MESMA sessão, nunca duas sessões.
-Se desanexar encerrar, pausar, creditar ou zerar qualquer coisa, o modelo está errado.
+Se desanexar encerrar, pausar, creditar ou zerar qualquer coisa, o modelo está errado. **No mundo aberto
+o último visualizador que se solta é uma INTENÇÃO ao `sim`** (`presence-lost`, OW-19) — o personagem fica
+parado e vulnerável, e é o `sim` quem decide se, e quando, ele sai —, e a sessão continua sem ser encerrada,
+pausada ou creditada por isso: ver "A presença do mundo", mais abaixo.
 
 A `Session` do `sim` guarda só IDS de visualizador — ela não pode conhecer socket
 (invariante 1). A ponte é `session.attached`, que decide a taxa de tick: a sessão sabe SE
@@ -1021,6 +1024,61 @@ no `game` com a flag ligada. O `compose.coolify.yml` o fixa (`${NODE_ID:-game-1}
 **Party e amigos no `api`:** `inSharedSpace(location)` (`api/party.ts`) aceita `null`, `'city'` e `'world'` onde
 só `'city'` valia — o nome da recusa não mudou. `api/friends.ts` responde `where: 'world'`. A party largada do
 mundo NÃO passa por `canLogout` (o `api` só vê o tipo da sessão): é o `member-in-fight` da OW-20.
+
+## A presença do mundo: socket vira intenção, evento vira I/O, e o hospedeiro não decide (#840, OW-19, ADR 0060 d.7)
+
+No mundo, desanexar NÃO é inofensivo como na hunt: o personagem fica parado e vulnerável, e sai depois, se
+`canLogout` deixar. O que o `sim` decide (`WorldRuleset`, OW-14) e o que o hospedeiro faz está em
+`game/world-presence.ts` (o contrato por forma) e nos pontos de `game/host.ts` abaixo. Produto:
+`docs/product/open-world.md`, "A presença no hospedeiro".
+
+**A regra que manda: nenhuma decisão de gameplay no hospedeiro.** Ele entrega TRÊS intenções (`presenceLost`,
+`presenceRestored`, `requestLogout`) e cumpre UM evento (`departure-requested`), mais a mensagem de UM outro
+(`logout-refused`). Não olha tile, luta nem relógio de parede. `worldPresenceOf(ruleset)` pede os métodos
+POR FORMA e devolve `undefined` para a Cidade e a hunt — é o que as mantém byte a byte como eram.
+
+Quando cada intenção sai, e armadilhas, todas com teste que as mata (`game/world-presence.test.ts`, mutação
+conferida):
+
+- **`presenceLost` no ÚLTIMO visualizador que se solta** (`detach`) **e na chegada sem visualizador**
+  (`#createLocal`: o ticket consumido e o socket que ainda não conectou, ou nunca vai; `#replace`: a volta de
+  uma instância cujo visualizador caiu no meio da transição). **`presenceRestored` no PRIMEIRO que anexa**
+  (`attach`). A segunda aba não é presença: só a troca de zero para um e de um para zero conta
+  (`#watchers`). O instante é o lógico — o `sim` agenda a partir do `nowMs` da sessão —, nunca um relógio
+  lido aqui (invariante 3).
+- **O visualizador que o SERVIDOR solta não é conexão perdida.** O `close` do uWS chama `detach` de volta
+  quando o `release` fecha o socket, e `#dropViewers` fecha DEPOIS de tirar do conjunto: `detach` só entrega
+  `presence-lost` se `viewers.delete` devolveu `true`. Inverter a ordem deixa um x-log pendente de quem
+  acabou de sair — e, se o mesmo id voltar, de quem acabou de chegar.
+- **O `logout` do mundo é `#requestLogout`**: `requestLogout` do `sim` e `#presentMoves` na hora — o jogador
+  tem a resposta sem esperar o ciclo. Na hunt e na Cidade segue `#logout` (encerra a sessão, sem
+  `canLogout`). O `leave-hunt` no mundo continua recusado (OW-18) e NUNCA vira `logout`.
+  **Veredicto `null` (o `sim` não conhece o personagem) é `release`, e não silêncio.** O `release` que
+  falhou (o Redis recusou o extrato) já tirou o personagem do `sim` e não o soltou do hospedeiro: o `logout`
+  seguinte é o retry do OW-16, e sem este ramo ele seria engolido — não há personagem para o `sim` decidir.
+  Quem já está saindo (`#departing`, `#transitions`) não pede nada; é o `#releaseFromWorld`, o ÚNICO
+  `release` do mundo por decisão do `sim`, que marca e desmarca `#departing`.
+- **`departure-requested` vale COM ou SEM visualizador.** `#presentMoves` o trata nos dois ramos — o sem
+  ninguém é o x-log. É por personagem, e `#departFromWorld` chama `release` com o `EndReason` (`endReasonOf`:
+  `death` → `death`, o resto → `manual-exit`) e a **posição do EVENTO** como âncora
+  (`ReleaseDeparture.worldPosition` → `#leaveWithReceipt(…, decidedAt)` → `#anchorWorldPosition`): o
+  personagem sem dono pode ter andado entre o instante da decisão e o ciclo que a lê. `{0, 0, 0}`
+  (`NO_WORLD_POSITION`) é "sem posição" e cai na posição de agora.
+- **O checkpoint e o repouso são UM passo**: `release` sai pela sessão `checkpointed` e antecipa o lote
+  inteiro (OW-16). Código novo que tire alguém do mundo continua por `release`/`#saveReceipt`, nunca por
+  `#persistReceipt` direto.
+- **`#departing` e `#transitions`.** Dois pedidos do mesmo personagem no mesmo ciclo viram uma saída (o
+  `sim` já o tirou, mas o hospedeiro só o esquece depois dos `await`s); quem está numa transição já está
+  deixando o mundo, e soltá-lo soltaria a sessão DE DESTINO, que o `release` resolve pelo personagem.
+- **`logout-refused` vai SÓ a quem pediu** (`#presentLogoutRefused`, todas as abas dele), nunca à sessão: a
+  mensagem montada UMA vez, fora do laço (o `EncodeCache`). O texto da recusa é do cliente (OW-23).
+- **O mundo não é recolhido.** `#collectResting` só visita `hz <= 0`, e o mundo roda a 10 Hz com ou sem
+  visualizador: o recolhimento de 5 min é da Cidade. Quem tira o personagem em luta, sem visualizador, é a
+  saída do `sim` — não um prazo do hospedeiro.
+
+**Um ruleset de teste que fale a língua do mundo** (os três métodos) é tratado como mundo, e um que não os
+tenha (o `CITY` de `world-checkpoint.test.ts`) não recebe presença nenhuma: as suítes de checkpoint, que
+montam o mundo à mão, continuam valendo sem tocar nelas.
 
 ## O checkpoint do mundo: um lote a cada 60 s, antecipado inteiro na saída (#837, OW-16, ADR 0060 d.10d)
 

@@ -10,9 +10,10 @@ ticket e o extrato que as levam), o **checkpoint do mundo** no hospedeiro (OW-16
 60 s e em toda saída, num `MULTI` só), a **liquidação do checkpoint no `jobs`** (OW-17, #838: o checkpoint
 sem valor movido vira só estado absoluto, sem linha de ledger) e o **mundo hospedado** (OW-18, #839: o
 `WorldShard`, o login que cai no mundo atrás de `OPEN_WORLD`, o grafo com `world` no centro, o serviço
-de Cidade só em PZ, a party e os amigos). A presença no hospedeiro (OW-19), a volta da hunt ao mundo
-(OW-20), a entrada pelo repouso com a fila (OW-21) e a apresentação do cliente (OW-23) ainda não
-saíram do papel.
+de Cidade só em PZ, a party e os amigos) e a **presença no hospedeiro** (OW-19, #840: o último
+visualizador que se solta, a chegada sem visualizador e o `logout` viram intenção para o `sim`, e a saída
+que ele decide vai ao repouso). A volta da hunt ao mundo (OW-20), a entrada pelo repouso com a fila
+(OW-21) e a apresentação do cliente (OW-23) ainda não saíram do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -23,12 +24,13 @@ Tibia sem PvP), [`docs/open-world-plan.md`](../open-world-plan.md) (marcos e ord
 O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicional instanciado (ADR
 0060 d.1). Um **mundo** é, no Canary, o `Game` único: aqui, uma sessão compartilhada num processo
 `game`, à qual o personagem pertence (`characters.world_id`, OW-15). Este documento cresce com
-cada peça do plano que sai do papel; hoje existem sete: o que o mundo **é** como dado, a regra de
+cada peça do plano que sai do papel; hoje existem nove: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
 topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
 que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) —, o
 checkpoint, que leva o que o mundo rendeu ao Redis (OW-16), a liquidação do checkpoint, que decide o que
-do extrato vira linha de ledger (OW-17), e o mundo hospedado, que põe o personagem dentro dele (OW-18).
+do extrato vira linha de ledger (OW-17), o mundo hospedado, que põe o personagem dentro dele (OW-18), e a
+presença no hospedeiro, que liga o socket à saída do `sim` (OW-19).
 
 ## O personagem em repouso (OW-15, #836)
 
@@ -773,7 +775,7 @@ item. Três regras:
   Vale também para a Cidade.
 - **O mundo roda a 10 Hz com ou sem visualizador** e nunca é recolhido como a Cidade (`#collectResting` só
   visita `hz <= 0`): fechar o navegador não o tira de lá. A saída do mundo — o `logout` por `canLogout`, o
-  x-log aos 60 s — é a OW-19.
+  x-log aos 60 s — é a presença do hospedeiro (OW-19), a seção seguinte.
 
 ### A party e os amigos
 
@@ -795,8 +797,6 @@ OW-59.
 
 ### O que ainda não existe
 
-- **A presença** (OW-19): `logout` ainda chama `release` direto, sem `canLogout`; o `departure-requested` e o
-  `logout-refused` do `sim` ainda não são lidos; fechar o navegador não dispara o x-log.
 - **Mundo ↔ hunt idle** (OW-20): o fim, a morte e a drenagem de uma hunt ainda levam à Cidade (que cura), assistidos
   ou não; a entrada numa instância a partir do mundo não consulta `canLogout`; a volta só com alguém olhando.
 - **A entrada pelo repouso** (OW-21): o mundo cheio recusa o login com `WorldFullError` (o socket falha); a fila
@@ -807,6 +807,93 @@ OW-59.
   da OW-23 depende deles para os ícones de PZ e de luta.
 - **A morte no mundo** (OW-32): sem monstro (OW-25) não há como morrer, e o dia em que houver, a saída por
   `member-left` leva o personagem à Cidade — a tela de relogin e o repouso no templo são da OW-32.
+
+## A presença no hospedeiro (OW-19, #840)
+
+O `sim` decide quem sai e quando (a seção "A saída do Tibia"), e a OW-19 liga o socket a essas decisões. O
+hospedeiro **traduz socket em intenção e evento em I/O**, e não decide nada de gameplay: não olha o tile, a
+luta nem o relógio. Tudo mora em `packages/server/src/game/host.ts` e `world-presence.ts`; nada disto existe
+sem `OPEN_WORLD` — a Cidade e a hunt não têm o que a presença pede (`worldPresenceOf` as devolve `undefined`).
+
+### Do socket à intenção
+
+| O que aconteceu no socket | O que o hospedeiro entrega ao `sim` |
+|---|---|
+| O **último** visualizador do personagem se solta (`detach`) | `presenceLost`, no instante lógico da sessão |
+| O personagem **chega** ao mundo com zero visualizadores | `presenceLost`, na hora da chegada |
+| O **primeiro** visualizador volta (`attach`) | `presenceRestored` |
+| O jogador manda `logout` | `requestLogout` |
+
+- **A segunda aba não é presença.** Só a troca de zero para um visualizador e de um para zero conta: fechar
+  uma de duas abas não faz nada, e abrir a segunda também não.
+- **Quem o servidor solta não perdeu a conexão.** O `release` tira o visualizador do conjunto ANTES de fechar
+  o socket, e o `detach` que o `close` do servidor chama de volta ignora quem já saiu. Sem isso, todo logout
+  deixaria um x-log pendente de um personagem que acabou de sair. A transição não passa pelo `detach`: os
+  visualizadores acompanham o personagem para a sessão de destino.
+- **A chegada sem visualizador são duas.** O login — o ticket consumido e o websocket que ainda não conectou,
+  ou que nunca vai (`#createLocal`) — e a volta de uma instância que perdeu o visualizador no meio da
+  transição (`#replace`, a corrida que o ADR 0060 d.6c descreve). Em ambas o personagem é tratado como quem
+  caiu: o primeiro visualizador devolve a presença, e sem ele o personagem tenta sair aos 60 s. Sem a
+  primeira, o login cujo socket nunca abre ficaria parado e vulnerável no mundo para sempre — a Cidade tem o
+  recolhimento por repouso, e o mundo não.
+- **O instante é o lógico.** O `sim` agenda os 60 s a partir do `nowMs` da sessão, nunca de um relógio de
+  parede lido aqui: o resultado é o mesmo a 1 Hz e a 10 Hz, com ou sem visualizador (invariante 3).
+
+### O `logout`
+
+O `logout` do mundo é uma **intenção**: o hospedeiro chama `requestLogout` e drena o evento na hora, sem
+esperar o ciclo seguinte (como o `leave-hunt`). O `sim` devolve um de dois eventos:
+
+| Evento do `sim` | O que o hospedeiro faz |
+|---|---|
+| `logout-refused { reason }` | manda a mensagem `logout-refused` do protocolo a **quem pediu** — todas as abas dele, e ninguém mais do mundo. O personagem não muda |
+| `departure-requested { reason, worldPosition }` | grava o checkpoint e solta o personagem para o repouso, como abaixo |
+| nenhum (`requestLogout` devolve `null`: o `sim` não conhece o personagem, ou ele morreu) | o `release` de sempre — não um pedido sem resposta. É o retry da saída que falhou, abaixo |
+
+Quem já está saindo (o duplo clique, o x-log em voo, a transição) não pede nada: o `logout` é ignorado.
+
+Na hunt e na Cidade o `logout` segue como era: encerra a sessão e devolve o slot, sem `canLogout`.
+
+### A saída: o checkpoint e o repouso
+
+`departure-requested` vale **com ou sem visualizador** — o x-log é justamente o caso em que não há — e é por
+personagem: sai quem o `sim` nomeou, e o resto do mundo continua. O hospedeiro chama `release`, que:
+
+1. **antecipa o lote inteiro** de checkpoint (OW-16): a linha de quem sai — vida, mana, condições, o que
+   carrega, a posição — vai junto do checkpoint de todo outro personagem sujo, num `MULTI` só;
+2. **fecha todos os visualizadores dele** com o código 1000 e o motivo da saída (`logout`, `xlog`, `idle-kick`
+   ou `death`) como texto;
+3. solta o personagem do diretório e devolve o slot da conta: ele passa a estar em **repouso**, e o próximo
+   login o põe de volta no tile gravado (OW-15).
+
+| O que fica diferente de um `release` comum | Por quê |
+|---|---|
+| A âncora é a posição **do evento**, não a de quando o hospedeiro roda | Entre o instante em que o `sim` decidiu e o ciclo que o lê o personagem sem dono pode ter andado (o medo, um empurrão), e o login seguinte volta ao tile de onde ele saiu |
+| O `{0, 0, 0}` do Canary vale "sem posição" | Só um mapa sem `source.region` o produz; a âncora cai na posição de agora |
+| `death` vira o `EndReason` `death`; os outros três, `manual-exit` | O ledger registra `session-death` como na hunt, e o logout, o x-log e o idle kick são o personagem saindo do jogo, o que o `logout` de antes já gravava |
+
+- **Idempotente por personagem.** Dois pedidos do mesmo personagem no mesmo ciclo (o x-log e o idle kick que
+  vencem juntos) viram uma saída só; o segundo `logout` de quem já saiu nem chega ao hospedeiro, porque o
+  `sim` não o conhece mais.
+- **Quem está no meio de uma transição já está deixando o mundo.** O pedido é ignorado: soltá-lo agora soltaria
+  a sessão de destino, que o `release` resolve pelo personagem.
+- **Falhar não perde nada.** Se o `release` falha — o Redis recusou o extrato —, o `sim` já tirou o personagem
+  da sessão (`Session.leave`), mas o hospedeiro não o soltou: o diretório e o slot ficam, e o extrato que não
+  pousou vai na frente do lote seguinte (OW-16). O `sim` não repete o pedido, e quem o repete é o `logout`
+  seguinte — o ramo "sem veredicto" acima, que é o `release` de sempre. Sem ele, o pedido seria engolido: não
+  há personagem para o `sim` decidir. O x-log que falha espera o `logout` ou a drenagem.
+- **O mundo não é recolhido.** `#collectResting` só visita sessão de `hz <= 0`, e o mundo roda a 10 Hz: o
+  recolhimento de 5 minutos é da Cidade, e o personagem em luta sem visualizador passa dos 5 minutos no
+  mundo. O que o tira é a saída do `sim`.
+
+### O que ainda não existe
+
+- **A morte e o idle kick** (OW-32, OW-47) emitem o mesmo `departure-requested`, com os motivos `death` e
+  `idle-kick`, e o hospedeiro já os cumpre. O que não existe é quem os emite, e a tela de morte no cliente.
+- **A mensagem de saída no cliente** (OW-23): o `logout-refused` chega e o cliente o ignora sem derrubar
+  (`apply.ts`); o texto da recusa e o ícone de luta são dele.
+- **A volta da hunt** (OW-20): a corrida da chegada sem visualizador em `#replace` já é tratada, mas o fim de
+  uma hunt ainda leva à Cidade, e é a OW-20 que decide entre o mundo e o repouso pelo visualizador.
 
 ## Parâmetros de balanceamento
 
@@ -828,14 +915,13 @@ OW-59.
 
 ## Em aberto
 
-- A presença no hospedeiro e a volta da hunt (OW-19 e OW-20): ver o [plano](../open-world-plan.md). É aí
-  que o `departure-requested` vira repouso (o checkpoint que ele grava já existe, OW-16), que o
-  `logout-refused` chega ao cliente e que a entrada numa instância passa por `canLogout`.
+- A volta da hunt (OW-20): ver o [plano](../open-world-plan.md). É aí que a entrada numa instância passa
+  por `canLogout` e que o fim de uma hunt decide entre o mundo e o repouso pelo visualizador.
 - O `requestExit` que o `WorldRuleset` herda da hunt (a OW-13 o testa) **não é a saída do mundo**:
   ele conclui por `onExitFinished` depois de `exitDelayMs` e da janela de luta, mas não olha o tile —
   um tile de no-logout não o recusa. **O hospedeiro o recusa desde a OW-18**: o `leave-hunt` no mundo
-  responde "Você já está aqui." e não chama o `requestExit`. O `logout` do mundo (OW-19) deve passar por
-  `requestLogout`, e nunca por ele.
+  responde "Você já está aqui." e não chama o `requestExit`. O `logout` do mundo passa por
+  `requestLogout` desde a OW-19, e nunca por ele.
 - O x-log num **tile de no-logout** não tem saída além do idle kick (OW-47): o personagem não anda
   sem dono. Se o dono quiser que o x-log insista, é uma decisão nova — o Canary desiste.
 - O teto de 200 é o ponto de partida; o `bench:world` o fixa (ADR 0060 d.11).
