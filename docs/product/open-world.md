@@ -173,8 +173,46 @@ Cada pergunta da `SessionTopology` (a tabela da instância está em
 | `startsInstanceSchedules` | não: o spawn do mundo nasce com o mundo, sem ninguém — nunca com o primeiro a entrar | o spawn é da **OW-25/OW-31** |
 | `burnsStaminaByTime` | não: a stamina queima ao ganhar XP, como o Canary (a comida continua drenando) | a regra é da **OW-46** |
 | `namesOwnerInEvents` | sempre: o número de presentes não pode decidir o que vai para o ledger | final |
+| `namesOwnerInItemIds` | sempre: o id de todo item novo é `${session.id}:${character.id}:${lootSeq}` (a instância solo fica em `${session.id}:${lootSeq}`) | final; ver "A sessão que não acaba" |
+| `scopesEventsToOwner` | sempre: cada evento de personagem leva o dono, e o extrato e o analisador de cada um filtram por ele | final; ver "A sessão que não acaba" |
 | `creditKill`, `rewardEligible`, `lootRecipient` | **só o dono do golpe final**, vivo e com stamina; sem sorteio (o `session.rng` não é tocado) | **provisório**: o mínimo seguro até o crédito do Canary (**OW-28**), em que a XP é a fatia de dano de cada um |
 | `placeOnEnter` | ver abaixo | final |
+
+### A sessão que não acaba: o que a instância nunca precisou
+
+O mundo é a primeira sessão em que **o mesmo id volta à mesma sessão**, e em que **estranhos dividem
+uma lista só** — duas coisas que a instância (que acaba) e a Cidade (que não simula) nunca
+exercitaram. A revisão da OW-13 achou quatro defeitos que nascem daí, e os quatro têm teste em
+`world.test.ts`:
+
+- **Quem entra começa sem fila.** `onLeave` não cancela os eventos de quem saiu — eles "vencem, não
+  encontram o personagem" —, e isso só vale até o mesmo id voltar: o passo, a vida e a mana que
+  ficaram na fila achavam o `CharacterRuntime` novo por id e se reagendavam, uma cadeia a mais por
+  relogue rápido (a regeneração a 2×, 3×…). `onEnter` faz `cancelEvents(character.id)` antes de
+  agendar a fila da entrada — na instância é um no-op, porque o id de quem entra nunca esteve nela.
+- **O relógio do mundo anda sem ninguém.** A âncora do tempo cobrado (`#staminaAnchorMs`) é a do
+  último evento, e o mundo vazio não tem evento: o primeiro a entrar depois de uma hora pagaria a
+  hora de comida (`fedMs`, persistida) que não viveu. `onEnter` do mundo cobra o intervalo dos que
+  **já estavam**, e leva a âncora para agora antes de o entrante contar. A instância não muda (o
+  relógio nunca corre nela sem ninguém, e o entrante tardio de uma party paga como sempre pagou).
+- **O id de item novo leva o dono.** `lootSeq` nasce em zero em todo `CharacterRuntime` de ticket, e
+  o id sem dono (`world-1:0`) é a chave primária de `item_instance` com `ON CONFLICT DO NOTHING`:
+  o segundo item era descartado em silêncio e o ledger creditava assim mesmo (invariante 10). O
+  critério deixou de ser "há party" (`SessionTopology.namesOwnerInItemIds`) e mora num ponto só,
+  `#newInstanceId` (loot de cadáver, baú de quest e bolsa de reposição da morte). E o personagem
+  que sai e volta continua o `lootSeq` de onde parou — o ruleset o guarda por id enquanto ele está
+  fora (`#lootSeqOfDeparted`, em memória: o mundo não tem snapshot).
+- **Estranhos não leem a lista uns dos outros.** `namesOwnerInEvents` só põe o dono no `detail` de
+  quatro eventos de progresso; a morte, a perda de XP e de nível, a skill, as bênçãos e os itens
+  perdidos não têm dono, e o extrato de um mostrava os de outro como se fossem dele.
+  `NotableEvent.characterId` (opcional) é gravado por `Session.record` só onde o ruleset declara
+  `scopesEventsToOwner` — a instância nunca o grava, e a lista dela é a de sempre byte a byte —, e
+  `Receipt` (`#receiptFor`), o `session-state` e o analisador (`Session.notableEventsFor`) levam os
+  eventos sem dono e os do próprio personagem. O evento da sessão (`advance-truncated`) continua de
+  todos. **Fica para a OW-18**: o cursor do analisador no hospedeiro ainda é a posição absoluta na
+  lista, que o teto (`maxNotableEventsPerCharacter`) desloca (`Session.notableEventsDropped`), e um
+  evento de outro personagem ainda muda a contagem e provoca um `analyzer` sem evento novo para
+  quem o recebe.
 
 ### A entrada: onde se saiu, senão o templo
 

@@ -47,11 +47,13 @@ Os 16 usos de classe T estão atrás de 9 perguntas e 2 chaves da `SessionTopolo
 | `burnsStaminaByTime` | 1 | Sim (só a stamina; a comida drena em qualquer topologia). |
 | `runsExitRules` | 2 | Sim: o evento periódico e a cascata `party-member-lost`. |
 | `namesOwnerInEvents` | 2 | Só com mais de um presente. |
+| `namesOwnerInItemIds` | 3 | Não: `${session.id}:${lootSeq}`; só a party (`partyOptions`) leva o dono no id. |
+| `scopesEventsToOwner` | — | Não: a lista de eventos é da sessão, e cada membro de uma party lê o que o grupo fez. |
 | `startsInstanceSchedules` | — | Com o primeiro corredor. |
 | `placeOnEnter` | — | O primeiro no tile inicial da rota; o segundo no livre mais próximo. |
 | `runsRouteWalker` | — | Sim. |
 
-Dos onze membros que o ADR 0060 d.4 lista, esta issue entrega todos. A auditoria achou **três perguntas a mais** que também decidiam por "quantos estão aqui": `leaderOf` (a outra metade da liderança), `onExitFinished` (a outra porta de saída, irmã da morte) e `namesOwnerInEvents` (o formato do `level-up`, `bestiary-milestone`, `bosstiary-level` e `hazard-level-up` do extrato dependia de haver um só presente, e no mundo o número de presentes não pode decidir o que vai para o ledger).
+Dos onze membros que o ADR 0060 d.4 lista, esta issue entrega todos. A revisão da OW-13 achou **mais duas perguntas** que decidiam por "há party" e por "a lista é de um dono só": `namesOwnerInItemIds` (os três pontos que cunham id de item — loot de cadáver, baú de quest e bolsa de reposição da morte — escolhiam o formato por `#party !== undefined`, e o mundo, sem party, cunharia o mesmo `world-1:0` para todos) e `scopesEventsToOwner` (a lista de eventos notáveis é uma só, e o extrato de um estranho levava a perda de XP de outro). A auditoria achou **três perguntas a mais** que também decidiam por "quantos estão aqui": `leaderOf` (a outra metade da liderança), `onExitFinished` (a outra porta de saída, irmã da morte) e `namesOwnerInEvents` (o formato do `level-up`, `bestiary-milestone`, `bosstiary-level` e `hazard-level-up` do extrato dependia de haver um só presente, e no mundo o número de presentes não pode decidir o que vai para o ledger).
 
 ## O que ficou aberto, e com quem
 
@@ -93,6 +95,8 @@ a OW-13 passou por cada armadilha acima:
 | `placeOnEnter` | o primeiro na rota, o segundo no livre mais próximo | a âncora absoluta, senão o templo, a pé |
 | `runsRouteWalker`, `runsExitRules`, `burnsStaminaByTime` | sim | não |
 | `namesOwnerInEvents` | só com mais de um presente | sempre |
+| `namesOwnerInItemIds` | não (só a party leva o dono no id) | sempre: `${session.id}:${character.id}:${lootSeq}` |
+| `scopesEventsToOwner` | não | sim: cada evento de personagem leva o dono, e extrato e analisador filtram por ele |
 
 - **`leaderOf` devolvendo `undefined`** é o caso do mundo, e os testes de `world.test.ts` rodam a
   sessão sem líder inteira (entrada, caminhada, saída, morte).
