@@ -6,9 +6,11 @@ tipo, mapa, cidade, templo e teto, validado no boot), a **regra de zona e de sa�
 `createWorldSession`, a topologia de mundo e a entrada na posição salva ou no templo), a **saída do
 Tibia no `sim`** (OW-14, #835: o `logout` por `canLogout` e a perda de conexão, que tenta sair aos
 60 s), o **personagem em repouso** (OW-15, #836: as colunas de mundo e vitais em `characters`, o
-ticket e o extrato que as levam) e o **checkpoint do mundo** no hospedeiro (OW-16, #837: um lote a cada
-60 s e em toda saída, num `MULTI` só). Nada hospeda a sessão ainda — o hospedeiro a constrói na OW-18,
-atrás de `OPEN_WORLD` — e a presença no hospedeiro e a apresentação ainda não saíram do papel.
+ticket e o extrato que as levam), o **checkpoint do mundo** no hospedeiro (OW-16, #837: um lote a cada
+60 s e em toda saída, num `MULTI` só) e a **liquidação do checkpoint no `jobs`** (OW-17, #838: o checkpoint
+sem valor movido vira só estado absoluto, sem linha de ledger). Nada hospeda a sessão ainda — o
+hospedeiro a constrói na OW-18, atrás de `OPEN_WORLD` — e a presença no hospedeiro e a apresentação ainda
+não saíram do papel.
 **PRD:** — (o PRD descreve a Cidade como praça social; o mundo aberto nasceu depois dele)
 **Épico:** E19 · Mundo aberto (M47–M51)
 **Referência técnica:** [ADR 0060](../adr/0060-tibia-open-world-without-pvp.md) (mundo aberto do
@@ -22,8 +24,9 @@ O Draconya é o mundo aberto do Tibia, tipo `no-pvp`, e a hunt idle é o adicion
 cada peça do plano que sai do papel; hoje existem seis: o que o mundo **é** como dado, a regra de
 zona do `sim` — onde o personagem pode sair —, a sessão do mundo, que é o motor da hunt com a
 topologia de mundo, a saída do Tibia, que usa a regra de zona para o `logout` e para o personagem
-que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) — e o
-checkpoint, que leva o que o mundo rendeu ao Redis (OW-16).
+que perdeu a conexão, o personagem em repouso — o que a linha de `characters` guarda dele (OW-15) —, o
+checkpoint, que leva o que o mundo rendeu ao Redis (OW-16), e a liquidação do checkpoint, que decide o que
+do extrato vira linha de ledger (OW-17).
 
 ## O personagem em repouso (OW-15, #836)
 
@@ -93,9 +96,9 @@ coluna `state` guarda por default. O diretório continua mandando: quem está nu
 
 ### O que ainda não existe
 
-- **A liquidação sem linha de ledger** para quem só mudou de lugar (OW-17): hoje cada extrato ainda é uma
-  linha de ledger. (A âncora já é escrita: o dono da sessão a grava na saída e no checkpoint, ver
-  [o checkpoint do mundo](#o-checkpoint-do-mundo-ow-16-837); o que a OW-20 acrescenta é a volta da hunt.)
+- **O checkpoint e a liquidação existem** (OW-16 e OW-17): o dono da sessão grava a âncora na saída e no
+  checkpoint, e o `jobs` liquida o checkpoint sem valor como estado puro (seções abaixo). O que a OW-20
+  acrescenta é a volta da hunt.
 - **A sessão do mundo hospedada** (OW-18): com a flag ligada o login ainda cai na Cidade, que cura ao entrar
   — a vida do ticket só sobrevive numa hunt idle, e na praça é curada.
 - **A escolha do mundo** (`world_id`, OW-50) e a **troca de cidade** (`town_id`): hoje só há `main` e `thais`.
@@ -219,12 +222,98 @@ seguinte grava o que ficou para trás antes de soltar o personagem. A sessão do
 - **Quem hospeda o mundo.** A sessão `world` ainda não é hospedada (o `WorldShard` é a OW-18, atrás de
   `OPEN_WORLD`): o checkpoint se prova com a sessão real do `sim` em `world-checkpoint-real.test.ts` e com
   um ruleset de mentira (`world-checkpoint.test.ts`), e entra em produção com o `WorldShard`.
-- **A liquidação sem linha de ledger** para quem só mudou de lugar (OW-17): hoje cada linha do lote ainda
-  vira uma linha de ledger no `jobs`.
 - **A presença** (OW-19): o `departure-requested` que o `sim` emite (logout, x-log) ainda não é lido pelo
   hospedeiro; quando for, ele chama o mesmo funil de saída, e o lote antecipado vem de graça.
 - **O `use-slot` do mundo** só suja pelo `dirty` na Cidade (`ruleset.type === 'city'`); conjurar no mundo
   suja pela mana e pelo gold, e trocar essa conferência é da OW-18.
+
+## A liquidação do checkpoint no `jobs` (OW-17, #838)
+
+O checkpoint do mundo grava, a cada 60 s e por personagem sujo, o estado absoluto inteiro — posição, cidade,
+vida, mana, condições, estoque, equipamento, storages (ADR 0060 d.10.d). Quase toda linha dessas não moveu
+nada: o jogador andou, tomou dano, curou. Uma linha de ledger por checkpoint seria só um log de posição que
+cresce para sempre, e o ledger existe para registrar **valor** (invariante 10). Então o `jobs` separa os dois
+casos pelo que o extrato carrega:
+
+| Extrato | O que o `jobs` faz |
+|---|---|
+| **Checkpoint** (`reason: 'checkpoint'`), versionado, sem valor movido (com `OPEN_WORLD`) | aplica **só o estado absoluto**, guardado por `characters.durable_version`; **nenhuma linha de ledger** |
+| **Checkpoint versionado, com valor movido** | o caminho de hoje: linha de ledger (`session-checkpoint`) e progressão na **mesma transação**, a chave `(session_id, seq)` fazendo o retry não duplicar |
+| **Fim de sessão e saída** (`manual-exit`, `death`, `drain`, `completed`…), com ou sem valor | o caminho de hoje: a linha de ledger dele, de delta zero quando nada se moveu |
+| **Sem versão** (nó `game` anterior, deploy em rolagem) | o caminho de hoje, mesmo sem valor: sem a guarda de versão, a chave única é a única idempotência dele |
+| **Flag desligada** (o default) | o caminho de hoje para todo extrato, byte a byte |
+
+**Só o checkpoint pula a linha, e não todo extrato sem valor, por causa do snapshot.** O fim de uma sessão que tem
+snapshot (hunt, Treino, party) deixa o `(session_id, seq)` dela no ledger, e é essa chave que a liquidação de um
+snapshot irrestaurável (`settleSnapshotAsReceipt`, `snapshot-settlement.ts`) encontra: ela reemite o **mesmo**
+`seq = ledgerSeq + 1`, com uma versão **nova**, e a chave faz o segundo virar operação nula. Se o extrato final
+não deixasse a linha, o rederivado passaria na guarda de versão e sobrescreveria a vida, a posição, as skills e a
+stamina que o final já tinha gravado com o estado de alguns segundos antes (a janela é um `release` que cai entre
+gravar o extrato final e apagar o snapshot). A sessão do mundo, a única que faz checkpoint, **não tem snapshot**
+(ADR 0060 d.10.a): não existe gêmeo a reconhecer, e a versão basta. O que a saída custa é uma linha por logout —
+limitada pelos logins, não pelo relógio — e o ADR 0060 d.10.d tem os números do checkpoint, que seguem os mesmos.
+
+**"Sem valor movido"** é, exatamente: `xpGained`, `goldGained`, `goldSpent`, `kills` e `deaths` iguais a zero,
+`removedInstances` vazio, e nenhum item **novo** em `acquired` (`movesValue`, `jobs/ledger.ts`). A XP negativa da
+penalidade de morte conta como valor, e o gold que entra e sai na mesma sessão também — o ledger tem o que
+registrar nos dois. O que não conta, de propósito: posição, vida, mana, condições, estoque, storages (estado, sem
+o que somar) e os campos monotônicos (Bestiário, Bosstiary, magias aprendidas, vocação, promoção), que são
+idempotentes por si.
+
+**`acquired` é cumulativo, então só o item novo é valor.** O emissor (`acquiredBy`, `game/host.ts`) lista todo item
+que ainda está na mochila, na satchel ou no corpo e leva o prefixo da sessão, e o id de loot
+(`${sessionId}:bag:N`) não muda. Num mundo que dura, quem pegou uma espada em t0 a leva em **todo** checkpoint
+seguinte sem ter pegado nada de novo — e contar a lista como valor deixaria todo personagem que já lootou uma vez
+no ledger para sempre, de modo que os 288 mil por dia seriam o caso típico, e não o teto. Por isso, para o
+checkpoint que não tem outro valor, o `jobs` pergunta ao banco, **dentro da transação e depois da trava da linha**,
+quais ids de `acquired` o dono já tem como linha de `item_instance` (`ownedAcquired`): se todos já estão lá, o
+extrato é estado puro e **nem o `INSERT` nulo roda**; se há um item que o dono ainda não tem, o extrato é a linha de
+ledger que registra o nascimento dele. É por dono, como o resto do `jobs`: o mesmo id na linha de outro personagem
+não conta. A pergunta só existe para o checkpoint versionado, sem outro valor e com `acquired` — o resto não
+consulta nada a mais —, e é um `SELECT` por chave primária sobre a mochila (dezenas de ids).
+
+**A idempotência sem a chave única vem da versão.** Reprocessar o mesmo extrato, ou um mais velho que o aplicado,
+encontra `durable_version` já igual ou maior e não escreve absoluto nenhum — é a "linha mais antiga é ignorada",
+e vale também para o extrato que chega depois de uma queda entre gravar a coluna e apagá-lo do Redis. O que é
+monotônico entra sempre, como no caminho com ledger (aplicar de novo não custa nada). O que **não** muda é a
+trava de linha — é ela que serializa o `jobs` e o `api` (ADR 0024) — e a ordem: o personagem liquida completo e
+em ordem de versão, e a liquidação do ticket (`settleCharacterProgress`, FUN-56) é o mesmo caminho, então
+encontra as linhas do lote em ordem de versão e aplica, das 3, 1 e 2 gravadas, a do 3.
+
+**Sem linha de ledger também não toca em XP, gold nem level**: não há delta a somar, e o level que
+`levelForXp` derivaria de uma XP que não mudou seria uma escrita a mais numa coluna econômica. `gold`
+continua sendo a projeção do ledger.
+
+### O custo, por mundo com 200 personagens
+
+| Cadência do checkpoint | Transações/s no `jobs` | Linhas de ledger por dia, no teto |
+|---|---|---|
+| 10 s | 20 | 1,73 M |
+| **60 s** (`WORLD_CHECKPOINT_MS`, ADR 0060 d.10.d; o emissor é a OW-16) | **3,3** | **até 288 mil** |
+
+A conta: 200 personagens × 1 extrato a cada 60 s = 3,33 transações/s; × 86.400 s = 288.000 por dia. O **teto** é
+o de todo extrato ter valor — 200 personagens caçando sem parar —; com a OW-17 só os checkpoints **com** valor
+entram no ledger (mais uma linha por saída, que vem dos logins e não do relógio), e quem só anda, trata, espera ou
+já lootou e carrega o que lootou não cria nenhuma. A transação por extrato continua (trava de linha, leitura,
+`UPDATE`), mas sem a inserção e sem os três índices que a linha de ledger mexe.
+
+**Medido** (nesta máquina, arm64, Postgres local; 20.000 linhas de ledger com o `ref` de um extrato sem eventos):
+uma linha de ledger pesa **≈ 497 bytes** — 315 de heap e 179 de índices (`ledger_pkey`,
+`ledger_session_seq_unique` e `ledger_by_character`) —, então o teto é **≈ 143 MB por dia por mundo** (≈ 52 GB
+por ano), e `notableEvents` o aumenta. O que a OW-17 poupa é a fração dessas linhas que não move valor. **Não
+medido, e fica para a OW-35** (`bench:world`, na arquitetura de destino, ADR 0013): a vazão da liquidação com as
+hunts idle no mesmo processo, e a fração real de extratos com valor.
+
+**Como se vê em produção:** `draconya_jobs_receipts_written_total` conta todo extrato liquidado e
+`draconya_jobs_receipts_state_only_total` os que entraram sem linha de ledger — a diferença é o que de fato
+cresceu o ledger. O resultado da varredura (`LedgerSweepResult.stateOnly`) só traz o campo quando é maior que
+zero, para o resultado com a flag desligada ser o de antes.
+
+**O limite do ticket.** A liquidação síncrona do ticket aplica no máximo os **50 extratos mais antigos** do
+personagem por chamada (`SETTLE_LIMIT`). A 1 extrato por minuto isso são ~50 minutos de `jobs` parado; passado
+isso, o ticket entra com a posição do 50º extrato e o resto sai no ciclo seguinte, em ordem — nada se perde (o
+contador do hospedeiro já parte da maior versão pendente), mas o jogador entra num tile antigo. É o limite que
+o login rápido paga desde a FUN-56, e não mudou.
 
 ## O mundo como conteúdo (OW-08, #829)
 

@@ -205,6 +205,8 @@ async function main(): Promise<void> {
                   receipts,
                   logger: apiLogger,
                   progression: content.progression,
+                  // O checkpoint sem valor movido é aplicado sem linha de ledger (#838, OW-17).
+                  ...(configuration.OPEN_WORLD ? { openWorld: true } : {}),
                 }),
             }),
       });
@@ -280,6 +282,8 @@ async function main(): Promise<void> {
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
+      // O checkpoint sem valor movido é aplicado sem linha de ledger (#838, OW-17).
+      ...(configuration.OPEN_WORLD ? { openWorld: true } : {}),
       botConfigs,
       metrics: new JobsMetrics(configuration.NODE_ID),
       // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`
