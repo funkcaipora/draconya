@@ -915,7 +915,7 @@ handshake falha, como a OW-18 o deixou.
 | Mundo e cidade de quem existia antes da migração 0029 | `'main'` e `'thais'`, cheio, sem posição nem condição | `packages/server/migrations/0029_836-world-vitals.sql` |
 | Teto de condições por personagem na linha | 64 | `packages/server/src/world-state.ts`, `MAX_CONDITIONS` |
 | Espera de quem está na fila do mundo cheio | 5 s até a posição 4, 10 s até a 9, 20 s até a 19, 60 s até a 49 e 120 s dali em diante; o prazo para voltar é a espera mais 15 s | `packages/server/src/world-queue.ts` (a tabela do script `CLIENT_LOGIN`; no Canary, `waitlist.cpp:20-24, 49-67`) |
-| Vida das chaves da fila no Redis | 150 s sem uso; o contador de ordem vive 1 h | `packages/server/src/world-queue.ts`, `KEY_TTL_MS`, `SEQUENCE_TTL_MS` |
+| Vida das chaves da fila no Redis | 150 s sem uso; o contador de ordem vive 1 h desde a última chamada que deixou a fila de pé | `packages/server/src/world-queue.ts`, `KEY_TTL_MS`, `SEQUENCE_TTL_MS` |
 | Tentativas do login contra a corrida da fila | 3 | `packages/server/src/game/host.ts`, `WORLD_ENTRY_ATTEMPTS` |
 | Código com que o socket fecha depois do `world-full` | 4001 (faixa de aplicação) | `packages/server/src/game/server.ts`, `WORLD_FULL_CLOSE_CODE` |
 | Cadência do checkpoint do mundo | 60 000 ms (entre 1 s e 1 h) | `packages/server/src/config.ts`, `WORLD_CHECKPOINT_MS`; `packages/server/src/game/world-checkpoint.ts`, `WORLD_CHECKPOINT_MS`; [`docs/runtime-configuration.md`](../runtime-configuration.md) |

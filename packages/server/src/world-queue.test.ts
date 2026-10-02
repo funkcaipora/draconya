@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { WorldQueue } from './world-queue.js';
 import type { WorldQueueVerdict } from './world-queue.js';
+import { SHORT_MS } from './testing/deadlines.js';
 import { connectTestRedis } from './testing/redis.js';
 
 // O banco 29 é deste arquivo — ver `testing/redis.ts`. A checagem fica no topo do módulo: `describe.runIf` é
@@ -46,7 +47,9 @@ describe.runIf(available)('a fila do mundo cheio (#842, OW-21)', () => {
   it('sem fila e com vaga, entra sem tocar em nada: nenhuma chave nasce no Redis', async () => {
     const { login, worldId } = build();
     expect(await login('a', 5)).toEqual({ admitted: true });
-    expect(await redis.keys('world:*')).toEqual([]);
+    // Só as chaves DESTE mundo: o Redis local de 16 bancos junta os arquivos no banco 0, e `world:*` pegaria as do
+    // `rest-entry.test.ts` rodando ao lado.
+    expect(await redis.keys(`world:${worldId}:*`)).toEqual([]);
   });
 
   it('sem vaga, o primeiro fica na posição 1 e espera 5 s; o segundo, na 2', async () => {
@@ -203,6 +206,41 @@ describe.runIf(available)('a fila do mundo cheio (#842, OW-21)', () => {
     // O contador dá a ordem de chegada: se expirasse antes da fila, o próximo da fila ganharia uma ordem
     // MENOR que a de quem já espera, e furaria.
     expect(sequenceTtl).toBeGreaterThan(queueTtl);
+  });
+
+  it('a fila viva mantém o contador de ordem vivo: quem espera volta, o contador renova, e o próximo a chegar fica ATRÁS', async () => {
+    // O contador só era renovado na chegada de alguém novo. Uma fila de gente que volta a cada poucos segundos
+    // mas sem ninguém chegando durante uma hora o deixava expirar, e o recém-chegado nascia com a ordem 1 —
+    // empatava com o primeiro e passava na frente do segundo. Ninguém espera um prazo vencer aqui (ver
+    // `testing/deadlines.ts`): o contador é encurtado à mão para `SHORT_MS`, e o que se afirma é o prazo
+    // GRAVADO depois da volta de `b`. Mutação que mata: renovar só na chegada.
+    const { login, worldId } = build();
+    const sequence = `world:${worldId}:queue:seq`;
+    await login('a', 0);
+    await login('b', 0);
+    await redis.pexpire(sequence, SHORT_MS);
+
+    expect(await login('b', 0)).toEqual(refused(2));
+    expect(await redis.pttl(sequence)).toBeGreaterThan(3_000_000);
+
+    expect(await login('c', 0)).toEqual(refused(3));
+    expect(await login('b', 0)).toEqual(refused(2));
+  });
+
+  it('a vez de quem entra também renova o contador, se ainda sobrou gente esperando', async () => {
+    const { login, worldId } = build();
+    const sequence = `world:${worldId}:queue:seq`;
+    await login('a', 0);
+    await login('b', 0);
+    await login('c', 0);
+    await redis.pexpire(sequence, SHORT_MS);
+
+    // `a` entra (a posição dele cabe na vaga) e `b` e `c` seguem na fila.
+    expect(await login('a', 1)).toEqual({ admitted: true });
+    expect(await redis.pttl(sequence)).toBeGreaterThan(3_000_000);
+
+    expect(await login('d', 0)).toEqual(refused(3));
+    expect(await login('b', 0)).toEqual(refused(1));
   });
 
   it('chegadas simultâneas não se atropelam: cada uma recebe uma posição distinta, na ordem em que o Redis as viu', async () => {

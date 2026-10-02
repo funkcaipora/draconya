@@ -1046,7 +1046,9 @@ Quem está em repouso entra por um de dois caminhos, e o ticket diz qual. Produt
   15 s de folga do prazo moram NO SCRIPT, uma cópia só; o teste de `world-queue.test.ts` a prende nos limites.
   Premium vai na frente (a parte alta da nota). **O contador de ordem (`…:seq`) tem de viver mais que a fila**
   (1 h contra 150 s): se expirasse antes, o próximo da fila ganharia uma ordem MENOR que a de quem espera e
-  furaria.
+  furaria. E é renovado a CADA chamada que deixa a fila de pé (recusa, ou entrada que deixou gente esperando),
+  não só na chegada de um novo: quem espera volta e mantém a fila viva por horas sem ninguém chegar, e um
+  contador renovado só na chegada expiraria no meio dela.
 - **A porta** (`WorldEntryGate`, `game/rest-entry.ts`): `login(personagem, premium)` e `leave(personagem)`. O
   `createSessionWiring` a monta (`worldEntry`) com o `WorldShard` (vagas) e a `WorldQueue` (ordem) — **só com a
   flag E a fila injetada** (o `main` a injeta só com `OPEN_WORLD`). O `main` passa `sessions.worldEntry` ao `game`,

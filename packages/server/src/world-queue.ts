@@ -38,7 +38,11 @@ export interface WorldQueueOptions {
 
 /** O que um personagem ganha por estar na fila depois de ter tentado: a chave só vive enquanto alguém bate nela. */
 const KEY_TTL_MS = 150_000;
-/** O contador dá a ordem de chegada e precisa viver mais que a fila — que expira em `KEY_TTL_MS` sem uso. */
+/**
+ * O contador dá a ordem de chegada e precisa viver mais que a fila — que expira em `KEY_TTL_MS` sem uso. Por isso
+ * ele é renovado toda vez que a fila segue de pé (e não só quando alguém chega): sem uso, ele sai uma hora depois
+ * da última chamada, bem depois de a fila ter ido.
+ */
 const SEQUENCE_TTL_MS = 3_600_000;
 /** Premium vem antes de comum (`priorityWaitList`, `waitlist.cpp:95-115`): a camada é a parte alta da nota. */
 const TIER_WEIGHT = 2 ** 40;
@@ -86,12 +90,19 @@ elseif slot < 50 then wait = 60 end
 if slot <= vacancies then
   redis.call('ZREM', KEYS[1], ARGV[1])
   redis.call('ZREM', KEYS[2], ARGV[1])
+  -- Sobrou gente: a fila segue viva, e o contador de ordem dela com ela.
+  if redis.call('ZCARD', KEYS[1]) > 0 then redis.call('PEXPIRE', KEYS[3], ${String(SEQUENCE_TTL_MS)}) end
   return { 1, 0, 0 }
 end
 
 redis.call('ZADD', KEYS[2], now + (wait + 15) * 1000, ARGV[1])
 redis.call('PEXPIRE', KEYS[1], ${String(KEY_TTL_MS)})
 redis.call('PEXPIRE', KEYS[2], ${String(KEY_TTL_MS)})
+-- O contador de ordem renova junto com a fila, a CADA chamada que a deixa de pé, e não só na chegada: quem
+-- espera volta de 5 em 5 s (até 2 min) e mantém a fila viva por horas sem ninguém novo chegar, e um contador
+-- que só se renovasse nas chegadas expiraria no meio — o próximo a chegar nasceria com a ordem 1 e passaria
+-- na frente de quem já espera.
+redis.call('PEXPIRE', KEYS[3], ${String(SEQUENCE_TTL_MS)})
 return { 0, slot, wait * 1000 }
 `;
 
