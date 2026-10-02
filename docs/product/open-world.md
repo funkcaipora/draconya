@@ -251,6 +251,32 @@ respondem `false`: sem dado, sem serviço, ao contrário de `canLogout`, que sem
 ninguém. É a pergunta; **quem recusa a intenção e avisa o jogador é o hospedeiro** (OW-18), que
 hoje confere `ruleset.type === 'city'`.
 
+### Os tetos da sessão
+
+`WORLD_SESSION_LIMITS` (ADR 0060 d.5): `maxEventsPerAdvance` 65.536, `maxPendingDomainEvents` 8.192
+e `maxNotableEventsPerCharacter` 64. São **ponto de partida, não medida**: os defaults da hunt,
+medidos para um personagem, multiplicados por dezesseis, e o `bench:world` (OW-35) os fixa na
+máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
+
+### O que ainda não existe
+
+- **Quem hospeda.** Nada cria o mundo: o `WorldShard` atrás de `OPEN_WORLD` é a OW-18, e a tabela
+  de transições (`game/transitions.ts`) tem a entrada `world: []` só porque o `Record<SessionType,
+  …>` o exige. Com a flag desligada — o default — o hospedeiro é o de hoje.
+- **Quem lê a saída.** `departure-requested` e `logout-refused` saem do `sim`, e o hospedeiro hoje os
+  ignora (`#presentMoves` os descarta): ler o primeiro **sem visualizador** — gravar o checkpoint e
+  soltar o personagem para o repouso — e traduzir o segundo na mensagem `logout-refused` é a OW-19, que
+  também entrega `presence-lost` e `presence-restored`.
+- **A fila estável.** O ADR 0060 d.5c quer a fila do mundo ordenada por `(dueAtMs, priority,
+  subject, kind, seq)` (`tieBreak: 'stable'`, OW-06, #827). `createWorldSession` é onde ela se
+  pede, e a OW-06 ainda não pousou: até lá a fila do mundo desempata por inserção, como a da
+  instância, que é correto enquanto não há monstro dormente (a OW-30 é quem depende da ordem).
+- **Monstro.** Sem pontos de spawn (OW-25) e sem semear o spawn na criação (OW-31), o mundo anda
+  sem criatura nenhuma. O personagem ocioso ainda agenda um `PLAYER_STEP` por passo (o custo de
+  quem fica parado, medido pelo `bench:world`, OW-35).
+- **O evento notável.** A entrada grava `entered-world` (o dono no detalhe, como `entered-city`); o
+  texto dele no cliente é da OW-23 — até lá ele sai cru, como todo tipo que o cliente não conhece.
+
 ## A saída do Tibia (OW-14, #835)
 
 No Tibia não se foge de uma luta fechando o navegador: o `logout` só passa onde `canLogout` deixa, e o
@@ -261,8 +287,9 @@ checkpoint e soltá-lo para o repouso é I/O, do hospedeiro (OW-19).
 
 ### O `logout`
 
-`WorldRuleset#requestLogout(session, characterId)` passa o pedido por `canLogout` (a tabela da seção
-anterior) e resulta em **um** de dois eventos de domínio — nunca nos dois, e nunca em nenhum:
+`WorldRuleset#requestLogout(session, characterId)` passa o pedido por `canLogout` (a tabela de "Zona
+por tile e `canLogout`", acima) e resulta em **um** de dois eventos de domínio — nunca nos dois, e
+nunca em nenhum:
 
 | Veredicto | Evento |
 |---|---|
@@ -290,9 +317,9 @@ servidor** (ADR 0060 d.7): o protocolo não tem opcode para elas e o cliente nun
 
 1. **O alvo é solto na hora** (`setAttackedCreature(nullptr)`, `player.cpp:2323-2325`): o alvo que o
    jogador escolheu, o candidato do auto-target e a caminhada até um alvo.
-2. **Toda automação para.** O bot (as cinco categorias), as automações da barra de ações
-   (`swap-ring` e as outras), a eleição de alvo da política, a caminhada manual, o follow e a postura
-   `follow`/`keep-distance`. O herói **também deixa de bater no monstro ao lado**: o golpe automático no
+2. **Toda automação para.** O bot (todos os grupos da barra de ações) e as automações da barra
+   (`swap-ring` e as outras), a eleição de alvo da política, a caminhada manual, o follow e a
+   postura `follow`/`keep-distance`. O herói **também deixa de bater no monstro ao lado**: o golpe automático no
    melhor ao alcance é o bot escolhendo, e a resposta do dono é que, sem o jogador, toda automação
    para. Nada para o que o jogo faz **com** o personagem: regeneração, condições, o medo que o faz
    andar e, claro, o que os monstros fazem com ele — ele fica vulnerável.
@@ -335,32 +362,6 @@ quando ela existir (OW-43): é o `onLeave`, o mesmo de qualquer saída.
   sem suspensão.
 - A instância não muda: o conjunto de suspensos é `null` em toda hunt (só nasce na primeira queda de
   um mundo), lido pelas sete guardas do caminho quente (`HuntRuleset#isSuspended`).
-
-### Os tetos da sessão
-
-`WORLD_SESSION_LIMITS` (ADR 0060 d.5): `maxEventsPerAdvance` 65.536, `maxPendingDomainEvents` 8.192
-e `maxNotableEventsPerCharacter` 64. São **ponto de partida, não medida**: os defaults da hunt,
-medidos para um personagem, multiplicados por dezesseis, e o `bench:world` (OW-35) os fixa na
-máquina de destino. `createWorldSession({ limits })` os troca campo a campo.
-
-### O que ainda não existe
-
-- **Quem hospeda.** Nada cria o mundo: o `WorldShard` atrás de `OPEN_WORLD` é a OW-18, e a tabela
-  de transições (`game/transitions.ts`) tem a entrada `world: []` só porque o `Record<SessionType,
-  …>` o exige. Com a flag desligada — o default — o hospedeiro é o de hoje.
-- **Quem lê a saída.** `departure-requested` e `logout-refused` saem do `sim`, e o hospedeiro hoje os
-  ignora (`#presentMoves` os descarta): ler o primeiro **sem visualizador** — gravar o checkpoint e
-  soltar o personagem para o repouso — e traduzir o segundo na mensagem `logout-refused` é a OW-19, que
-  também entrega `presence-lost` e `presence-restored`.
-- **A fila estável.** O ADR 0060 d.5c quer a fila do mundo ordenada por `(dueAtMs, priority,
-  subject, kind, seq)` (`tieBreak: 'stable'`, OW-06, #827). `createWorldSession` é onde ela se
-  pede, e a OW-06 ainda não pousou: até lá a fila do mundo desempata por inserção, como a da
-  instância, que é correto enquanto não há monstro dormente (a OW-30 é quem depende da ordem).
-- **Monstro.** Sem pontos de spawn (OW-25) e sem semear o spawn na criação (OW-31), o mundo anda
-  sem criatura nenhuma. O personagem ocioso ainda agenda um `PLAYER_STEP` por passo (o custo de
-  quem fica parado, medido pelo `bench:world`, OW-35).
-- **O evento notável.** A entrada grava `entered-world` (o dono no detalhe, como `entered-city`); o
-  texto dele no cliente é da OW-23 — até lá ele sai cru, como todo tipo que o cliente não conhece.
 
 ## Parâmetros de balanceamento
 
