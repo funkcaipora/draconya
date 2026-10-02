@@ -177,25 +177,26 @@ export function decodeS2C(input: ArrayBuffer | Uint8Array): S2CMessage[] | null 
 export function packBatch(frames: readonly Uint8Array[]): Frame {
   let total = 0;
   for (const f of frames) total += 4 + f.length;
-  const body = new Uint8Array(total);
-  let i = 0;
+  // Uma alocação só, no tamanho final: o cabeçalho do frame e o corpo do lote são escritos lado a
+  // lado e embaralhados no lugar. O corpo não passa por um buffer intermediário que seria copiado
+  // para dentro do frame e descartado — um por visualizador por ciclo, na praça cheia.
+  const frame = new Uint8Array(5 + total);
+  let i = 5;
   for (const f of frames) {
-    body[i] = f.length & 255;
-    body[i + 1] = (f.length >>> 8) & 255;
-    body[i + 2] = (f.length >>> 16) & 255;
-    body[i + 3] = (f.length >>> 24) & 255;
+    frame[i] = f.length & 255;
+    frame[i + 1] = (f.length >>> 8) & 255;
+    frame[i + 2] = (f.length >>> 16) & 255;
+    frame[i + 3] = (f.length >>> 24) & 255;
     i += 4;
-    body.set(f, i);
+    frame.set(f, i);
     i += f.length;
   }
   const key = (Math.random() * 0x1_0000_0000) >>> 0;
-  const frame = new Uint8Array(5 + body.length);
   frame[0] = key & 255;
   frame[1] = (key >>> 8) & 255;
   frame[2] = (key >>> 16) & 255;
   frame[3] = (key >>> 24) & 255;
   frame[4] = BATCH_FLAG;
-  frame.set(body, 5);
   scramble(frame.subarray(4), key);
   return frame;
 }

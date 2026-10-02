@@ -36,5 +36,9 @@ e recusa de mensagem malformada com erro tipado em vez de estado corrompido.
   ofuscação, **não criptografia** — não trate como segurança.
 - Lote e compressão precisam existir desde o começo. Retrofitar batching depois que dezenas de
   sistemas já publicam mensagens é doloroso.
+- **`packBatch` nunca modifica os pedaços que junta** (OW-22). O hospedeiro codifica a mesma mensagem
+  uma vez por ciclo e entrega o MESMO `Uint8Array` a vários visualizadores; um `packBatch` que
+  embaralhasse os pedaços no lugar corromperia o frame de todos os outros. Ele escreve o lote num
+  buffer só, e `codec.test.ts` prende o formato byte a byte contra o formato escrito à mão.
 
 Issues: FUN-6 (opcodes e tipos), FUN-7 (codec).
